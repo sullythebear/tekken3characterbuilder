@@ -6,7 +6,10 @@ for the name plate, whose letters come from the player's own Tekken 3 disc.
 
   expanded_custom.py install --root R --key cbdizzy --label DIZZY --portrait p.png
   expanded_custom.py remove  --root R --key cbdizzy
-  expanded_custom.py list    --root R --entry "cbdizzy 7" --entry "cbzed 12"
+  expanded_custom.py list    --root R --entry "cbdizzy 7" --entry "cbzed 12" [--drop cbold]
+
+`list` never leaves out a fighter that customs.txt already lists unless that
+key is named with --drop: removing a fighter from the game is always a choice.
 
 Files go to workspace/ttt1-import/roster (copied into every build) and to
 build-release/mods/ttt1 (the running game's asset folder), if present.
@@ -89,13 +92,20 @@ def remove(root: Path, key: str) -> None:
     print(f"OK removed {key}")
 
 
-def write_list(root: Path, entries: list[str]) -> None:
-    lines = []
+def write_list(root: Path, entries: list[str], drop: list[str]) -> None:
+    lines, keys = [], set()
     for entry in entries:
         key, donor = entry.split()
         if not re.fullmatch(r"cb[a-z0-9]{1,24}", key) or not 0 <= int(donor) <= 20:
             fail(f"Invalid entry: {entry}")
         lines.append(f"{key} {int(donor)}")
+        keys.add(key)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import custom_page
+    listed, _ = custom_page.read_entries(root)
+    lost = [key for key, _ in listed if key not in keys and key not in drop]
+    if lost:
+        fail(f"customs.txt would lose {', '.join(lost)}; name them with --drop to remove them on purpose.")
     for folder in targets(root):
         path = folder / LIST_NAME
         if lines:
@@ -113,6 +123,7 @@ def main() -> None:
     parser.add_argument("--label")
     parser.add_argument("--portrait", type=Path)
     parser.add_argument("--entry", action="append", default=[])
+    parser.add_argument("--drop", action="append", default=[])
     args = parser.parse_args()
     if args.command in ("install", "remove") and not (args.key and re.fullmatch(r"cb[a-z0-9]{1,24}", args.key)):
         fail("Invalid fighter key.")
@@ -125,7 +136,7 @@ def main() -> None:
     elif args.command == "remove":
         remove(args.root, args.key)
     else:
-        write_list(args.root, args.entry)
+        write_list(args.root, args.entry, args.drop)
 
 
 if __name__ == "__main__":

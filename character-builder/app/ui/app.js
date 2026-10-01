@@ -29,7 +29,7 @@ function showWarnings(result) {
   return list.length;
 }
 const state = {
-  status: null, characters: [], current: blank(), dirty: false,
+  status: null, characters: [], unlinked: [], current: blank(), dirty: false,
   source: null, crop: { zoom: 100, x: 0, y: 0 }, portraitChanged: false, hasPortrait: false,
   logTotal: 0, lastBuild: "idle", lastGameRunning: false,
 };
@@ -304,9 +304,59 @@ function renderRoster() {
   $("roster-empty").hidden = state.characters.length > 0;
 }
 
+// Fighters in the game's customs.txt that this library does not have. The
+// builder never drops them on its own: the user adds or removes each one.
+function renderUnlinked() {
+  const list = $("unlinked-list");
+  list.replaceChildren();
+  for (const u of state.unlinked) {
+    const li = document.createElement("li");
+    const thumb = u.portrait ? Object.assign(document.createElement("img"), { src: u.portrait, alt: "" })
+      : Object.assign(document.createElement("span"), { className: "thumb" });
+    const who = document.createElement("div");
+    who.className = "who";
+    const strong = document.createElement("strong");
+    strong.textContent = u.name;
+    const small = document.createElement("small");
+    small.textContent = u.files ? donorLabel(u.donor) : `${donorLabel(u.donor)} · portrait files missing`;
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const add = Object.assign(document.createElement("button"), { type: "button", className: "btn btn-ghost", textContent: "Add to library" });
+    add.addEventListener("click", () => adoptUnlinked(u));
+    const drop = Object.assign(document.createElement("button"), { type: "button", className: "btn btn-danger", textContent: "Remove from game" });
+    drop.addEventListener("click", () => removeUnlinked(u));
+    actions.append(add, drop);
+    who.append(strong, small, actions);
+    li.append(thumb, who);
+    list.append(li);
+  }
+  $("unlinked").hidden = state.unlinked.length === 0;
+}
+
+async function adoptUnlinked(u) {
+  if (state.dirty && !confirm("You have unsaved changes. Continue anyway?")) return;
+  try {
+    const character = await api("/api/unlinked/adopt", { key: u.key });
+    state.dirty = false;
+    await loadCharacters();
+    selectCharacter(character);
+    toast(character.portrait ? `${character.name} added to your library` : `${character.name} added to your library, without a portrait`);
+  } catch (e) { toast(e.message); }
+}
+
+async function removeUnlinked(u) {
+  if (!confirm(`Remove ${u.name} from the Custom page? Its portrait and name plate files are deleted from the game folder. This cannot be undone.`)) return;
+  try {
+    const result = await api("/api/unlinked/remove", { key: u.key, confirm: true });
+    await loadCharacters();
+    if (!showWarnings(result)) toast(`${u.name} removed from the Custom page`);
+  } catch (e) { toast(e.message); }
+}
+
 async function loadCharacters() {
-  state.characters = await api("/api/characters");
+  [state.characters, state.unlinked] = await Promise.all([api("/api/characters"), api("/api/unlinked")]);
   renderRoster();
+  renderUnlinked();
 }
 
 async function save(event) {
@@ -427,7 +477,7 @@ function renderSteps() {
   const c = state.current;
   if (isExpanded()) {
     playBtn.lastChild.textContent = "Play";
-    const count = state.characters.length, max = s.custom_max || 12;
+    const count = state.characters.length + state.unlinked.length, max = s.custom_max || 12;
     if (s.game.running) setStep("step-play", "busy", "Game running", "busy");
     else if (!s.built) setStep("step-play", null, "Waiting for step 2");
     else if (!count) setStep("step-play", null, "Save a fighter to put it on the Custom page");
@@ -526,6 +576,7 @@ function wire() {
         : "Creator support installed in the source code. Build the game next.");
       if (!showWarnings(result)) toast(isExpanded() ? "Custom page support installed" : "Creator support installed");
     } catch (e) { toast(e.message); log("ERROR: " + e.message); }
+    loadCharacters().catch(() => {});
     refresh();
   });
   $("build-button").addEventListener("click", async () => {
@@ -570,6 +621,7 @@ function wire() {
     try {
       const result = await api("/api/sync", {});
       $("project-dialog").close();
+      loadCharacters().catch(() => {});
       if (!showWarnings(result)) toast("Custom page files refreshed");
     } catch (e) { $("root-error").textContent = e.message; }
   });

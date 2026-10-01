@@ -8,6 +8,7 @@ for the direction. Talk to the user in Dutch; the app's UI and code comments are
 - `character-builder/app/server.py` – local server (stdlib only), build/launch/sync logic
 - `character-builder/app/creator_patch.py` – applies/removes source patches; profiles `recompiled` and `expanded`
 - `character-builder/app/expanded_patch_data.py` – the CUSTOM-page edits for Tekken 3 Expanded
+- `character-builder/app/custom_page.py` – reads customs.txt, labels and `.jui` portraits (stdlib)
 - `character-builder/app/expanded_custom.py` – writes portrait pack, name plate and customs.txt (runs with Expanded's venv)
 - `character-builder/app/ui/` – the interface (no build step)
 

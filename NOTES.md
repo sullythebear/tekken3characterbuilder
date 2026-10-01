@@ -145,15 +145,43 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
 - Still seen in 0.3.3: `follow()` tries to load `Cbdizzy-TTT1-arcade-P1.3dm` and rejects it
   (harmless log noise; `follow()` stays for the name plate). Only P1's `0x80052958` call was
   logged this session; in the 0.3.2 session the CPU opponent's (`a1=4`) was too. Not explained.
-- **Bug (builder 0.3.2, code, not yet fixed):** Install/Update (`/api/support/install` in
-  `server.py`) also runs `sync_customs(everything=True)`, which rewrites `customs.txt` from the
+- **Bug (builder 0.3.2, fixed in 0.3.4):** Install/Update (`/api/support/install` in
+  `server.py`) also runs `sync_customs(everything=True)`, which rewrote `customs.txt` from the
   builder's own `characters/` folder only. A builder copied into a game folder without that
-  folder (or with an empty one) therefore wipes the CUSTOM page: `expanded_custom.py list` with
+  folder (or with an empty one) therefore wiped the CUSTOM page: `expanded_custom.py list` with
   no entries deletes `customs.txt` everywhere (the portrait packs stay behind). Found 2026-10-01
   when a fresh builder copy went into the Expanded 1.1.3 test folder while Dizzy lived in another
-  builder copy; worked around by calling `creator_patch.install` directly. Fix idea: keep
-  entries already in `customs.txt` that are not in the library, or warn before an empty library
-  overwrites a non-empty list.
+  builder copy; worked around then by calling `creator_patch.install` directly.
+- **Rule since 0.3.4: the builder never silently removes a `customs.txt` entry.**
+  - `custom_page.read_entries` reads both copies (`workspace/ttt1-import/roster` and
+    `build-release/mods/ttt1`) and keeps every key from either, in order. Lines it cannot read
+    are reported as a warning (they cannot be written back).
+  - `sync_customs` keeps existing entries in their place (so their IDs 41.. do not shift) and
+    appends new library fighters after them. Only `drop`, a key the user chose to remove, leaves
+    the list: deleting a library fighter, or "Remove from game" (`/api/unlinked/remove`, which
+    needs `confirm: true`; the UI asks first). The 12-fighter cap only leaves out new library
+    fighters, never entries already in the game.
+  - Safety net in the tool: `expanded_custom.py list` fails ("customs.txt would lose …") when an
+    existing key is missing from `--entry` and not named with `--drop`.
+  - Entries not in the library show in the UI under "On the Custom page, not in this library"
+    (`/api/unlinked`; name from `<Key>-T3-label.txt`, else from the key). "Add to library"
+    (`/api/unlinked/adopt`) creates `characters/<key without cb>/`, so `game_key()` gives the same
+    key back and the entry keeps its place; the donor comes from `customs.txt`. The portrait is
+    decoded from `<Key>-T3-ui.jui` (TIM 0: 126 × 252, four 64-row bands, CLUT entries
+    `band * 64 + index`, index 0 transparent) into `portrait-ps1.png` (126 × 252) and
+    `portrait-full.png` / `portrait.png` (168 × 252, nearest-neighbour). Without a readable pack
+    the fighter gets no portrait files, so the next install draws the blank card.
+    `character.json` records `adopted: {key, portrait}`.
+- **Tested 2026-10-01** (copy `tekken3-expanded-1.1.3-installtest`, empty `characters/`,
+  `customs.txt` = `cbdizzy 3`, `cbpeumel 5`, plus `cbghost 4` without any files), 22 API checks, all
+  passed: Install and Refresh keep both lists and the packs byte for byte; all three listed as
+  unlinked; a new library fighter is appended as the 4th entry; adopting Dizzy gives donor 3 and
+  the portrait from the pack (decoded image checked by eye); adopting ghost gives no portrait and
+  the next Install generates its pack; remove without confirmation and remove of a library
+  fighter are refused; confirmed remove drops Peumel and its files only; deleting a library
+  fighter drops only that one; the tool refuses a list without `--drop`. In the UI (browser):
+  the section shows, "Remove from game" asks for confirmation (declined: nothing changed), and
+  "Add to library" moved Peumel into the library with its portrait and Nina as donor.
 
 ## Portrait and name plate (code: Expanded `tools/ttt1/ui.py`, `ui_art.py`, `glyphs.py`)
 

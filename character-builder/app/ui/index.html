@@ -35,6 +35,11 @@
     <h2 class="menu-title">Your fighters</h2>
     <ul class="roster" id="roster"></ul>
     <p class="empty" id="roster-empty">No fighters yet. Create one and save it to add it here.</p>
+    <section class="unlinked" id="unlinked" aria-labelledby="unlinked-title" hidden>
+      <h3 class="unlinked-title" id="unlinked-title">On the Custom page, not in this library</h3>
+      <p class="hint">These fighters stay in the game. Add one to your library to edit it here, or remove it from the game.</p>
+      <ul class="unlinked-list" id="unlinked-list"></ul>
+    </section>
     <div class="menu-actions">
       <button class="menu-item" id="new-character" type="button">New fighter</button>
       <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.zip" hidden></label>

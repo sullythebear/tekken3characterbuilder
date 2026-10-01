@@ -15,8 +15,9 @@ from urllib.parse import urlparse, unquote
 # The Easy Setup's embedded Python does not put the script folder on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
+import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
@@ -371,21 +372,39 @@ def run_custom_tool(root: Path, args: list[str]) -> str | None:
     return None
 
 
-def sync_customs(changed: str | None = None, removed: str | None = None, everything: bool = False) -> list[str]:
-    """Keeps Tekken 3 Expanded's CUSTOM page in line with the library."""
+def sync_customs(changed: str | None = None, drop: str | None = None, everything: bool = False) -> list[str]:
+    """Keeps Tekken 3 Expanded's CUSTOM page in line with the library.
+
+    Fighters already in customs.txt keep their place (and so their ID), also
+    those that are not in this builder's library: only `drop`, a key the user
+    chose to remove, leaves the list. New library fighters are added after them.
+    """
     root = project_root()
     if not root or creator_patch.project_kind(root) != "expanded":
         return []
     warnings = []
-    if removed:
-        problem = run_custom_tool(root, ["remove", "--key", game_key(removed)])
+    if drop:
+        problem = run_custom_tool(root, ["remove", "--key", drop])
         if problem:
             warnings.append(problem)
     fighters = sorted(character_list(), key=lambda c: c.get("created", ""))
-    listed, roster_dir = [], root / "workspace/ttt1-import/roster"
-    for c in fighters[:CUSTOM_PAGE_MAX]:
-        key = game_key(c["id"])
-        present = (roster_dir / f"{key[0].upper()}{key[1:]}-T3-ui.jui").is_file()
+    library = {game_key(c["id"]): c for c in fighters}
+    existing, unreadable = custom_page.read_entries(root)
+    for line in unreadable:
+        warnings.append(f"customs.txt has a line the builder cannot read, kept out of the list: {line}")
+    order = [key for key, _ in existing if key != drop]
+    order += [key for key in library if key not in order and key != drop]
+    donors = dict(existing)
+    listed, left_out = [], 0
+    for key in order:
+        c = library.get(key)
+        if not c:  # not in this library: keep it as the game has it
+            listed.append(f"{key} {donors[key]}")
+            continue
+        if len(listed) >= CUSTOM_PAGE_MAX:
+            left_out += 1
+            continue
+        present = custom_page.find_file(root, key, "-ui.jui") is not None
         if everything or c["id"] == changed or not present:
             folder = DATA / c["id"]
             portrait = next((folder / n for n in ("portrait-full.png", "portrait.png") if (folder / n).is_file()), None)
@@ -395,14 +414,68 @@ def sync_customs(changed: str | None = None, removed: str | None = None, everyth
             problem = run_custom_tool(root, args)
             if problem:
                 warnings.append(f"{c['name']}: {problem}")
-                continue
+                if not present and key not in donors:
+                    continue
         listed.append(f"{key} {c['donor']}")
-    if len(fighters) > CUSTOM_PAGE_MAX:
-        warnings.append(f"The Custom page holds {CUSTOM_PAGE_MAX} fighters: the newest ones are left out.")
-    problem = run_custom_tool(root, ["list", *sum((["--entry", e] for e in listed), [])])
+    if left_out:
+        warnings.append(f"The Custom page holds {CUSTOM_PAGE_MAX} fighters: {left_out} of yours are left out.")
+    args = ["list", *sum((["--entry", e] for e in listed), [])]
+    if drop:
+        args += ["--drop", drop]
+    problem = run_custom_tool(root, args)
     if problem:
         warnings.append(problem)
     return warnings
+
+
+def unlinked_fighters() -> list[dict]:
+    """Fighters on the CUSTOM page that are not in this builder's library."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        return []
+    library = {game_key(c["id"]) for c in character_list()}
+    result = []
+    for key, donor in custom_page.read_entries(root)[0]:
+        if key in library:
+            continue
+        jui = custom_page.find_file(root, key, "-ui.jui")
+        stamp = int(jui.stat().st_mtime) if jui else 0
+        result.append({"key": key, "donor": donor, "name": custom_page.read_label(root, key) or key[2:].upper(),
+                       "files": jui is not None,
+                       "portrait": f"/unlinked/{key}.png?v={stamp}" if jui else None})
+    return result
+
+
+def unlinked_key(value: str) -> str:
+    key = str(value or "")
+    if not custom_page.KEY_RE.fullmatch(key) or key not in {u["key"] for u in unlinked_fighters()}:
+        raise ValueError("This fighter is not on the Custom page, or it is already in your library.")
+    return key
+
+
+def adopt_unlinked(key: str) -> dict:
+    """Adds a Custom page fighter to the library under the same key, keeping its place."""
+    root = project_root()
+    item = next(u for u in unlinked_fighters() if u["key"] == key)
+    name = item["name"].upper().strip()
+    if not NAME_RE.fullmatch(name):
+        raise ValueError(f"{item['name']} cannot be used as a name in Tekken 3's name font.")
+    folder = DATA / key[2:]  # game_key(folder name) gives this key back
+    if folder.exists():
+        raise ValueError(f"The folder characters/{folder.name} already exists. Move it away first.")
+    rows = custom_page.read_portrait(root, key)
+    folder.mkdir(parents=True)
+    now = datetime.now().isoformat(timespec="seconds")
+    record = {"format": 1, "builder": APP_VERSION, "created": now, "updated": now, "name": name,
+              "donor": item["donor"], "author": "", "slot_mode": "jun-slot-23",
+              "adopted": {"key": key, "portrait": "from the game's pack" if rows else "none"}}
+    if rows:
+        full = custom_page.png(custom_page.stretch(rows, custom_page.SHOWN_W))
+        (folder / "portrait-ps1.png").write_bytes(custom_page.png(rows))
+        (folder / "portrait-full.png").write_bytes(full)
+        (folder / "portrait.png").write_bytes(full)
+    (folder / "character.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return get_character(folder.name)
 
 
 def get_character(cid: str) -> dict:
@@ -569,6 +642,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({**project_status(), "app": APP_VERSION})
         if path == "/api/characters":
             return self._json(character_list())
+        if path == "/api/unlinked":
+            return self._json(unlinked_fighters())
+        if path.startswith("/unlinked/") and path.endswith(".png"):
+            key, root = path[len("/unlinked/"):-4], project_root()
+            rows = custom_page.read_portrait(root, key) if root and custom_page.KEY_RE.fullmatch(key) else None
+            if rows:
+                return self._send(200, custom_page.png(rows), "image/png")
+            return self._error("Not found.", 404)
         if path == "/api/build":
             since = 0
             query = urlparse(self.path).query
@@ -635,10 +716,18 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/characters/delete":
                 cid = safe_id(str(data.get("id", "")))
                 delete_character(cid)
-                return self._json({"ok": True, "warnings": sync_customs(removed=cid)})
+                return self._json({"ok": True, "warnings": sync_customs(drop=game_key(cid))})
             if path == "/api/import":
                 imported = import_character(str(data.get("file", "")))
                 return self._json({**imported, "warnings": sync_customs(changed=imported["id"])})
+            if path == "/api/unlinked/adopt":
+                adopted = adopt_unlinked(unlinked_key(data.get("key")))
+                return self._json(adopted)
+            if path == "/api/unlinked/remove":
+                key = unlinked_key(data.get("key"))
+                if data.get("confirm") is not True:
+                    return self._error("Removing a fighter from the Custom page needs confirmation.")
+                return self._json({"ok": True, "warnings": sync_customs(drop=key)})
             if path == "/api/sync":
                 return self._json({"warnings": sync_customs(everything=True)})
         except (ValueError, KeyError, creator_patch.PatchError, OSError) as error:

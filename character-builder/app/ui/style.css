@@ -110,15 +110,22 @@ button, input { font: inherit; color: inherit; }
 .roster button::before { content: "▶"; position: absolute; left: .2rem; font-size: .7rem; color: var(--gold); opacity: 0; }
 .roster button:hover::before, .roster button[aria-current="true"]::before { opacity: 1; }
 .roster button[aria-current="true"] { background: linear-gradient(90deg, rgba(255,164,18,.18), transparent); }
-.roster img, .roster .thumb { width: 28px; height: 42px; flex: none; image-rendering: pixelated; background: #000; border: 1px solid #56618c; object-fit: cover; }
-.roster strong { display: block; font: 800 italic 1.3rem/1 var(--display); text-transform: uppercase; color: #8390bb; }
+.roster img, .roster .thumb, .unlinked-list img, .unlinked-list .thumb { width: 28px; height: 42px; flex: none; image-rendering: pixelated; background: #000; border: 1px solid #56618c; object-fit: cover; }
+.roster strong, .unlinked-list strong { display: block; font: 800 italic 1.3rem/1 var(--display); text-transform: uppercase; color: #8390bb; }
 .roster button:hover strong { color: var(--paper); }
 .roster button[aria-current="true"] strong {
   background: var(--flame); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 1px 0 #420308);
 }
-.roster small { color: var(--steel); font-size: .76rem; }
+.roster small, .unlinked-list small { color: var(--steel); font-size: .76rem; }
 .empty { color: var(--steel); font-size: .85rem; margin: .25rem 0 0; }
+.unlinked { margin-top: 1rem; padding-top: .8rem; border-top: 1px dashed var(--line); }
+.unlinked-title { margin: 0; font: 800 italic 1rem/1.1 var(--display); text-transform: uppercase; color: var(--amber); }
+.unlinked-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .15rem; }
+.unlinked-list li { display: flex; align-items: center; gap: .6rem; padding: .3rem .4rem .3rem 1.3rem; }
+.unlinked-list .who { flex: 1; min-width: 0; }
+.unlinked-list .actions { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+.unlinked-list .btn { padding: .3rem .7rem; font-size: .85rem; }
 .menu-actions { margin-top: 1.1rem; padding-top: .8rem; border-top: 1px solid var(--line); display: grid; gap: .1rem; }
 .menu-item {
   display: block; width: 100%; padding: .25rem .4rem .25rem 1.3rem; position: relative;

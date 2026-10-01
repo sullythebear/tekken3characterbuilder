@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.3.4 | The builder never drops CUSTOM page fighters it does not know: it lists them, to add to the library or remove on purpose. |
 | 0.3.3 | Custom fighters fight with their donor's moves and throws (tested with King as donor on Tekken 3 Expanded 1.1.3). |
 | 0.3.0 | Fighters on a third CUSTOM page in Tekken 3 Expanded, with their own portrait and name plate, fighting as a Tekken 3 donor. Not yet tested in game. |
 | 0.2.x | Fighter in Jun's slot on Tekken3Recompiled 0.1.4 (donor principle proven in game). |

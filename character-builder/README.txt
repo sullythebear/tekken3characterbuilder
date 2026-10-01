@@ -1,4 +1,4 @@
-TEKKEN 3 CHARACTER BUILDER 0.3.3
+TEKKEN 3 CHARACTER BUILDER 0.3.4
 ================================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
@@ -22,6 +22,12 @@ With Tekken 3 Expanded
 - Names use Tekken 3's own name font: there is no F or Q, and 2 is the only
   digit. Very long names do not fit the name plate.
 - Custom fighters are not picked as CPU opponents yet.
+- The builder never removes a fighter from the CUSTOM page on its own.
+  Fighters the game has that are not in this builder's "characters"
+  folder (for example from another copy of the builder) are listed under
+  "On the Custom page, not in this library": add them to your library
+  (their portrait is taken from the game files) or remove them from the
+  game after confirming.
 
 With Tekken3Recompiled
 ----------------------
