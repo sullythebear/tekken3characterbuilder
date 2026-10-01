@@ -10,7 +10,8 @@ for the direction. Talk to the user in Dutch; the app's UI and code comments are
 - `character-builder/app/expanded_patch_data.py` – the CUSTOM-page edits for Tekken 3 Expanded
 - `character-builder/app/custom_page.py` – reads customs.txt, labels and `.jui` portraits (stdlib)
 - `character-builder/app/expanded_custom.py` – writes portrait pack, name plate and customs.txt (runs with Expanded's venv)
-- `character-builder/app/ui/` – the interface (no build step)
+- `character-builder/app/model_export.py` – fighter models from the disc (BNS) as mesh JSON for the 3D preview (runs with Expanded's venv; output in `character-builder/cache/`, game data, never commit)
+- `character-builder/app/ui/` – the interface (no build step); `ui/costumes.js` = WebGL preview and colour variants
 
 ## Rules
 

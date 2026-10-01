@@ -6,7 +6,7 @@ session token embedded in its own page.
 """
 from __future__ import annotations
 
-import base64, io, json, os, re, secrets, shutil, subprocess, sys, threading, time, zipfile
+import base64, io, json, os, re, secrets, shutil, struct, subprocess, sys, threading, time, zipfile
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,13 +17,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.6"
+APP_VERSION = "0.3.7"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
 DATA = BASE / "characters"
 LOGS = BASE / "logs"
 CONFIG = BASE / "config.json"
+CACHE = BASE / "cache"          # models read from the player's disc: game data, never shared
 TOKEN = secrets.token_urlsafe(24)
 WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0
@@ -433,6 +434,67 @@ def validate_character(data: dict) -> dict:
     return {"name": name, "donor": donor, "author": author}
 
 
+COSTUME_MAX = 8
+COSTUME_NAME_RE = re.compile(r"[^\w .\-]")
+
+
+def validate_costumes(value) -> list[dict]:
+    """Colour variants: a name, the donor costume they recolour (0..3) and the changed
+    palettes as PS1 15-bit colours, keyed by CLUT id."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > COSTUME_MAX:
+        raise ValueError(f"A fighter can have up to {COSTUME_MAX} colour variants.")
+    out = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid colour variant.")
+        name = COSTUME_NAME_RE.sub("", str(item.get("name", ""))).strip()[:24] or "Variant"
+        try:
+            base = int(item.get("base", 0))
+        except (TypeError, ValueError):
+            raise ValueError("Invalid colour variant.") from None
+        if not 0 <= base <= 3:
+            raise ValueError("Invalid base costume.")
+        cluts = {}
+        for key, colours in dict(item.get("cluts") or {}).items():
+            if not str(key).isdigit() or int(key) > 0x7FFF or not isinstance(colours, list)                     or len(colours) not in (16, 256) or not all(isinstance(c, int) and 0 <= c <= 0xFFFF for c in colours):
+                raise ValueError("Invalid palette in a colour variant.")
+            cluts[str(int(key))] = colours
+        if len(cluts) > 64:
+            raise ValueError("Too many palettes in a colour variant.")
+        try:
+            slot = int(item.get("slot", -1))
+        except (TypeError, ValueError):
+            slot = -1
+        out.append({"name": name, "base": base, "slot": slot if 0 <= slot <= 3 else -1, "cluts": cluts,
+                    "recipe": validate_recipe(item.get("recipe"))})
+    return out
+
+
+def validate_recipe(value) -> dict:
+    """The builder's editing state for a variant (kept so it can be edited again)."""
+    recipe = {"tint": {"h": 0, "s": 100, "l": 0, "keepSkin": True}, "parts": {}, "free": {}}
+    if not isinstance(value, dict):
+        return recipe
+    tint = value.get("tint") if isinstance(value.get("tint"), dict) else {}
+    for key, low, high in (("h", -180, 180), ("s", 0, 200), ("l", -40, 40)):
+        try:
+            recipe["tint"][key] = max(low, min(high, int(tint.get(key, recipe["tint"][key]))))
+        except (TypeError, ValueError):
+            pass
+    recipe["tint"]["keepSkin"] = bool(tint.get("keepSkin", True))
+    parts = value.get("parts") if isinstance(value.get("parts"), dict) else {}
+    for key, colour in list(parts.items())[:64]:
+        if re.fullmatch(r"[0-9\-]{1,200}", str(key)) and re.fullmatch(r"#[0-9a-fA-F]{6}", str(colour)):
+            recipe["parts"][str(key)] = str(colour).lower()
+    free = value.get("free") if isinstance(value.get("free"), dict) else {}
+    for key, colour in list(free.items())[:2048]:
+        if re.fullmatch(r"\d{1,5}:\d{1,3}", str(key)) and isinstance(colour, int) and 0 <= colour <= 0xFFFF:
+            recipe["free"][str(key)] = colour
+    return recipe
+
+
 def character_list() -> list[dict]:
     DATA.mkdir(exist_ok=True)
     result = []
@@ -519,6 +581,9 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
                 if not present and key not in donors:
                     continue
         listed.append(f"{key} {c['donor']}")
+        problem = write_palettes(root, key, c)
+        if problem:
+            warnings.append(f"{c['name']}: {problem}")
     if left_out:
         warnings.append(f"The Custom page holds {CUSTOM_PAGE_MAX} fighters: {left_out} of yours are left out.")
     args = ["list", *sum((["--entry", e] for e in listed), [])]
@@ -528,6 +593,98 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
     if problem:
         warnings.append(problem)
     return warnings
+
+
+def donor_costume_count(donor: int) -> int:
+    info = donor_models()
+    return len(info["donors"].get(str(donor), [])) if info.get("available") else 0
+
+
+def write_palettes(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-pal.bin: the fighter's colour variants on their chosen costume slots.
+    Format: b"T3CP", u16 version 1, u16 entries; per entry u8 slot, u8 base costume,
+    u16 CLUT id, u16 colour count, then the PS1 colours (u16 each)."""
+    entries, taken, own = [], set(), donor_costume_count(fighter["donor"])
+    for variant in validate_costumes(fighter.get("costumes")):
+        slot = variant["slot"]
+        # Costume 3 (Start) is the only extra slot a player can pick; others replace a costume.
+        if slot < 0 or slot in taken or not own or slot > max(own - 1, 2):
+            continue
+        taken.add(slot)
+        if slot < own:
+            variant["base"] = slot          # replacing a costume recolours that costume's model
+        for cid, colours in sorted(variant["cluts"].items(), key=lambda kv: int(kv[0])):
+            entries.append(struct.pack("<BBHH", slot, variant["base"], int(cid), len(colours))
+                           + struct.pack(f"<{len(colours)}H", *colours))
+    name = f"{custom_page.file_prefix(key)}-pal.bin"
+    data = b"T3CP" + struct.pack("<HH", 1, len(entries)) + b"".join(entries)
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if entries:
+                (target / name).write_bytes(data)
+            else:
+                (target / name).unlink(missing_ok=True)
+    except OSError as error:
+        return f"Colour variants could not be written: {error}"
+    return None
+
+
+model_lock = threading.Lock()
+
+
+def run_model_tool(root: Path, args: list[str], timeout: int = 180) -> tuple[str | None, str]:
+    """Runs model_export.py; returns (error or None, stdout)."""
+    try:
+        done = subprocess.run([venv_python(root), str(APP / "model_export.py"), *args, "--root", str(root)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout, creationflags=NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"The model tool could not run: {error}", ""
+    if done.returncode:
+        lines = (done.stdout + done.stderr).strip().splitlines()
+        errors = [l[7:] for l in lines if l.startswith("ERROR: ")]
+        return (errors[-1] if errors else (lines[-1] if lines else "The model tool failed.")), ""
+    return None, done.stdout
+
+
+def donor_models() -> dict:
+    """{donor: [model per costume]} read from the game's model map, cached."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        return {"available": False, "reason": "The 3D preview needs Tekken 3 Expanded."}
+    path = CACHE / "donors.json"
+    if not path.is_file():
+        problem, out = run_model_tool(root, ["donors"], timeout=60)
+        if problem:
+            return {"available": False, "reason": problem}
+        CACHE.mkdir(exist_ok=True)
+        path.write_text(out.strip(), encoding="utf-8")
+    return {"available": True, "donors": json.loads(path.read_text(encoding="utf-8"))}
+
+
+MODEL_FORMAT = 7   # model_export.py output; 7 = per-triangle body row (garment names)
+
+
+def model_json(model: int) -> bytes:
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("The 3D preview needs Tekken 3 Expanded.")
+    if not 0 <= model < 52:
+        raise ValueError("No such model.")
+    path = CACHE / "models" / f"model-{model}-v{MODEL_FORMAT}.json"
+    with model_lock:
+        if not path.is_file():
+            for old in path.parent.glob(f"model-{model}.json"):   # format 1 (one pose), replaced
+                old.unlink(missing_ok=True)
+            for old in path.parent.glob(f"model-{model}-v*.json"):
+                old.unlink(missing_ok=True)
+            problem, _ = run_model_tool(root, ["model", "--model", str(model), "--out", str(path)])
+            if problem:
+                raise ValueError(problem)
+    return path.read_bytes()
 
 
 def unlinked_fighters() -> list[dict]:
@@ -607,7 +764,8 @@ def save_character(data: dict) -> dict:
         old = json.loads(info.read_text(encoding="utf-8"))
     now = datetime.now().isoformat(timespec="seconds")
     record = {"format": 1, "builder": APP_VERSION, "created": old.get("created", now),
-              "updated": now, **clean, "slot_mode": "jun-slot-23"}
+              "updated": now, **clean, "slot_mode": "jun-slot-23",
+              "costumes": validate_costumes(data["costumes"]) if "costumes" in data else old.get("costumes", [])}
     for key, filename in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                           ("portrait_full", "portrait-full.png")):
         png = decode_png(data.get(key))
@@ -664,7 +822,7 @@ def import_character(payload: str) -> dict:
     for name in ("portrait.png", "portrait-ps1.png", "portrait-full.png"):
         if name in files and not files[name].startswith(PNG_SIGNATURE):
             raise ValueError(f"{name} is not a valid PNG.")
-    record = {**validate_character(data)}
+    record = {**validate_character(data), "costumes": validate_costumes(data.get("costumes"))}
     for key, name in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                       ("portrait_full", "portrait-full.png")):
         if name in files:
@@ -744,6 +902,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({**project_status(), "app": APP_VERSION})
         if path == "/api/characters":
             return self._json(character_list())
+        if path == "/api/models":
+            return self._json(donor_models())
+        if path.startswith("/api/model/"):
+            try:
+                body = model_json(int(path.rsplit("/", 1)[1]))
+            except ValueError as error:
+                return self._error(str(error), 404)
+            return self._send(200, body, "application/json")
         if path == "/api/unlinked":
             return self._json(unlinked_fighters())
         if path.startswith("/unlinked/") and path.endswith(".png"):

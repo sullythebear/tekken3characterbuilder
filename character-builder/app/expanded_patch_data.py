@@ -41,6 +41,7 @@ ROSTER = [
  "    g->catalog_index=roster_count++;\n}\n"
  "/* Custom fighters: <asset root>/customs.txt, one \"<key> <donor ID>\" per line,\n"
  " * with <Key>-T3-ui.jui, <Key>-T3-name.4bpp and <Key>-T3-label.txt beside it. */\n"
+ "static unsigned custom_slot_model(unsigned k,unsigned c);   /* T3CB-PATCH-9 */\n"
  "static void add_customs(void) {\n"
  "    const char *root=tekken3_ttt1_asset_root();char path[4096];\n"
  "    if(!root || snprintf(path,sizeof path,\"%s/customs.txt\",root)>=(int)sizeof path)return;\n"
@@ -59,6 +60,8 @@ ROSTER = [
  "        g->custom=1;g->donor_id=donor;g->arena_owner=donor;g->moveset=NO_MOVESET;\n"
  "        g->third_costume=0;g->donor_count=0;\n"
  "        g->catalog_index=roster_count++;\n"
+ "        /* T3CB-PATCH-9: Start picks costume 3 when it has a model (the donor's or a variant's). */\n"
+ "        g->third_costume=custom_slot_model(g->catalog_index,2)!=255;\n"
  "        fprintf(stderr,\"Custom fighters: %s (character %u) fights as character %u\\n\",g->name,23u+g->catalog_index,donor);\n"
  "    }\n"
  "    fclose(f);\n"
@@ -83,7 +86,8 @@ ROSTER = [
  "    int d=tekken3_guest_native(id);\n"
  "    if(d>=0 && id<64 && !(logged>>id&1)){logged|=1ull<<id;fprintf(stderr,\"Custom fighters: character %u reads character %d's data\\n\",id,d);}\n"
  "    return d<0?9u:(unsigned)d;\n"
- "}\n", 1),
+ "}\n"
+ "static unsigned custom_slot_model(unsigned k,unsigned c);   /* T3CB-PATCH-9 */\n", 1),
 ("static uint32_t guest_desc(unsigned k){return desc+k*DESC_STRIDE;}",
  "/* 22 records fit before name_table; the rest follow its 64 entries. */\n"
  "static uint32_t guest_desc(unsigned k){return k<22?desc+k*DESC_STRIDE:name_table+NAME_TABLE_IDS*4+(k-22)*DESC_STRIDE;}", 1),
@@ -91,7 +95,7 @@ ROSTER = [
  "        psx_mod_write_word(body_profiles+(GUEST_ID+k)*4,psx_mod_read_word(0x80096f60+(roster[k].custom?roster[k].donor_id:9)*4));", 1),
 ("            psx_mod_write_byte(model_map+(GUEST_ID+k)*4+c,GUEST_MODEL);",
  "            psx_mod_write_byte(model_map+(GUEST_ID+k)*4+c,roster[k].custom?\n"
- "                psx_mod_read_byte(0x800958c4+roster[k].donor_id*4+c):GUEST_MODEL);", 1),
+ "                custom_slot_model(k,c):GUEST_MODEL);", 1),
 ("tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=9;",
  "tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=remap_donor(cpu->gpr[5]);", 2),
 # A custom fighter starts from its donor's own descriptor (T3CB-PATCH-2): bytes 6..8,
@@ -174,9 +178,65 @@ ROSTER = [
  "    patch(0x800761b4,0x3c038002,0x3c030000|(table>>16));\n"
  "    patch(0x800761b8,0x24637950,0x34630000|(table&65535));\n"
  "}\n"
+ "/* T3CB-PATCH-9: colour variants. <prefix>-pal.bin, written by the builder: \"T3CP\", u16 version,\n"
+ " * u16 entries; each u8 slot, u8 base costume, u16 CLUT id, u16 count, then count PS1 colours.\n"
+ " * A variant sits on a costume slot the donor leaves free (model map 255 there). */\n"
+ "static unsigned char *custom_pal[CUSTOM_MAX];\n"
+ "static unsigned custom_pal_size[CUSTOM_MAX],custom_pal_tried[CUSTOM_MAX];\n"
+ "static unsigned pal16(const unsigned char *p){return p[0]|p[1]<<8;}\n"
+ "static const unsigned char *custom_palettes(unsigned k,unsigned *size) {\n"
+ "    *size=0;\n"
+ "    if(k<tag_count || k-tag_count>=CUSTOM_MAX || !roster[k].custom)return NULL;\n"
+ "    unsigned c=k-tag_count;\n"
+ "    if(!custom_pal_tried[c]) {\n"
+ "        custom_pal_tried[c]=1;\n"
+ "        const char *root=tekken3_ttt1_asset_root();char path[4096];\n"
+ "        FILE *f=root && snprintf(path,sizeof path,\"%s/%s-pal.bin\",root,roster[k].prefix)<(int)sizeof path?fopen(path,\"rb\"):NULL;\n"
+ "        if(f) {\n"
+ "            fseek(f,0,SEEK_END);long n=ftell(f);fseek(f,0,SEEK_SET);\n"
+ "            unsigned char *b=n>=8 && n<(1<<20)?malloc((size_t)n):NULL;\n"
+ "            if(b && fread(b,1,(size_t)n,f)==(size_t)n && !memcmp(b,\"T3CP\",4) && pal16(b+4)==1) {\n"
+ "                unsigned at=8,count=pal16(b+6),ok=1;\n"
+ "                for(unsigned i=0;i<count && ok;i++){if(at+6>(unsigned)n){ok=0;break;}at+=6+2*pal16(b+at+4);if(at>(unsigned)n)ok=0;}\n"
+ "                if(ok){custom_pal[c]=b;custom_pal_size[c]=(unsigned)n;b=NULL;\n"
+ "                    fprintf(stderr,\"Custom fighters: %s has %u variant palettes\\n\",roster[k].name,count);}\n"
+ "                else fprintf(stderr,\"Custom fighters: %s-pal.bin is damaged, ignored\\n\",roster[k].prefix);\n"
+ "            }\n"
+ "            free(b);fclose(f);\n"
+ "        }\n"
+ "    }\n"
+ "    *size=custom_pal_size[c];return custom_pal[c];\n"
+ "}\n"
+ "/* The model of a custom fighter's costume slot c: the donor's, else the base model of the\n"
+ " * colour variant placed on that free slot, else none (255). */\n"
+ "static unsigned custom_slot_model(unsigned k,unsigned c) {\n"
+ "    unsigned donor=roster[k].donor_id,own=psx_mod_read_byte(0x800958c4+donor*4+c),size;\n"
+ "    const unsigned char *b=custom_palettes(k,&size);\n"
+ "    if(own!=255 || !b)return own;\n"
+ "    for(unsigned i=0,at=8,count=pal16(b+6);i<count;i++,at+=6+2*pal16(b+at+4))\n"
+ "        if(b[at]==c)return psx_mod_read_byte(0x800958c4+donor*4+(b[at+1]&3));\n"
+ "    return 255;\n"
+ "}\n"
+ "/* In a fight, a custom fighter in a variant's slot gets that variant's palettes, in its\n"
+ " * player's CLUT rows (504 + player * 4 + row), every frame so nothing reloads them away. */\n"
+ "static void custom_palette_tick(void) {\n"
+ "    if(psx_mod_read_word(0x800ae204)!=8)return;\n"
+ "    for(unsigned p=0;p<2;p++) {\n"
+ "        uint32_t actor=0x800a9228+p*0x188c;\n"
+ "        int k=tekken3_guest_character(psx_mod_read_half(actor+0x18));\n"
+ "        unsigned size;const unsigned char *b=k>=0?custom_palettes((unsigned)k,&size):NULL;\n"
+ "        if(!b)continue;\n"
+ "        unsigned slot=psx_mod_read_half(actor+0x14)&3;\n"
+ "        for(unsigned i=0,at=8,count=pal16(b+6);i<count;i++,at+=6+2*pal16(b+at+4)) {\n"
+ "            unsigned id=pal16(b+at+2),n=pal16(b+at+4);\n"
+ "            if(b[at]!=slot || (n!=16 && n!=256) || (id>>6)>3)continue;\n"
+ "            gr_vram_transfer_in((int)((id&63)*16),(int)(504+p*4+(id>>6)),(int)n,1,(const uint16_t*)(b+at+6));\n"
+ "        }\n"
+ "    }\n"
+ "}\n"
  "void tekken3_ttt1_roster_tick(void) {\n", 1),
 ("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
- "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    custom_strips();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
+ "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    custom_strips();\n    custom_palette_tick();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
 # --- T3CB-PATCH-4: a custom fighter's move key (actor+0x16) is its donor's, not GUEST_ID ---
 ("            cpu->gpr[4]=GUEST_ID;",
  "            cpu->gpr[4]=guest_move_key((uint16_t)cpu->gpr[4]);", 1),

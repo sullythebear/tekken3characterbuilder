@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.3.7 | Costumes in 3D in the builder (standing pose, read from your own disc) and colour variants on a Colours tab: recolour every piece of clothing or accessory, the whole costume, or a scheme. A variant goes into the game as a replaced costume or as costume 3 (Start). |
 | 0.3.6 | Style layer: pick a fighting style (Striking, Grappling, Traditional, Special), each based on a Tekken 3 fighter. Copycat (Mokujin) draws another style each round (tested), holding the sword only with Yoshimitsu's style (patch T3CB-PATCH-6). |
 | 0.3.5 | Test button: build if needed, play, then a compact test report (`logs/test-report.md`) shown in the builder. |
 | 0.3.4 | The builder never drops CUSTOM page fighters it does not know: it lists them, to add to the library or remove on purpose. |

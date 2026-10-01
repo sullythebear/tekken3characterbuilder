@@ -2,6 +2,7 @@
 character-builder/characters/
 character-builder/logs/
 character-builder/config.json
+character-builder/cache/
 __pycache__/
 *.pyc
 

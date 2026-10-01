@@ -41,7 +41,8 @@ const state = {
   logTotal: 0, lastBuild: "idle", lastGameRunning: false, lastTest: "idle",
 };
 
-function blank() { return { id: null, name: "", donor: null, author: "" }; }
+function blank() { return { id: null, name: "", donor: null, author: "", costumes: [] }; }
+const copyFighter = (c) => ({ ...c, costumes: JSON.parse(JSON.stringify(c.costumes || [])) });
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -106,7 +107,7 @@ function renderDonors() {
       based.textContent = `based on ${donor.name}`;
       button.append(style, based);
       button.title = donorLabel(donor.id);
-      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); });
+      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Costumes.refresh(); });
       cards.append(button);
     }
     section.append(title, cards);
@@ -273,10 +274,11 @@ function fillForm() {
 
 async function selectCharacter(character) {
   if (state.dirty && !confirm("You have unsaved changes. Switch anyway?")) return;
-  state.current = character ? { ...character } : blank();
+  state.current = character ? copyFighter(character) : blank();
   state.dirty = false;
   clearPortrait();
   fillForm();
+  T3Costumes.refresh();
   renderRoster();
   if (character && character.portrait) {
     try {
@@ -381,7 +383,8 @@ async function save(event) {
   if (!NAME_VALID.test(name)) { error.textContent = "Enter a name of 1 to 15 characters: letters (no F or Q), space, period, hyphen or 2."; $("name").focus(); return; }
   if (state.current.donor === null) { error.textContent = "Choose a fighting style."; return; }
   error.textContent = "";
-  const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim() };
+  const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
+    costumes: T3Costumes.serialize() };
   if (state.portraitChanged && state.source) {
     body.portrait_ps1 = $("portrait-canvas").toDataURL("image/png");
     body.portrait_source = sourcePNG();
@@ -392,9 +395,10 @@ async function save(event) {
     const saved = await api("/api/characters", body);
     state.dirty = false;
     state.portraitChanged = false;
-    state.current = { ...saved };
+    state.current = copyFighter(saved);
     await loadCharacters();
     fillForm();
+    T3Costumes.refresh(true);
     if (!showWarnings(saved)) toast(isExpanded() ? `${saved.name} saved to the Custom page` : `${saved.name} saved`);
   } catch (e) { error.textContent = e.message; }
   finally { $("save").disabled = false; renderSteps(); }
@@ -678,6 +682,26 @@ function wire() {
 wire();
 fillForm();
 loadCharacters().catch((e) => toast(e.message));
+T3Costumes.init({ getCurrent: () => state.current, onChange: markDirty, toast, openColours: () => showPage(true) });
+function showView(model) {
+  $("view-portrait").setAttribute("aria-selected", String(!model));
+  $("view-model").setAttribute("aria-selected", String(model));
+  $("model-view").hidden = !model;
+  $("portrait-frame").hidden = model;
+  if (model) T3Costumes.showModel();
+}
+// editor pages: Fighter (name, style, portrait) and Colours (costume variants, uses the 3D view)
+function showPage(colours) {
+  $("tab-fighter").setAttribute("aria-selected", String(!colours));
+  $("tab-colours").setAttribute("aria-selected", String(colours));
+  $("page-fighter").hidden = colours;
+  $("page-colours").hidden = !colours;
+  if (colours && $("model-view").hidden) showView(true);
+}
+$("tab-fighter").addEventListener("click", () => showPage(false));
+$("tab-colours").addEventListener("click", () => showPage(true));
+$("view-portrait").addEventListener("click", () => showView(false));
+$("view-model").addEventListener("click", () => showView(true));
 loadReport(false).catch(() => {});
 refresh();
 setInterval(refresh, 1500);

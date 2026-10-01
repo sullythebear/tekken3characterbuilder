@@ -1,4 +1,4 @@
-TEKKEN 3 CHARACTER BUILDER 0.3.6
+TEKKEN 3 CHARACTER BUILDER 0.3.7
 ================================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
@@ -39,6 +39,20 @@ Sharing
 "Export" creates a .t3char file you can share. Others load it with
 "Import package". A package only contains a description and images, never
 game files or programs.
+
+Costumes and colours
+--------------------
+With Tekken 3 Expanded, "3D model" (above the portrait) shows your fighter's
+costumes in 3D, read from your own disc the first time (kept in the "cache"
+folder). Drag to turn, scroll to zoom, double-click to reset.
+On the "Colours" tab (next to "Fighter"), "+ Colour variant" makes a
+recoloured copy of a costume. Under "Clothing" every piece of clothing and
+accessory is listed (click one, or click it on the model): give it a colour,
+or open it to change its colours one by one. "Whole costume" shifts all
+colours at once, "Schemes" colours the biggest pieces in one go. Under "In the
+game" choose where it goes: it can replace one of the style's costumes, or,
+for styles with two costumes, be costume 3 (press Start on the select
+screen). Save, Update/Build if the builder asks, then restart the game.
 
 Test
 ----
