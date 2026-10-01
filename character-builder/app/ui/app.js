@@ -15,13 +15,13 @@ const DONORS = [
   ["Hwoarang", "Taekwondo", "Striking"],
   ["Xiaoyu", "Baguazhang", "Traditional", "Tested: works fully as a donor."],
   ["Eddy", "Capoeira", "Striking", "Eddy and Tiger share this slot."], ["Jin", "Karate", "Traditional"],
-  ["Julia", "Xingyiquan", "Traditional"], ["Kuma", "Bear style", "Special", "Kuma and Panda share this slot."],
+  ["Julia", "Xingyiquan", "Traditional"], ["Kuma", "Bear style", "Special", "Kuma and Panda share this slot. Moves work, but the model shows graphical glitches for now."],
   ["Bryan", "Kickboxing", "Striking"], ["Heihachi", "Mishima karate", "Traditional"],
   ["Ogre", "Ancient arts", "Special", "Tested: works fully as a donor."],
   ["Mokujin", "Copycat", "Special", "Copies another fighter's style at the start of every round, like Mokujin. Needs the 0.3.6 game patch."],
   ["Gun Jack", "Heavy machine", "Special"], ["Gon", "Dino power", "Special", "Tested: works as a donor (needs the 0.3.6 game patch)."],
-  ["Anna", "Assassination arts", "Striking"], ["Dr. B", "Unpredictable", "Special", "Tested: works as a donor (needs the 0.3.6 game patch)."],
-  ["True Ogre", "Ancient arts (boss)", "Special", "Moves work, but the model shows graphical glitches for now."],
+  ["Anna", "Assassination arts", "Striking", "Tested: works as a donor (needs the 0.3.6 game patch)."], ["Dr. B", "Unpredictable", "Special", "Tested: works as a donor (needs the 0.3.6 game patch)."],
+  ["True Ogre", "Ancient arts (boss)", "Special", "Tested: works, but graphical glitches were seen once."],
 ].map(([name, style, group, note = ""], id) => ({ id, name, style, group, note }));
 const STYLE_GROUPS = ["Striking", "Grappling", "Traditional", "Special"];
 
