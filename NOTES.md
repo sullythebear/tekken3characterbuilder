@@ -103,10 +103,11 @@ Results (one test fighter per donor, Arcade, played by the user with the Test bu
   Not looked into what they do; candidates if something Gon-specific is ever missed.
 - **Dr. B (19): works** (user). DR.B T = ID 42: `a1=18`, header `1200`/`1201` (key 18, Dr. B's
   moveset), model 45 (map `44, 45`), descriptor `13 43 15 02 14 12 0e 19`.
-- **True Ogre (20): moves work, many graphical glitches (open, not fixed).** T.OGRE T = ID 43:
+- **True Ogre (20): works** (the glitches of the first test came from ID 43, fixed by
+  T3CB-PATCH-8, see "ID 43" below). T.OGRE T = ID 43 in that test:
   `a1=14`, header `0e00`/`0e01` (key 14, Ogre's moveset, as stock True Ogre), model 33 (map
-  `32, 33`). The user's screenshot shows the model dark with wrong-looking textures. All four
-  True Ogre checks test `actor+0x18 == 20`, so none fire for a custom fighter:
+  `32, 33`). The True Ogre checks below test `actor+0x18 == 20`, so none fire for a custom
+  fighter; no visible effect so far:
   - `0x800697D4` (moveset loading): when request 14 loads and P1's or P2's `+0x18` (`0x800A9240`,
     `+0x18A4` for P2) is 20, it calls `0x8006C588(3)`, most likely True Ogre's extra data
     (textures). Prime suspect for the glitches.
@@ -119,52 +120,48 @@ Results (one test fighter per donor, Arcade, played by the user with the Test bu
 - **Anna (18): works perfectly** (user, T3CB-PATCH-7). ANNA T = ID 42: `a1=17`, header
   `1100`/`1101` (key 17, Anna's moveset), model 41 (map `36, 41, 46`). Before patch 7 she would
   have loaded moveset 18 (Dr. B's).
-- **True Ogre, second test (same patch, 12:16, Arcade, played after Kuma T and Anna T): works
-  perfectly, no glitches** (user). Same values as the first test. So the glitches of the first
-  test (after Gon and Dr. B fights in the same session, against Eddy) do not always happen; the
-  `+0x18 == 20` checks below stay unexplained but are not shown to break him. Keep watching.
-- **Kuma (11): moves and animations work, model glitch seen (open).** KUMA T = ID 43, costume 2
-  = model 23 (Panda; map `22, 23`), `a1=11`, header `0b00`/`0b01` (key 11). In Practice against a
-  stock Panda the custom fighter's model was drawn white and torn, with holes (user screenshot).
-  First hypothesis (both players on model 23, the mirror case) is **ruled out**: the second test
-  (12:24) showed the same glitches against Xiaoyu (KUMA T costume 2, model 23) and against
-  Yoshimitsu (costume 1, model 22). That screenshot shows black holes/spots all over Kuma's fur
-  and the life bars and round markers drawn as solid orange blocks. Moves stay correct.
-  - No Kuma check in SLUS draws anything: a scan for `+0x16/+0x18 == 11` finds only the two
-    distance checks below (and two unrelated byte writes of 11 at `0x80030654` / `0x80030B3C`).
-  - Suspect 1 (code, Expanded `tekken3_ttt1_roster.c`): in state 8 (fight) the roster tick
-    uploads `guests[p].name_pixels` to VRAM (464, p * 256), 16 halfwords × 16 rows, **every
-    frame**, for every guest including custom fighters. That is player p's texture band, where
-    the HUD name sits. If Kuma's large texture set (46 tiles in his costume file) uses that spot,
-    the name plate overwrites part of it. Fits the holes; does not obviously explain the orange
-    HUD.
-  - Suspect 2: Expanded's outfits keyed on character 11 (`psxrecomp/runtime/src/tekken3_outfits.c`:
-    Brown bear, Panda, Polar bear with the HD skin `mods/kuma-polar-bear`, applied by the GL
-    renderer). The first glitch showed the custom Kuma white (polar-bear-like) and torn.
-  - **Suspect 1 ruled out (tested 12:31):** a diagnostic build (temporary edit in the test
-    folder's source only, reverted afterwards with Install + rebuild) skipped, for custom fighters,
-    both the per-frame name-plate upload in state 8 and the state-11 loading card (448 + p * 16,
-    160) with its palette (row 496 + p). Same glitches in both costumes against Law, and more:
-    orange blocks also mid-screen (the round announcement), so HUD/system graphics break too, not
-    only Kuma's own textures. The HUD name plate was blank, as expected for that build.
-  - The two "Kuma/True Ogre" checks are gameplay, not VRAM: fn `0x80045248` takes the actor and
-    its opponent (`0x80045C18`), looks up a value per weight class (`actor+0x1E`, table
-    `0x8009E660`) and subtracts 40 per fighter whose `+0x18` is 11 or 20, into `+0xF4`/`+0xF8`.
-  - Suspect 2 is unlikely: Expanded's outfit catalog (`tekken3_outfits.c`, Kuma = character 11)
-    only acts on the selector cursor's character.
-  - **Still open.** Known: moves fine, model 22/23 is Kuma's, stock Panda as P2 looked fine
-    (Practice), only Kuma-based custom fighters are affected so far (King, Ogre, Gon, Dr. B,
-    Anna fine; True Ogre glitched once). Untested ideas: compare with stock Kuma as P1 in this
-    Expanded build; look for Kuma's VRAM/texture placement keyed on the selection ID or on
-    selection `11 * 4 + costume` (the custom fighter's selection is `ID * 4 + costume`, beyond the
-    stock 92-entry tables), e.g. per-selection texture or CLUT position tables.
-  - The two Kuma checks are about distance, not graphics: `0x80043A40(actorA, actorB, a2)`
-    returns `a2 - 40 * (number of the two whose +0x18 is 11 or 20)`, and `0x800452F0` does the
-    same to a value stored at `+0xF4` / `+0xF8` of a struct. Large fighters get 40 less of some
-    spacing; a Kuma- or True Ogre-based custom fighter does not. No visible effect reported.
-- True Ogre fix idea (bigger): make these see 20 for a custom fighter based on True Ogre, e.g. wrappers
-  that answer for the selection ID, or call `0x8006C588(3)` after his moveset loads. Faking
-  `+0x18` itself is risky: Expanded's own hooks use it to recognise guests.
+- **True Ogre, second test (12:16): no glitches** (user). He was ID 41 then; in the first test he
+  was ID 43 (see below).
+- **Kuma (11): works** (user, T3CB-PATCH-8, 13:56). Moves and animations were always right
+  (`a1=11`, key 11, models 22/23). The model glitches (fur drawn with black holes or white and
+  torn, life bars / round text as orange blocks) were **not about Kuma but about the custom ID
+  43**: KUMA T was ID 43 in every glitching test, T.OGRE T glitched only while he was ID 43, and
+  after reordering `customs.txt` KUMA T (now ID 41) was perfect while ANNA T (now ID 43) got the
+  same glitches.
+- **ID 43 (root cause, tested 2026-10-01):**
+  - The fighter loader (around `0x80036300`) calls `0x8007619C(player, actor+0x18, data)` at
+    `0x800365A8`. That routine reads a 6-byte row per character ID from `0x80027950` (first
+    halfword = number of 8 × 32 tiles; `0x800279EC + player * 48` gives the VRAM rectangle) and
+    uploads that many tiles from `data` into the strips next to the fighter bands (x 368..383 and
+    496..511, rows 0..479 in stock fights).
+  - The table has 22 rows. Custom IDs read whatever follows: ID 41 → 0, 42 → 32, **43 → 256**,
+    44 → 48, 45 → 352, 46 → 64, 47 → 448, 48 → 80, 49 → 288, 50 → 0, 51+ → garbage. With 256 the
+    routine stamped one tile (source `0x800C13D4`) over x 376..495, rows 0..511: it wiped P1's
+    textures (P2's were uploaded afterwards and survived) and the CLUT rows 480..511, which the HUD
+    and the fighters' palettes use. IDs 45, 47, 49 and 51+ would have done the same.
+  - **Fix T3CB-PATCH-8:** `custom_strips()` (roster tick) keeps a 64-row copy of the table in guest
+    memory, rows copied live from `0x80027950` except custom IDs, which get their donor's row, and
+    points `0x800761B4`/`0x800761B8` (`lui`/`addiu` of the table address) at it with `lui`/`ori`
+    via Expanded's `patch()` / `psx_mod_write_code_word`. Custom fighters now also get their
+    donor's 30 (or 22) strip tiles. Install → uninstall restores the sources byte for byte.
+    Tested: ANNA T as ID 43 and KUMA T as ID 41 both perfect (user, 13:56).
+  - How it was found (method worth reusing): a temporary diagnostic in the test folder only
+    (reverted afterwards): VRAM + actor dumps at a fixed time in the fight (stock Kuma vs custom
+    Kuma, same opponent), then a trace of every CPU→VRAM upload in `psxrecomp/runtime/src/gpu.c`
+    (`gp0_commit_cpu_to_vram`) with a stack backtrace that keeps only words preceded by a
+    `jal`/`jalr` (`debug_guest_sp()`, `psx_mod_read_word`). The display area is x 0..367,
+    y 0..479. Ruled out on the way: mirror costume, name-plate / loading-card uploads, Expanded's
+    outfits and HD skins, the weight-class checks below. When searching for `jal` callers, mask
+    the target: `0x0C000000 | ((addr >> 2) & 0x03FFFFFF)`; several "no callers" results before
+    that fix were wrong.
+  - The two Kuma/True Ogre checks are gameplay, not graphics: fn `0x80045248` (callers in fn
+    `0x800451B8`) and `0x80043A40` (caller `0x80043890`) subtract 40 per fighter whose `+0x18` is
+    11 or 20 from a value looked up per weight class (`actor+0x1E`, table `0x8009E660`). A Kuma- or
+    True Ogre-based custom fighter does not get that; no visible effect reported.
+- True Ogre's own `+0x18 == 20` checks (above) are still not handled; nothing visible so far.
+  If something True-Ogre-specific turns out missing: wrappers that answer for the selection ID,
+  or call `0x8006C588(3)` after his moveset loads. Faking `+0x18` itself is risky: Expanded's
+  own hooks use it to recognise guests.
 
 ## Mokujin's round-start draw (code, SLUS-00402)
 

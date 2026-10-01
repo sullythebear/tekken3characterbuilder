@@ -159,9 +159,24 @@ ROSTER = [
  "            psx_mod_write_word(actor+0x7c0,psx_mod_read_half(actor+0x16)==4);\n"
  "    }\n"
  "}\n"
+ "/* T3CB-PATCH-8: 0x8007619C(player, actor+0x18, data), called by the fighter loader\n"
+ " * (0x800365A8), uploads table[ID].count tiles from the 6-byte table at 0x80027950,\n"
+ " * which has 22 rows. Custom IDs read past it: ID 43 found 256 and wiped both fighter\n"
+ " * bands and the CLUT rows. The routine reads a copy whose custom rows hold their\n"
+ " * donor's row; every other row is copied live, so nothing else changes. */\n"
+ "static void custom_strips(void) {\n"
+ "    static uint32_t table;\n"
+ "    if(!table && !(table=psx_mod_alloc_guest_memory(64*6,16)))return;\n"
+ "    for(unsigned id=0;id<64;id++) {\n"
+ "        int d=tekken3_guest_native(id);\n"
+ "        copy_guest(table+id*6,0x80027950+(d<0?id:(unsigned)d)*6,6);\n"
+ "    }\n"
+ "    patch(0x800761b4,0x3c038002,0x3c030000|(table>>16));\n"
+ "    patch(0x800761b8,0x24637950,0x34630000|(table&65535));\n"
+ "}\n"
  "void tekken3_ttt1_roster_tick(void) {\n", 1),
 ("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
- "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
+ "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    custom_strips();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
 # --- T3CB-PATCH-4: a custom fighter's move key (actor+0x16) is its donor's, not GUEST_ID ---
 ("            cpu->gpr[4]=GUEST_ID;",
  "            cpu->gpr[4]=guest_move_key((uint16_t)cpu->gpr[4]);", 1),
