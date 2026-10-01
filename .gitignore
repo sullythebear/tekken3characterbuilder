@@ -1,0 +1,19 @@
+# Personal builder data
+character-builder/characters/
+character-builder/logs/
+character-builder/config.json
+__pycache__/
+*.pyc
+
+# Never commit game data or builds
+*.bin
+*.cue
+*.chd
+*.iso
+*.img
+*.exe
+build-release/
+generated/
+workspace/
+disc/
+*.t3char
