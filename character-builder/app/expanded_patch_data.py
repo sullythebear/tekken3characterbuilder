@@ -169,8 +169,11 @@ ROSTER = [
  "            cpu->gpr[2]=guest_move_key((uint16_t)cpu->gpr[2]);cpu->pc=cpu->gpr[31];return;", 1),
 ("void __wrap_func_8002D1DC(CPUState *cpu) {\n",
  "/* T3CB-PATCH-4: the moveset loader (0x80069F74) reads actor+0x16, so a custom\n"
- " * fighter keeps its donor's ID there; TTT1 guests keep 23. */\n"
- "static unsigned guest_move_key(unsigned id){int d=tekken3_guest_native(id);return d<0?GUEST_ID:(unsigned)d;}\n"
+ " * fighter keeps its donor's moveset key there; TTT1 guests keep 23.\n"
+ " * T3CB-PATCH-7: the key is the donor descriptor's byte 9, as stock T3 sets it\n"
+ " * (0x8004F2BC); it differs from the ID for Mokujin, Gon, Anna, Dr. B, True Ogre. */\n"
+ "static unsigned guest_move_key(unsigned id){int d=tekken3_guest_native(id);\n"
+ "    return d<0?GUEST_ID:psx_mod_read_byte(psx_mod_read_word(0x80097d40+(unsigned)d*16)+9);}\n"
  "void __wrap_func_8002D1DC(CPUState *cpu) {\n", 1),
 # Custom fighters keep their name plate but do not switch the TTT1 side on.
 ("wanted=1;gr_vram_transfer_in(464,p*256,guests[p].name_halfwords,16,guests[p].name_pixels);",
