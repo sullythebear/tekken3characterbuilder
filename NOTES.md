@@ -145,6 +145,12 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
 - Still seen in 0.3.3: `follow()` tries to load `Cbdizzy-TTT1-arcade-P1.3dm` and rejects it
   (harmless log noise; `follow()` stays for the name plate). Only P1's `0x80052958` call was
   logged this session; in the 0.3.2 session the CPU opponent's (`a1=4`) was too. Not explained.
+- **Mixed fights (tested 2026-10-01 by the user, Expanded 1.1.3 test folder, patch
+  T3CB-PATCH-4, Dizzy = King donor), both work perfectly:**
+  - Dizzy vs Kazuya (VS mode): Kazuya, a TTT1 guest, keeps his own TTT1 model and moves next to
+    a custom fighter. So `guest_move_key` giving Dizzy King's key and Dizzy no longer switching
+    the TTT1 side on does not take the TTT1 side away from a real guest in the same fight.
+  - Dizzy vs King: a custom fighter and its own donor can be in one fight together.
 - **Bug (builder 0.3.2, fixed in 0.3.4):** Install/Update (`/api/support/install` in
   `server.py`) also runs `sync_customs(everything=True)`, which rewrote `customs.txt` from the
   builder's own `characters/` folder only. A builder copied into a game folder without that
