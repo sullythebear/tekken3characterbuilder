@@ -119,6 +119,8 @@ button, input { font: inherit; color: inherit; }
 }
 .roster small, .unlinked-list small { color: var(--steel); font-size: .76rem; }
 .empty { color: var(--steel); font-size: .85rem; margin: .25rem 0 0; }
+.step-buttons { display: inline-flex; gap: .3rem; }
+.copy-report { margin: .4rem 0; }
 .unlinked { margin-top: 1rem; padding-top: .8rem; border-top: 1px dashed var(--line); }
 .unlinked-title { margin: 0; font: 800 italic 1rem/1.1 var(--display); text-transform: uppercase; color: var(--amber); }
 .unlinked-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .15rem; }

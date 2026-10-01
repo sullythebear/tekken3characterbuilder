@@ -118,9 +118,14 @@
     <li class="step" id="step-play">
       <div class="step-head"><span class="step-name">Play</span><span class="sym" aria-hidden="true">□</span></div>
       <span class="bar"><span class="fill"></span></span>
-      <div class="step-foot"><span class="step-text">Choose or save a fighter</span><button class="btn btn-primary" type="button" id="play-button" disabled><span class="ps" aria-hidden="true">✕</span>Play</button></div>
+      <div class="step-foot"><span class="step-text">Choose or save a fighter</span><span class="step-buttons"><button class="btn btn-ghost" type="button" id="test-button" disabled title="Build if needed, play, then write a test report">Test</button><button class="btn btn-primary" type="button" id="play-button" disabled><span class="ps" aria-hidden="true">✕</span>Play</button></span></div>
     </li>
   </ol>
+  <details class="console" id="report-panel" hidden>
+    <summary>Test report</summary>
+    <button class="btn btn-ghost copy-report" type="button" id="copy-report">Copy</button>
+    <pre id="report"></pre>
+  </details>
   <details class="console" id="console">
     <summary>Log</summary>
     <pre id="log" aria-live="polite"></pre>

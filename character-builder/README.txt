@@ -1,4 +1,4 @@
-TEKKEN 3 CHARACTER BUILDER 0.3.4
+TEKKEN 3 CHARACTER BUILDER 0.3.5
 ================================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
@@ -39,6 +39,13 @@ Sharing
 "Export" creates a .t3char file you can share. Others load it with
 "Import package". A package only contains a description and images, never
 game files or programs.
+
+Test
+----
+"Test" (next to Play) builds the game if needed, starts it, and when you
+close the game writes logs	est-report.md: versions, build result, the
+Custom page list and the game's Custom/TTT1 log lines. It also appears in
+the builder under "Test report", with a Copy button.
 
 Undo
 ----

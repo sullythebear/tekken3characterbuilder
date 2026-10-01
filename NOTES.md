@@ -210,6 +210,24 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
 
 ## Testing
 
+- **Test button (builder 0.3.5):** one click checks that the patch is current (if not it stops:
+  Install/Update first), builds when the exe is missing the patch or is older than the patched
+  source, starts the game like Play, and when the game closes writes
+  `character-builder/logs/test-report.md`: date and time, builder version, patch revision and
+  whether it is current, the build result (not needed / succeeded / failed), play time and exit
+  code, both copies of `customs.txt`, every game-log line starting with `Custom fighters`,
+  `Custom probe` or `TTT1 characters`, and up to 40 other lines matching
+  error/fault/failed/exception/assert/crash. The report shows in the UI (Test report, with Copy)
+  and survives a restart of the builder. Code: `TestRun` in `server.py`, `/api/test`.
+  Verified 2026-10-01: report rendered offline from a real game log; button and panel checked in
+  a browser.
+- **Test button tested 2026-10-01 (full click, by the user, Expanded 1.1.3 test folder):** patch
+  T3CB-PATCH-4 current, build not needed, game ran 56 s (Arcade, Dizzy as P1), exit code 0,
+  report written 2 s after the game log closed; 17 log lines, 0 errors, and the values match the
+  0.3.3 test (`a1=3`, header `0301`, `actor+0x16 3`, model 7, no `guest in the fight`). The Copy
+  button copied the report straight to the clipboard with a real click in the builder window (in
+  the automated browser only the select-and-Ctrl+C fallback could be checked). Not yet seen: a
+  test run that has to build first (it uses the same `build.start()` as the Build button).
 - psxrecomp has a TCP debug server (`beetle_debug_server.c`, default port 4380) with
   `set_input`, `clear_input`, `pad_status`, `screenshot_file` and memory reads. Builds from the
   Easy Setup turn debug tools off (`PSX_DEBUG_TOOLS=OFF`, `PSX_DEBUG_SERVER_LITE=OFF`);

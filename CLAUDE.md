@@ -27,3 +27,8 @@ for the direction. Talk to the user in Dutch; the app's UI and code comments are
   (the builder's Build button does the same; Expanded keeps its own CMake configuration).
 - Game log: run `build-release/Tekken_3_Recompiled.exe` with stderr redirected; the builder writes `character-builder/logs/game-log.txt`.
 - Custom fighter lines in the log start with `Custom fighters:`; page switches log `TTT1 characters: <page> page`.
+- Testing with the user: ask them to click **Test** in the builder (it builds if needed, plays, and
+  writes a report). After every test, read `<game>/character-builder/logs/test-report.md` yourself
+  before answering (for the user's Expanded test folder:
+  `D:\Tekken 3 Recompiled	ekken3-expanded-1.1.3\character-builder\logs	est-report.md`), and
+  open `game-log.txt` beside it only when the report is not enough.

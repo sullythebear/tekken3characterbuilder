@@ -31,7 +31,7 @@ function showWarnings(result) {
 const state = {
   status: null, characters: [], unlinked: [], current: blank(), dirty: false,
   source: null, crop: { zoom: 100, x: 0, y: 0 }, portraitChanged: false, hasPortrait: false,
-  logTotal: 0, lastBuild: "idle", lastGameRunning: false,
+  logTotal: 0, lastBuild: "idle", lastGameRunning: false, lastTest: "idle",
 };
 
 function blank() { return { id: null, name: "", donor: null, author: "" }; }
@@ -437,10 +437,13 @@ function setGauge(prefix, kind, label, text, fill) {
 
 function renderSteps() {
   const s = state.status;
-  const supportBtn = $("support-button"), buildBtn = $("build-button"), playBtn = $("play-button");
+  const supportBtn = $("support-button"), buildBtn = $("build-button"), playBtn = $("play-button"), testBtn = $("test-button");
   supportBtn.textContent = "Install";
-  supportBtn.disabled = buildBtn.disabled = playBtn.disabled = true;
+  supportBtn.disabled = buildBtn.disabled = playBtn.disabled = testBtn.disabled = true;
   if (!s) return;
+  const testing = s.test && s.test.state === "running";
+  testBtn.textContent = testing ? `${s.test.phase || "Testing"}…` : "Test";
+  testBtn.disabled = testing || !s.patch || !s.patch.installed || s.build === "running" || s.game.running;
   if (!s.found) {
     setStep("step-support", "bad", "Tekken 3 Recompiled folder not found. Click the Project bar to choose it.");
     setStep("step-build", null, "Waiting for step 1");
@@ -531,8 +534,21 @@ async function refresh() {
     s.game.summary.forEach(log);
   }
   state.lastGameRunning = s.game.running;
+  const testState = s.test ? s.test.state : "idle";
+  if (state.lastTest === "running" && testState !== "running") {
+    await loadReport(true);
+    toast(testState === "done" ? "Test finished: report ready" : "Test failed: see the report");
+  }
+  state.lastTest = testState;
   renderProject();
   renderSteps();
+}
+
+async function loadReport(open) {
+  const r = await api("/api/test");
+  $("report").textContent = r.report || "";
+  $("report-panel").hidden = !r.report;
+  if (open && r.report) $("report-panel").open = true;
 }
 
 async function pollBuild() {
@@ -596,6 +612,22 @@ function wire() {
     } catch (e) { toast(e.message); }
     refresh();
   });
+  $("test-button").addEventListener("click", async () => {
+    try {
+      await api("/api/test", {});
+      state.lastTest = "running";
+      toast("Test started: play a fight, then close the game");
+    } catch (e) { toast(e.message); }
+    refresh();
+  });
+  $("copy-report").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("report").textContent); toast("Report copied"); }
+    catch {
+      const range = document.createRange(); range.selectNodeContents($("report"));
+      getSelection().removeAllRanges(); getSelection().addRange(range);
+      toast(document.execCommand("copy") ? "Report copied" : "Report selected: press Ctrl+C");
+    }
+  });
   $("project-button").addEventListener("click", () => {
     $("root-input").value = state.status && state.status.root ? state.status.root : "";
     $("root-error").textContent = "";
@@ -631,5 +663,6 @@ function wire() {
 wire();
 fillForm();
 loadCharacters().catch((e) => toast(e.message));
+loadReport(false).catch(() => {});
 refresh();
 setInterval(refresh, 1500);

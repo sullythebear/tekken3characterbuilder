@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.4"
+APP_VERSION = "0.3.5"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
@@ -127,7 +127,7 @@ def project_status() -> dict:
         "jun": kind == "expanded" or jun_enabled(root), "patch": patch, "built": built and not stale,
         "custom_max": CUSTOM_PAGE_MAX,
         "exe_support": built,
-        "stale": stale, "build": build.snapshot(0)["state"], "game": game.snapshot(),
+        "stale": stale, "build": build.snapshot(0)["state"], "game": game.snapshot(), "test": test.snapshot(),
         "build_phase": build.phase, "build_progress": build.progress,
     }
 
@@ -290,6 +290,108 @@ class Game:
 
 
 game = Game()
+
+
+# ------------------------------------------------------------------- test --
+
+REPORT_PREFIXES = ("Custom fighters", "Custom probe", "TTT1 characters")
+REPORT_ERRORS = re.compile(r"error|fault|failed|exception|assert|crash", re.I)
+
+
+class TestRun:
+    """One click: check the patch, build if needed, play, then write logs/test-report.md."""
+
+    def __init__(self):
+        self.state, self.phase, self.report = "idle", "", ""
+        try:  # the last report survives a restart of the builder
+            self.report = (LOGS / "test-report.md").read_text(encoding="utf-8")
+        except OSError:
+            pass
+
+    def snapshot(self) -> dict:
+        return {"state": self.state, "phase": self.phase}
+
+    def start(self) -> str | None:
+        root = project_root()
+        kind = creator_patch.project_kind(root) if root else None
+        if not kind:
+            return "No supported game folder found."
+        patch = creator_patch.status(root, kind)
+        if not patch["installed"]:
+            return "The patch is not current: use Install/Update first, then test."
+        with lock:
+            if self.state == "running":
+                return "A test is already running."
+            if build.state == "running" or game.snapshot()["running"]:
+                return "Wait until the build or the game has finished."
+            self.state, self.phase = "running", "Checking"
+        threading.Thread(target=self._run, args=(root, kind), daemon=True).start()
+        return None
+
+    def _run(self, root: Path, kind: str) -> None:
+        started = datetime.now()
+        built = None  # None: not needed, True/False: rebuilt and whether it succeeded
+        played, problem = None, None
+        try:
+            if not project_status().get("built"):
+                self.phase = "Building"
+                problem = build.start()
+                while not problem and build.snapshot(0)["state"] == "running":
+                    time.sleep(1)
+                built = not problem and build.snapshot(0)["state"] == "success"
+            if built is not False and not problem:
+                self.phase = "Playing"
+                begin = time.time()
+                problem = game.start(None)
+                while not problem and game.snapshot()["running"]:
+                    time.sleep(1)
+                if not problem:
+                    played = (time.time() - begin, game.process.returncode)
+                    time.sleep(1)  # let the game log close
+        except Exception as error:  # noqa: BLE001 - report it instead of losing the test
+            problem = str(error)
+        self.report = self._write(root, kind, started, built, played, problem)
+        self.state, self.phase = ("done" if built is not False and not problem else "failed"), ""
+
+    def _write(self, root: Path, kind: str, started: datetime, built, played, problem) -> str:
+        p = creator_patch.PROFILES[kind]
+        patch = p.get("revision") or p["version"]
+        status = creator_patch.status(root, kind)
+        build_line = ("not needed" if built is None else "rebuilt, succeeded" if built
+                      else "rebuilt, FAILED (see logs/build-log.txt)")
+        lines = ["# Test report", "",
+                 f"- Date: {started:%Y-%m-%d %H:%M:%S}",
+                 f"- Builder: {APP_VERSION}",
+                 f"- Game folder: {root} ({kind})",
+                 f"- Patch: {patch}, {'current' if status['installed'] else 'NOT current'}",
+                 f"- Build: {build_line}"]
+        if played:
+            lines.append(f"- Game: ran {int(played[0]) // 60}m {int(played[0]) % 60:02d}s, exit code {played[1]}")
+        if problem:
+            lines.append(f"- Problem: {problem}")
+        if kind == "expanded":
+            lines += ["", "## customs.txt", ""]
+            for folder in custom_page.FOLDERS:
+                path = root / folder / custom_page.LIST_NAME
+                text = path.read_text(encoding="ascii", errors="replace").strip() if path.is_file() else "(missing)"
+                lines += [f"{folder}:", "```", text or "(empty)", "```"]
+        log_lines = []
+        if played:
+            try:
+                log_lines = (LOGS / "game-log.txt").read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                pass
+        picked = [l for l in log_lines if l.startswith(REPORT_PREFIXES)]
+        errors = [l for l in log_lines if REPORT_ERRORS.search(l) and not l.startswith(REPORT_PREFIXES)]
+        lines += ["", f"## Game log ({len(picked)} lines)", "", "```", *(picked or ["(none)"]), "```",
+                  "", f"## Errors ({len(errors)})", "", "```", *(errors[:40] or ["(none)"]), "```", ""]
+        report = "\n".join(lines)
+        LOGS.mkdir(exist_ok=True)
+        (LOGS / "test-report.md").write_text(report, encoding="utf-8")
+        return report
+
+
+test = TestRun()
 
 
 # ------------------------------------------------------------- characters --
@@ -650,6 +752,8 @@ class Handler(BaseHTTPRequestHandler):
             if rows:
                 return self._send(200, custom_page.png(rows), "image/png")
             return self._error("Not found.", 404)
+        if path == "/api/test":
+            return self._json({**test.snapshot(), "report": test.report})
         if path == "/api/build":
             since = 0
             query = urlparse(self.path).query
@@ -703,6 +807,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"restored": creator_patch.uninstall(root, kind)})
             if path == "/api/build":
                 problem = build.start()
+                return self._error(problem) if problem else self._json({"ok": True})
+            if path == "/api/test":
+                problem = test.start()
                 return self._error(problem) if problem else self._json({"ok": True})
             if path == "/api/play":
                 character = get_character(safe_id(data["id"])) if data.get("id") else None
