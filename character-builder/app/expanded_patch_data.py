@@ -125,16 +125,31 @@ ROSTER = [
  "        if(tekken3_guest_native(id)<0)continue;\n"
  "        uint32_t base=psx_mod_read_word(0x800adc20+p*4);\n"
  "        unsigned key=base>=0x80010000 && base<=0x801f0000?psx_mod_read_word(base)&0xffff:0xffff;\n"
- "        uint32_t sig=base^key<<20^id;\n"
+ "        uint32_t actor=0x800a9228+p*0x188c;\n"
+ "        unsigned move_id=psx_mod_read_half(actor+0x16),model=psx_mod_read_half(actor+28);\n"
+ "        uint32_t sig=base^key<<20^id^move_id<<8^model<<14;\n"
  "        if(sig==seen[p])continue;seen[p]=sig;\n"
  "        unsigned sel=psx_mod_read_half(0x800add98+p*2)&3;\n"
- "        fprintf(stderr,\"Custom probe: P%u character %u, moves at %08x, header %04x (key %u), model map %u, stock table byte %u\\n\",\n"
- "            p+1,id,base,key,key>>8,psx_mod_read_byte(model_map+id*4+sel),psx_mod_read_byte(0x800958c4+id*4+sel));\n"
+ "        fprintf(stderr,\"Custom probe: P%u character %u, moves at %08x, header %04x (key %u), model map %u, actor+0x16 %u, actor+28 model %u\\n\",\n"
+ "            p+1,id,base,key,key>>8,psx_mod_read_byte(model_map+id*4+sel),move_id,model);\n"
  "    }\n"
  "}\n"
  "void tekken3_ttt1_roster_tick(void) {\n", 1),
 ("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
  "    patch_tables();\n    custom_fight_probe();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
+# --- T3CB-PATCH-4: a custom fighter's move key (actor+0x16) is its donor's, not GUEST_ID ---
+("            cpu->gpr[4]=GUEST_ID;",
+ "            cpu->gpr[4]=guest_move_key((uint16_t)cpu->gpr[4]);", 1),
+("            cpu->gpr[2]=GUEST_ID;cpu->pc=cpu->gpr[31];return;",
+ "            cpu->gpr[2]=guest_move_key((uint16_t)cpu->gpr[2]);cpu->pc=cpu->gpr[31];return;", 1),
+("void __wrap_func_8002D1DC(CPUState *cpu) {\n",
+ "/* T3CB-PATCH-4: the moveset loader (0x80069F74) reads actor+0x16, so a custom\n"
+ " * fighter keeps its donor's ID there; TTT1 guests keep 23. */\n"
+ "static unsigned guest_move_key(unsigned id){int d=tekken3_guest_native(id);return d<0?GUEST_ID:(unsigned)d;}\n"
+ "void __wrap_func_8002D1DC(CPUState *cpu) {\n", 1),
+# Custom fighters keep their name plate but do not switch the TTT1 side on.
+("wanted=1;gr_vram_transfer_in(464,p*256,guests[p].name_halfwords,16,guests[p].name_pixels);",
+ "if(tekken3_guest_native(id)<0)wanted=1;gr_vram_transfer_in(464,p*256,guests[p].name_halfwords,16,guests[p].name_pixels);", 1),
 ("        uint32_t profile=psx_mod_read_word(0x80096ff0+9*4);",
  "        uint32_t profile=psx_mod_read_word(0x80096ff0+guest_donor(psx_mod_read_half(cpu->gpr[4]+24))*4);", 1),
 # --- VS grid pages ---

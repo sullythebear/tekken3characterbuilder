@@ -16,7 +16,7 @@ from urllib.parse import urlparse, unquote
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.3.3"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"

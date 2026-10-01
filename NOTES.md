@@ -87,12 +87,64 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
   and logs both the descriptor bytes and which donor the character-data remaps return.
 - **Fixed in 0.3.1:** an orange glitch above the left life bar in Arcade disappeared once custom
   fighters copied their donor's descriptor instead of Jin's.
-- **Still open (0.3.1, tested):** King as donor still fights with Jin's moves. King's descriptor
+- **Was open in 0.3.1 (tested; fixed in 0.3.3, see below):** King as donor still fights with Jin's moves. King's descriptor
   bytes 4..11 read `03 1e 03 03 03 03 0b 0a` (ID, name width, three bytes equal to the ID, ID,
   arena, music), so bytes 6..8 are now King's and are not what picks the moves. The remaps at
   `0x80052958` / `0x80052990` were never called with the custom ID 41 in that session.
   0.3.2 logs every call to those two functions and, per fight, the player's move header
   (`0x800adc20 + player * 4`, header byte 1 = the moveset's character key) plus the model map.
+- **Probe results (0.3.2, tested 2026-10-01, Dizzy = ID 41, donor King, Expanded 1.1.3 test folder):**
+  - `Custom fighters: Dizzy descriptor from character 3: 03 1e 03 03 03 03 0b 0a` – the donor
+    descriptor copy works. No `character 41 reads character 3's data` line: `remap_donor` was
+    never reached with ID 41.
+  - `0x80052958` calls: `a0=801aea14 a1=-1 ra=80069ff0`, `a0=800f9d80 a1=9 ra=8006a014`,
+    `a0=8015c6d8 a1=4 ra=8006a014`. `0x80052990` was not called.
+  - P1 (ID 41) moves at `0x800f9d80` (the same `a0` as the `a1=9` call), header `0900`/`0901`
+    = moveset key 9 (Jin). Model map byte 7 (donor's model; King's look was confirmed before).
+  - So the caller at `ra=0x8006a014` passes 9, not 41: the ID is turned into Jin's before the
+    remap, which therefore never sees a guest ID.
+  - Expanded's TTT1 side also treats Dizzy as a guest: `19 guests registered as character 23 to
+    41 / model 52`, `Dizzy model: missing ...Cbdizzy-TTT1-arcade-P1.3dm` / `rejected`, and
+    `TTT1 characters: guest in the fight`.
+- **Root cause of Jin's moves (code, 2026-10-01; disassembled from `disc/SLUS_004.02` and
+  `generated/SLUS_004.02_full_28.c`, Expanded 1.1.3 sources):**
+  - `func_80069F74` loads both players' movesets from a request table at `0x800A0510`:
+    8 bytes per player (`+0` character ID half, `+2` pending flag, `+4` destination word), and a
+    third entry at `+16` (called with `a1 = -1`, the `ra=80069ff0` call). Per player it calls
+    `0x80052958(a0 = dest, a1 = ID)` (return address `0x8006A014`), then `func_8006A158` copies
+    each `dest` to `0x800ADC20 + player * 4` (the moves pointer the probe reads).
+  - The ID comes from the actor: `0x80069CDC` stores `actor+0x16` (actor =
+    `0x800A9228 + player * 0x188C`) into `0x800A0510 + player * 8`. So there are two IDs per
+    actor: `+0x18` = the selection (41 for Dizzy) and `+0x16` = the key for moves, shared move
+    headers and hit rules.
+  - `actor+0x16` is clamped by `0x8002D1DC` ("if ID >= 21 return 20"; Expanded raises the bound
+    to 24). Expanded's `__wrap_func_8002D1DC` (`tekken3_ttt1_roster.c`) returns `GUEST_ID` (23)
+    for **every** guest, custom fighters included, via the `0x8002D1F4` path.
+  - With 23 in `a1`, `__wrap_func_80052958` sees guest 0 (a TTT1 guest, not custom), so
+    `remap_donor` returns 9 (Jin) before the probe logs: hence `a1=9` and no `reads character 3`.
+  - Fix: in `__wrap_func_8002D1DC`, give a custom fighter its donor's ID instead of 23.
+- **Model hooks (code):** `0x8003626C` (model → byte from `0x8009591C`), `0x80036294` (`actor+28`
+  → byte from `0x80095950`) and `0x800362C4` (`actor+28` → byte from `0x80095984`) are only
+  redirected to Jin's model 18 when the model is 52 (`GUEST_MODEL`). King's model map is
+  `6, 7, 255, 255` (Jin's `18, 19, 39, 255`); Dizzy's model map byte was 7 (King, costume 2) and
+  `0x80095950[7] = 0x80095984[7] = 0`, King's own values. So if `actor+28` is 7 in game, the
+  hooks leave Dizzy alone. **Tested** in 0.3.3: `actor+28` reads 7 in the fight.
+- **TTT1 side (code):** at state 8, `tekken3_ttt1_roster_tick` calls `follow()` (sets the guest
+  identity; that is what tries `Cbdizzy-TTT1-arcade-P1.3dm` and rejects it), uploads the guest's
+  HUD name plate to VRAM (464, player * 256), and sets `wanted = 1`, which makes
+  `tekken3_ttt1_select(1)` write control byte 1 and log `guest in the fight`. The per-player
+  TTT1 paths also check `guest_player()`, which already excludes custom fighters, but the control
+  byte should only be on for real TTT1 guests. Fix: custom fighters keep `follow()` and their
+  name plate upload, but do not set `wanted`.
+- **Fixed in 0.3.3 (T3CB-PATCH-4, tested 2026-10-01, Dizzy = ID 41, donor King, costume 2):**
+  both fixes above; the probe line also logs `actor+0x16` and `actor+28`. Log: `actor+0x16 3`,
+  `0x80052958 a0=800f9d80 a1=3 ra=8006a014`, header `0301` (key 3), `actor+28 model 7`, and no
+  `guest in the fight` after selecting Dizzy. In game Dizzy fights with King's moves and throws,
+  and the HUD name plate above the life bar still shows. Install → uninstall restores the four
+  sources byte for byte (checked).
+- Still seen in 0.3.3: `follow()` tries to load `Cbdizzy-TTT1-arcade-P1.3dm` and rejects it
+  (harmless log noise; `follow()` stays for the name plate). Only P1's `0x80052958` call was
+  logged this session; in the 0.3.2 session the CPU opponent's (`a1=4`) was too. Not explained.
 - **Bug (builder 0.3.2, code, not yet fixed):** Install/Update (`/api/support/install` in
   `server.py`) also runs `sync_customs(everything=True)`, which rewrites `customs.txt` from the
   builder's own `characters/` folder only. A builder copied into a game folder without that
