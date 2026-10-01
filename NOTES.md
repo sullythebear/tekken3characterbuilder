@@ -93,6 +93,15 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
   `0x80052958` / `0x80052990` were never called with the custom ID 41 in that session.
   0.3.2 logs every call to those two functions and, per fight, the player's move header
   (`0x800adc20 + player * 4`, header byte 1 = the moveset's character key) plus the model map.
+- **Bug (builder 0.3.2, code, not yet fixed):** Install/Update (`/api/support/install` in
+  `server.py`) also runs `sync_customs(everything=True)`, which rewrites `customs.txt` from the
+  builder's own `characters/` folder only. A builder copied into a game folder without that
+  folder (or with an empty one) therefore wipes the CUSTOM page: `expanded_custom.py list` with
+  no entries deletes `customs.txt` everywhere (the portrait packs stay behind). Found 2026-10-01
+  when a fresh builder copy went into the Expanded 1.1.3 test folder while Dizzy lived in another
+  builder copy; worked around by calling `creator_patch.install` directly. Fix idea: keep
+  entries already in `customs.txt` that are not in the library, or warn before an empty library
+  overwrites a non-empty list.
 
 ## Portrait and name plate (code: Expanded `tools/ttt1/ui.py`, `ui_art.py`, `glyphs.py`)
 
