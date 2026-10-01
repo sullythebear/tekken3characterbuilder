@@ -87,7 +87,7 @@ def install(root: Path, key: str, label: str, portrait_path: Path | None) -> Non
 
 def remove(root: Path, key: str) -> None:
     for folder in targets(root):
-        for suffix in ("-ui.jui", "-name.4bpp", "-label.txt", "-pal.bin"):
+        for suffix in ("-ui.jui", "-name.4bpp", "-label.txt", "-pal.bin", "-model.bin"):
             (folder / f"{prefix(key)}{suffix}").unlink(missing_ok=True)
     print(f"OK removed {key}")
 

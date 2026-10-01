@@ -88,7 +88,7 @@ PROFILES = {
                    "roster": ROSTER, "version": "v0.1.4"},
     "expanded": {"edits": EXPANDED_EDITS, "marker": "tekken3_guest_native", "old": (),
                  "tag": "Custom fighters:", "roster": EXPANDED_ROSTER, "version": "0.1.2",
-                 "revision": "T3CB-PATCH-9"},
+                 "revision": "T3CB-PATCH-10"},
 }
 
 

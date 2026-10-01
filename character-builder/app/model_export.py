@@ -368,16 +368,89 @@ def export_model(root: Path, model: int) -> dict:
             "missing": [u for u in used if u not in cluts]}
 
 
+# --- Own models (phase 1): a fighter model file the game loads over its donor's model ---------
+# 3DMK header: rows (27), scale, "3DMK", 0, u32 pointer at +16 (to 24 + 27 * 56 - 8), 0; then 27
+# rows of 14 i32. Pointer words: header +16, row words 0, 1, 2, 12, 13 when > 2, and the entries
+# of the hand-pose table that word 13 points to (as tools/ttt1/model/convert.py relocates them).
+MODEL_HEADER = 24 + 27 * 56
+
+
+def relocations(m: bytes) -> list[int]:
+    """File offsets of every pointer word in a 3DMK model."""
+    from fmt import row, block, nrows
+    out = [16]
+    for r in range(nrows(m)):
+        w = row(m, r)
+        out += [24 + r * 56 + 4 * k for k in (0, 1, 2, 12, 13) if w[k] > 2]
+        if w[13] > 2:
+            out += [w[13] + 4 * i for i in range(len(block(m, w[13])) // 4)]
+    return sorted(set(out))
+
+
+def own_vertex_span(m: bytes, r: int) -> tuple[int, int] | None:
+    """(file offset, count) of row r's own vertices (4 x s16 each). Row r reads row r-1's word 12."""
+    import struct
+    from fmt import row, block, parse_a
+    w = row(m, r - 1)
+    if w[12] <= 2:
+        return None
+    a = parse_a(block(m, w[12]))
+    n = len(a["verts"])
+    return w[12] + a["used"] - 8 * n, n
+
+
+def scaled_rows(m: bytes, rows: list[int], factor: float) -> bytes:
+    """A copy of model m with the own vertices of `rows` scaled about their bone (phase 1 test)."""
+    import struct
+    out = bytearray(m)
+    for r in rows:
+        span = own_vertex_span(m, r)
+        if not span:
+            continue
+        at, n = span
+        for i in range(n):
+            x, y, z, pad = struct.unpack_from("<4h", out, at + 8 * i)
+            clamp = lambda v: max(-32768, min(32767, int(round(v * factor))))
+            struct.pack_into("<4h", out, at + 8 * i, clamp(x), clamp(y), clamp(z), pad)
+    return bytes(out)
+
+
+def own_model_file(model: int, stock: bytes, new: bytes) -> bytes:
+    """<prefix>-model.bin: "T3CM", u16 version 1, u16 model it replaces, u32 new size, u32
+    relocation count, the stock model's header (how the patch recognises it in memory), the new
+    3DMK model, then u32 relocation offsets."""
+    import struct
+    if new[8:12] != b"3DMK" or struct.unpack_from("<I", new, 0)[0] != 27:
+        fail("Not a 27-row 3DMK model.")
+    relocs = relocations(new)
+    return (b"T3CM" + struct.pack("<HHII", 1, model, len(new), len(relocs)) + stock[:MODEL_HEADER] + new
+            + b"".join(struct.pack("<I", r) for r in relocs))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel"))
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--scale-rows", default="", help="ownmodel test: rows whose own vertices are scaled")
+    parser.add_argument("--factor", type=float, default=1.0)
     args = parser.parse_args()
     setup(args.root)
     if args.command == "donors":
         print(json.dumps(donors(args.root)))
+        return
+    if args.command == "ownmodel":
+        if args.model is None or args.out is None:
+            fail("--model and --out are needed.")
+        rid = FIRST_MODEL_RECORD + 4 * args.model
+        stock = records(args.root, [rid])[rid]
+        rows = [int(x) for x in args.scale_rows.split(",") if x.strip()]
+        new = scaled_rows(stock, rows, args.factor) if rows else stock
+        data = own_model_file(args.model, stock, new)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_bytes(data)
+        print(f"OK own model over model {args.model}: {len(new)} bytes, {len(relocations(new))} relocations")
         return
     if args.model is None or args.out is None:
         fail("--model and --out are needed.")

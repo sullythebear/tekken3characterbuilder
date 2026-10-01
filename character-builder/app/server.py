@@ -581,7 +581,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
                 if not present and key not in donors:
                     continue
         listed.append(f"{key} {c['donor']}")
-        problem = write_palettes(root, key, c)
+        problem = write_palettes(root, key, c) or write_own_model(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
     if left_out:
@@ -629,6 +629,28 @@ def write_palettes(root: Path, key: str, fighter: dict) -> str | None:
                 (target / name).unlink(missing_ok=True)
     except OSError as error:
         return f"Colour variants could not be written: {error}"
+    return None
+
+
+def write_own_model(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-model.bin: the fighter's own model (characters/<id>/model.bin, a "T3CM" file from
+    model_export.py), copied next to its other files; removed when the fighter has none."""
+    source = DATA / fighter["id"] / "model.bin"
+    name = f"{custom_page.file_prefix(key)}-model.bin"
+    try:
+        data = source.read_bytes() if source.is_file() else None
+        if data is not None and data[:4] != b"T3CM":
+            return "Its own model (model.bin) is not a builder model file."
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if data is not None:
+                (target / name).write_bytes(data)
+            else:
+                (target / name).unlink(missing_ok=True)
+    except OSError as error:
+        return f"Its own model could not be written: {error}"
     return None
 
 
