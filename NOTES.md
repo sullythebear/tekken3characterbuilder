@@ -32,10 +32,18 @@ Expanded uses 23..40 for its TTT1 guests; the builder's custom fighters use 41..
   character), CPU profiles `0x80098260` (12 bytes per character), radius profiles
   `0x80096ff0` (used by the `0x8003F044` hook), and the character remaps at
   `0x80052958` / `0x80052990` (argument `a1` = character ID).
+- `0x80097d40` is the metadata table: one descriptor pointer per selection (4 bytes).
+  A fighter's punch-costume descriptor is `read_word(0x80097d40 + ID * 16)`.
 - Character descriptor: 12 bytes (template `0x80022274`), name pointer at +0,
   character ID at +4 and +9, stage at +10, music at +11.
 - Memory card stats hold 22 rows; Jun uses the Force row (21). No free row is left.
 - Selector (Tekken 3 page): rows of 8, 8 and 6 cells (22); the arcade cabinet grid is 2 × 11.
+
+## Names on screen (tested, Tekken3Recompiled Jun slot)
+
+- The VS screen spells the name from the character descriptor's string (+0 pointer).
+- The name above the life bar and on the select screen is a 4bpp bitmap from the fighter's
+  interface pack, not the descriptor string.
 
 ## Donor principle (tested)
 
@@ -58,7 +66,7 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
 - CPU table and Force bosses for IDs ≥ 22 default to Jin's rows (`src/tekken3_ttt1_combat.c`).
 - The guest/native split for the import pipeline is `guest_player()` in `src/tekken3_ttt1_mod.c`.
 
-## CUSTOM page (builder 0.3.0, code written, not yet tested)
+## CUSTOM page (builder 0.3.0, tested 2026-10-01 on Expanded 1.1.3 folder)
 
 - `customs.txt` in the asset root: `<key> <donor ID>` per line, keys `cb<name>`.
 - Custom fighters follow the TTT1 guests in the roster (`tag_count` marks the split), max 12
@@ -69,6 +77,22 @@ moves, throws, animations, CPU. Verified with Xiaoyu as donor in Jun's slot
   into the Tag tile slots. The CHARACTER SELECT card reads CUSTOM on page 2.
 - Known limits: not picked as CPU opponents, no Start costume, silent announcer name call,
   Team Battle icons may show the wrong tile.
+- **Tested:** the CUSTOM page appears (R2/L2), the CHARACTER SELECT card reads CUSTOM, the
+  custom portrait, select tiles and name plate show, the VS screen shows the custom name and
+  portrait, and the HUD name above the life bar is the custom name plate. The fighter uses the
+  donor's model (King tested).
+- **Bug (0.3.0):** with King as donor the fighter had Jin/Kazuya-style moves, not King's.
+  Suspect: guest descriptors are copied from the template `0x80022274` (Jin's); its bytes 6..8
+  are not understood yet. 0.3.1 copies the donor's own descriptor (`0x80097d40 + donor * 16`)
+  and logs both the descriptor bytes and which donor the character-data remaps return.
+- **Fixed in 0.3.1:** an orange glitch above the left life bar in Arcade disappeared once custom
+  fighters copied their donor's descriptor instead of Jin's.
+- **Still open (0.3.1, tested):** King as donor still fights with Jin's moves. King's descriptor
+  bytes 4..11 read `03 1e 03 03 03 03 0b 0a` (ID, name width, three bytes equal to the ID, ID,
+  arena, music), so bytes 6..8 are now King's and are not what picks the moves. The remaps at
+  `0x80052958` / `0x80052990` were never called with the custom ID 41 in that session.
+  0.3.2 logs every call to those two functions and, per fight, the player's move header
+  (`0x800adc20 + player * 4`, header byte 1 = the moveset's character key) plus the model map.
 
 ## Portrait and name plate (code: Expanded `tools/ttt1/ui.py`, `ui_art.py`, `glyphs.py`)
 

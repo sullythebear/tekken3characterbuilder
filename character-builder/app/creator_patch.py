@@ -87,7 +87,8 @@ PROFILES = {
     "recompiled": {"edits": EDITS, "marker": MARKER, "old": OLD_MARKERS, "tag": LOG_TAG,
                    "roster": ROSTER, "version": "v0.1.4"},
     "expanded": {"edits": EXPANDED_EDITS, "marker": "tekken3_guest_native", "old": (),
-                 "tag": "Custom fighters:", "roster": EXPANDED_ROSTER, "version": "0.1.2"},
+                 "tag": "Custom fighters:", "roster": EXPANDED_ROSTER, "version": "0.1.2",
+                 "revision": "T3CB-PATCH-3"},
 }
 
 
@@ -132,13 +133,16 @@ def original_text(path: Path, kind: str = "recompiled") -> str:
 
 def status(root: Path, kind: str = "recompiled") -> dict:
     p = PROFILES[kind]
-    result = {"installed": False, "old_probe": False, "compatible": False, "problem": None}
+    result = {"installed": False, "old_probe": False, "outdated": False, "compatible": False, "problem": None}
     try:
         texts = {name: _read(root / name) for name in p["edits"]}
     except OSError:
         result["problem"] = "The source files this builder patches are missing from this folder."
         return result
     result["installed"] = all(p["marker"] in t for t in texts.values())
+    revision = p.get("revision")
+    if result["installed"] and revision and revision not in texts[p["roster"]]:
+        result["installed"], result["outdated"] = False, True
     result["old_probe"] = any(any(m in t for m in p["old"]) for t in texts.values())
     try:
         _plan(root, kind)

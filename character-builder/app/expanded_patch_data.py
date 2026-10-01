@@ -76,7 +76,14 @@ ROSTER = [
  "    return k>=0 && roster[k].custom?(int)roster[k].donor_id:-1;\n"
  "}\n"
  "/* The stock fighter whose tables a guest reads: Jin's for TTT1 guests. */\n"
- "static unsigned guest_donor(unsigned id){int d=tekken3_guest_native(id);return d<0?9u:(unsigned)d;}\n", 1),
+ "static unsigned guest_donor(unsigned id){int d=tekken3_guest_native(id);return d<0?9u:(unsigned)d;}\n"
+ "/* The same, for the character-data remaps, noting once which donor a custom fighter reads. */\n"
+ "static unsigned remap_donor(unsigned id) {\n"
+ "    static unsigned long long logged;\n"
+ "    int d=tekken3_guest_native(id);\n"
+ "    if(d>=0 && id<64 && !(logged>>id&1)){logged|=1ull<<id;fprintf(stderr,\"Custom fighters: character %u reads character %d's data\\n\",id,d);}\n"
+ "    return d<0?9u:(unsigned)d;\n"
+ "}\n", 1),
 ("static uint32_t guest_desc(unsigned k){return desc+k*DESC_STRIDE;}",
  "/* 22 records fit before name_table; the rest follow its 64 entries. */\n"
  "static uint32_t guest_desc(unsigned k){return k<22?desc+k*DESC_STRIDE:name_table+NAME_TABLE_IDS*4+(k-22)*DESC_STRIDE;}", 1),
@@ -86,7 +93,48 @@ ROSTER = [
  "            psx_mod_write_byte(model_map+(GUEST_ID+k)*4+c,roster[k].custom?\n"
  "                psx_mod_read_byte(0x800958c4+roster[k].donor_id*4+c):GUEST_MODEL);", 1),
 ("tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=9;",
- "tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=guest_donor(cpu->gpr[5]);", 2),
+ "tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=remap_donor(cpu->gpr[5]);", 2),
+# A custom fighter starts from its donor's own descriptor (T3CB-PATCH-2): bytes 6..8,
+# whose meaning is not known yet, then match the donor instead of Jin.
+("        copy_guest(d,0x80022274,12);\n",
+ "        /* T3CB-PATCH-2: a custom fighter copies its donor's descriptor, not Jin's. */\n"
+ "        uint32_t from=roster[k].custom?psx_mod_read_word(0x80097d40+roster[k].donor_id*16):0x80022274;\n"
+ "        copy_guest(d,from,12);\n"
+ "        if(roster[k].custom)fprintf(stderr,\"Custom fighters: %s descriptor from character %u: %02x %02x %02x %02x %02x %02x %02x %02x\\n\",\n"
+ "            roster[k].name,roster[k].donor_id,psx_mod_read_byte(from+4),psx_mod_read_byte(from+5),psx_mod_read_byte(from+6),\n"
+ "            psx_mod_read_byte(from+7),psx_mod_read_byte(from+8),psx_mod_read_byte(from+9),psx_mod_read_byte(from+10),psx_mod_read_byte(from+11));\n", 1),
+# The strong-hit effect: a custom fighter has its donor's pack, so its donor's header.
+("        if(tekken3_guest_character((ptr-EFFECT_HEADERS)/EFFECT_HEADER)>=0)psx_mod_write_word(at,jin);",
+ "        unsigned id=(ptr-EFFECT_HEADERS)/EFFECT_HEADER;int donor=tekken3_guest_native(id);\n"
+ "        if(tekken3_guest_character(id)>=0)psx_mod_write_word(at,donor>=0?EFFECT_HEADERS+(unsigned)donor*EFFECT_HEADER:jin);", 1),
+# --- T3CB-PATCH-3 diagnostics: where a custom fighter's moves come from ---
+("    __real_func_80052958(cpu);\n}",
+ "    remap_probe(0x80052958u,cpu);\n    __real_func_80052958(cpu);\n}", 1),
+("    __real_func_80052990(cpu);\n}",
+ "    remap_probe(0x80052990u,cpu);\n    __real_func_80052990(cpu);\n}", 1),
+("void tekken3_ttt1_roster_tick(void) {\n",
+ "/* T3CB-PATCH-3: diagnostics for the custom fighters' moves. */\n"
+ "static void remap_probe(uint32_t at,CPUState *cpu) {\n"
+ "    static unsigned calls;\n"
+ "    if(calls<24 && (cpu->pc==0 || cpu->pc==at)){calls++;fprintf(stderr,\"Custom probe: %08x a0=%08x a1=%u ra=%08x\\n\",at,cpu->gpr[4],cpu->gpr[5],cpu->gpr[31]);}\n"
+ "}\n"
+ "static void custom_fight_probe(void) {\n"
+ "    static uint32_t seen[2];\n"
+ "    for(unsigned p=0;p<2;p++) {\n"
+ "        unsigned id=psx_mod_read_half(0x800a9240+p*0x188c);\n"
+ "        if(tekken3_guest_native(id)<0)continue;\n"
+ "        uint32_t base=psx_mod_read_word(0x800adc20+p*4);\n"
+ "        unsigned key=base>=0x80010000 && base<=0x801f0000?psx_mod_read_word(base)&0xffff:0xffff;\n"
+ "        uint32_t sig=base^key<<20^id;\n"
+ "        if(sig==seen[p])continue;seen[p]=sig;\n"
+ "        unsigned sel=psx_mod_read_half(0x800add98+p*2)&3;\n"
+ "        fprintf(stderr,\"Custom probe: P%u character %u, moves at %08x, header %04x (key %u), model map %u, stock table byte %u\\n\",\n"
+ "            p+1,id,base,key,key>>8,psx_mod_read_byte(model_map+id*4+sel),psx_mod_read_byte(0x800958c4+id*4+sel));\n"
+ "    }\n"
+ "}\n"
+ "void tekken3_ttt1_roster_tick(void) {\n", 1),
+("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
+ "    patch_tables();\n    custom_fight_probe();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
 ("        uint32_t profile=psx_mod_read_word(0x80096ff0+9*4);",
  "        uint32_t profile=psx_mod_read_word(0x80096ff0+guest_donor(psx_mod_read_half(cpu->gpr[4]+24))*4);", 1),
 # --- VS grid pages ---

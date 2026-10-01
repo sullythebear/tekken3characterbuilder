@@ -388,6 +388,7 @@ function setGauge(prefix, kind, label, text, fill) {
 function renderSteps() {
   const s = state.status;
   const supportBtn = $("support-button"), buildBtn = $("build-button"), playBtn = $("play-button");
+  supportBtn.textContent = "Install";
   supportBtn.disabled = buildBtn.disabled = playBtn.disabled = true;
   if (!s) return;
   if (!s.found) {
@@ -401,6 +402,11 @@ function renderSteps() {
   $("step-support").querySelector(".step-name").textContent = isExpanded() ? "Custom page" : "Creator support";
   if (!s.jun) setStep("step-support", "bad", "Requires Jun: run the Easy Setup with Include Jun Kazama checked.");
   else if (p.installed) setStep("step-support", "ok", "Installed");
+  else if (p.outdated && p.compatible) {
+    setStep("step-support", null, "Update ready for the builder's changes. Install, then build again.");
+    supportBtn.textContent = "Update";
+    supportBtn.disabled = building;
+  }
   else if (!p.compatible) setStep("step-support", "bad", p.problem || "This version is not supported.");
   else {
     setStep("step-support", null, p.old_probe ? "Replaces the Dizzy test with the full version."
