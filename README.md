@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.3.6 | Style layer: pick a fighting style (Striking, Grappling, Traditional, Special), each based on a Tekken 3 fighter. Copycat (Mokujin) draws another style each round (tested), holding the sword only with Yoshimitsu's style (patch T3CB-PATCH-6). |
 | 0.3.5 | Test button: build if needed, play, then a compact test report (`logs/test-report.md`) shown in the builder. |
 | 0.3.4 | The builder never drops CUSTOM page fighters it does not know: it lists them, to add to the library or remove on purpose. |
 | 0.3.3 | Custom fighters fight with their donor's moves and throws (tested with King as donor on Tekken 3 Expanded 1.1.3). |

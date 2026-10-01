@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.5"
+APP_VERSION = "0.3.6"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
@@ -426,7 +426,7 @@ def validate_character(data: dict) -> dict:
     try:
         donor = int(data.get("donor"))
     except (TypeError, ValueError):
-        raise ValueError("Choose a donor.") from None
+        raise ValueError("Choose a fighting style.") from None
     if not DONOR_MIN <= donor <= DONOR_MAX:
         raise ValueError("That donor does not exist.")
     author = re.sub(r"[^\w .\-]", "", str(data.get("author", ""))).strip()[:32]

@@ -1,4 +1,4 @@
-TEKKEN 3 CHARACTER BUILDER 0.3.5
+TEKKEN 3 CHARACTER BUILDER 0.3.6
 ================================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.

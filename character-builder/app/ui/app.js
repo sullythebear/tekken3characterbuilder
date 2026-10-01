@@ -7,16 +7,23 @@ const PORTRAIT_W = 126, PORTRAIT_H = 252, SHOWN_W = 168, BAND_ROWS = 64, BAND_CO
 
 // Internal Tekken 3 (SLUS-00402) character IDs, as read from the game's own
 // character records (confirmed by Tekken3Recompiled and Tekken 3 Expanded).
+// Layer 1 of docs/vision.md: a fighter picks a style; the donor supplies its moveset.
 const DONORS = [
-  ["Paul"], ["Law"], ["Lei"], ["King"], ["Yoshimitsu"], ["Nina"], ["Hwoarang"],
-  ["Xiaoyu", "Tested: works fully as a donor."], ["Eddy", "Eddy and Tiger share this slot."], ["Jin"],
-  ["Julia"], ["Kuma", "Kuma and Panda share this slot."], ["Bryan"], ["Heihachi"],
-  ["Ogre", "Boss character. Not tested as a donor yet."],
-  ["Mokujin", "Mokujin copies other fighters' styles. Not tested as a donor yet."], ["Gun Jack"],
-  ["Gon", "Not tested as a donor yet."], ["Anna"],
-  ["Dr. B", "Not tested as a donor yet."],
-  ["True Ogre", "Boss character. Not tested as a donor yet."],
-].map(([name, note = "", probable = false], id) => ({ id, name, note, probable }));
+  ["Paul", "Judo", "Grappling"], ["Law", "Jeet kune do", "Striking"], ["Lei", "Kung fu", "Traditional"],
+  ["King", "Pro wrestling", "Grappling", "Tested: works fully as a donor."],
+  ["Yoshimitsu", "Ninjutsu", "Traditional"], ["Nina", "Assassination arts", "Striking"],
+  ["Hwoarang", "Taekwondo", "Striking"],
+  ["Xiaoyu", "Baguazhang", "Traditional", "Tested: works fully as a donor."],
+  ["Eddy", "Capoeira", "Striking", "Eddy and Tiger share this slot."], ["Jin", "Karate", "Traditional"],
+  ["Julia", "Xingyiquan", "Traditional"], ["Kuma", "Bear style", "Special", "Kuma and Panda share this slot."],
+  ["Bryan", "Kickboxing", "Striking"], ["Heihachi", "Mishima karate", "Traditional"],
+  ["Ogre", "Ancient arts", "Special", "Boss character. Not tested as a donor yet."],
+  ["Mokujin", "Copycat", "Special", "Copies another fighter's style at the start of every round, like Mokujin. Needs the 0.3.6 game patch."],
+  ["Gun Jack", "Heavy machine", "Special"], ["Gon", "Dino power", "Special", "Not tested as a donor yet."],
+  ["Anna", "Assassination arts", "Striking"], ["Dr. B", "Unpredictable", "Special", "Not tested as a donor yet."],
+  ["True Ogre", "Ancient arts (boss)", "Special", "Boss character. Not tested as a donor yet."],
+].map(([name, style, group, note = ""], id) => ({ id, name, style, group, note }));
+const STYLE_GROUPS = ["Striking", "Grappling", "Traditional", "Special"];
 
 const $ = (id) => document.getElementById(id);
 // Tekken 3's name font has no F or Q, and 2 is its only digit.
@@ -76,34 +83,42 @@ function log(text) {
 function renderDonors() {
   const grid = $("donor-grid");
   grid.replaceChildren();
-  for (const donor of DONORS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "donor" + (donor.probable ? " probable" : "");
-    button.dataset.initial = donor.name[0];
-    button.setAttribute("role", "radio");
-    button.setAttribute("aria-checked", String(state.current.donor === donor.id));
-    button.dataset.id = donor.id;
-    const num = document.createElement("span");
-    num.className = "num";
-    num.textContent = `#${donor.id}`;
-    const name = document.createElement("span");
-    name.className = "dn";
-    name.textContent = donor.name;
-    button.append(num, name);
-    button.title = donor.probable ? `${donor.name} (probable)` : donor.name;
-    button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); });
-    grid.append(button);
+  for (const group of STYLE_GROUPS) {
+    const section = document.createElement("div");
+    section.className = "style-group";
+    const title = document.createElement("h4");
+    title.textContent = group;
+    const cards = document.createElement("div");
+    cards.className = "style-cards";
+    for (const donor of DONORS.filter((d) => d.group === group)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "donor";
+      button.dataset.initial = donor.style[0];
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(state.current.donor === donor.id));
+      button.dataset.id = donor.id;
+      const style = document.createElement("span");
+      style.className = "dn";
+      style.textContent = donor.style;
+      const based = document.createElement("span");
+      based.className = "num";
+      based.textContent = `based on ${donor.name}`;
+      button.append(style, based);
+      button.title = donorLabel(donor.id);
+      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); });
+      cards.append(button);
+    }
+    section.append(title, cards);
+    grid.append(section);
   }
   const d = DONORS[state.current.donor];
-  $("donor-info").textContent = d
-    ? (d.note || `Based on ${d.name}.`)
-    : "";
+  $("donor-info").textContent = d ? `${donorLabel(d.id)}.${d.note ? ` ${d.note}` : ""}` : "";
 }
 
 function donorLabel(id) {
-  if (id === null || id === undefined) return "Choose a donor";
-  return `Fights as ${DONORS[id].name}`;
+  if (id === null || id === undefined) return "Choose a style";
+  return `${DONORS[id].style}, based on ${DONORS[id].name}`;
 }
 
 /* ---------------------------------------------------------- portrait -- */
@@ -364,7 +379,7 @@ async function save(event) {
   const error = $("form-error");
   const name = $("name").value.trim().toUpperCase();
   if (!NAME_VALID.test(name)) { error.textContent = "Enter a name of 1 to 15 characters: letters (no F or Q), space, period, hyphen or 2."; $("name").focus(); return; }
-  if (state.current.donor === null) { error.textContent = "Choose a donor."; return; }
+  if (state.current.donor === null) { error.textContent = "Choose a fighting style."; return; }
   error.textContent = "";
   const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim() };
   if (state.portraitChanged && state.source) {

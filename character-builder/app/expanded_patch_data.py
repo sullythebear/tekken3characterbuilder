@@ -134,9 +134,34 @@ ROSTER = [
  "            p+1,id,base,key,key>>8,psx_mod_read_byte(model_map+id*4+sel),move_id,model);\n"
  "    }\n"
  "}\n"
+ "/* T3CB-PATCH-5: Mokujin's round-start draw for custom fighters based on him. Stock\n"
+ " * T3 only draws when actor+0x18 == 15 (0x8002AA44), so do the same draw here:\n"
+ " * an unlocked fighter (0x80097EF0 & 0x13FFF) whose ID goes to actor+0x16. */\n"
+ "void tekken3_custom_copycat_draw(void) {\n"
+ "    unsigned mask=psx_mod_read_word(0x80097ef0)&0x13fff,ids[22],n=0;\n"
+ "    for(unsigned i=0;i<22;i++)if(mask>>i&1)ids[n++]=i;\n"
+ "    for(unsigned p=0;p<2 && n;p++) {\n"
+ "        uint32_t actor=0x800a9228+p*0x188c;\n"
+ "        int k=tekken3_guest_character(psx_mod_read_half(actor+0x18));\n"
+ "        if(k<0 || !roster[k].custom || roster[k].donor_id!=15)continue;\n"
+ "        unsigned id=ids[draw(n)];\n"
+ "        unsigned drawn=psx_mod_read_byte(psx_mod_read_word(0x80097d40+id*16)+9);\n"
+ "        psx_mod_write_half(actor+0x16,(uint16_t)drawn);\n"
+ "        fprintf(stderr,\"Custom fighters: %s copies character %u this round\\n\",roster[k].name,drawn);\n"
+ "    }\n"
+ "}\n"
+ "/* T3CB-PATCH-6: Mokujin's sword. 0x8003615C sets actor+0x7C0 = (actor+0x16 == 4) only\n"
+ " * when actor+0x18 == 15, so Mokujin holds it with Yoshimitsu's moves only. */\n"
+ "static void copycat_sword(void) {\n"
+ "    for(unsigned p=0;p<2;p++) {\n"
+ "        uint32_t actor=0x800a9228+p*0x188c;\n"
+ "        if(tekken3_guest_native(psx_mod_read_half(actor+0x18))==15)\n"
+ "            psx_mod_write_word(actor+0x7c0,psx_mod_read_half(actor+0x16)==4);\n"
+ "    }\n"
+ "}\n"
  "void tekken3_ttt1_roster_tick(void) {\n", 1),
 ("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
- "    patch_tables();\n    custom_fight_probe();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
+ "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
 # --- T3CB-PATCH-4: a custom fighter's move key (actor+0x16) is its donor's, not GUEST_ID ---
 ("            cpu->gpr[4]=GUEST_ID;",
  "            cpu->gpr[4]=guest_move_key((uint16_t)cpu->gpr[4]);", 1),
@@ -241,6 +266,13 @@ MOD = [
 ]
 
 COMBAT = [
+("void __wrap_func_8002A914(CPUState *cpu) {\n",
+ "extern void tekken3_custom_copycat_draw(void);\n"
+ "void __wrap_func_8002A914(CPUState *cpu) {\n", 1),
+("        for(unsigned p=0;p<2;p++)if(tekken3_guest_draw_moveset(p))ready(p);\n",
+ "        for(unsigned p=0;p<2;p++)if(tekken3_guest_draw_moveset(p))ready(p);\n"
+ "    /* T3CB-PATCH-5: a custom fighter based on Mokujin draws its moveset each round. */\n"
+ "    if((cpu->pc==0 || cpu->pc==0x8002a914) && tekken3_ttt1_roster_enabled())tekken3_custom_copycat_draw();\n", 1),
 ("enum { CPU_TABLE=0x80098260,",
  "extern int tekken3_guest_native(unsigned id);\n"
  "static unsigned native_row(unsigned id,unsigned fallback){int d=tekken3_guest_native(id);return d<0?fallback:(unsigned)d;}\n"
