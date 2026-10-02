@@ -49,10 +49,12 @@ def _boundary_quadrics(p, tris, Q, weight=1000.0):
         Q[v] += K
 
 
-def decimate(positions, triangles, target: int, keep=None):
+def decimate(positions, triangles, target: int, keep=None, importance=None):
     p = np.array(positions, dtype=float).copy()
     tris = np.array(triangles, dtype=np.int64)
     Q = _plane_quadrics(p, tris)
+    if importance is not None:          # per vertex: shape there costs more to lose
+        Q *= np.asarray(importance, float)[:, None, None]
     _boundary_quadrics(p, tris, Q)
     faces = [list(t) for t in tris]
     alive = [True] * len(faces)

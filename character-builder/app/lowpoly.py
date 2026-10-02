@@ -169,49 +169,16 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     torso = tube(hips, neck, 4, n_body, torso_tris, front, 0.2 * height, 1, first=waist, weight=1.3)
     tube(hips, crotch, 2, n_body, pelvis_tris, front, 0.2 * height, 3, first=waist, cap_at=crotch)
 
-    # head: rings of a latitude/longitude shell around the head's centre, the neck ring shared
+    # head: the original's own head (and hair), as Namco shapes it: one closed shell of the
+    # head's triangles (voxel surface), simplified to the head budget with the shape of the
+    # face (nose, brows, lips, jaw; the front, below the hairline) and the outline weighing
+    # most. The torso's neck ring is closed; the head shell covers it.
     top = ends["head"]
-    head_tris = sel({19})
-    hc = neck + (top - neck) * 0.48
-    radius = np.linalg.norm(top - hc) * 2.5
-    a, r, s = frame(top - neck, front)
-    lats = np.radians([-50, -28, -8, 12, 34, 58, 78])
-    rings = [torso[-1]]
-    ang = 2 * np.pi * np.arange(n_body) / n_body
-    for la in lats:
-        dirs = np.cos(la) * (np.cos(ang)[:, None] * r + np.sin(ang)[:, None] * s) + np.sin(la) * a
-        rings.append(body.add(cast(np.repeat(hc[None], n_body, 0), dirs, P, head_tris, radius), 19))
-    crown = body.add(cast(hc[None], a[None], P, head_tris, radius), 19)[0]
-    Pp = np.array(body.pos)
-    circ = np.linalg.norm(Pp[rings[3]] - np.roll(Pp[rings[3]], -1, 0), axis=1).sum()
-    vs = [0.0]
-    for j in range(1, len(rings)):
-        vs.append(vs[-1] + np.mean(np.linalg.norm(Pp[rings[j]] - Pp[rings[j - 1]], axis=1)))
-    # three charts: the face (the sectors around the front, the most texels, as Namco's
-    # faces), and the two halves of the back of the head
-    before = len(body.faces)
-    q = n_body // 6
-    face = [(k % n_body) for k in range(-q - 1, q + 1)]
-    rest = [k for k in range(n_body) if k not in face]
-    # The face chart stops at the forehead (ring 5, 34 degrees up); the hair above the face
-    # is a chart of its own (otherwise skin from the folded face bleeds onto the crown)
-    brow = 5
-    ch = body.chart(9.0)
-    first_face = len(body.faces)
-    body.strip(rings[:brow + 1], vs[:brow + 1], ch, circ, face)
-    # Namco's faces are half a face, mirrored over the nose line: both halves share the
-    # texels, so the face gets twice the detail in the same room
-    mid = circ * len(face) / (2 * n_body)
-    for f in body.faces[first_face:]:
-        f["flat"] = [(mid + abs(u - mid), v) for u, v in f["flat"]]
-    ch = body.chart(1.6)
-    body.strip(rings[brow:], vs[brow:], ch, circ, face)
-    body.cap(rings[-1], crown, vs[-1], vs[-1] + circ / n_body, ch, circ, face)
-    for ks in (rest[:len(rest) // 2], rest[len(rest) // 2:]):
-        ch = body.chart(1.6)
-        body.strip(rings, vs, ch, circ, ks)
-        body.cap(rings[-1], crown, vs[-1], vs[-1] + circ / n_body, ch, circ, ks)
-    centre_of.extend([lambda x, hc=hc: hc] * (len(body.faces) - before))
+    # the neck: a short tube from the torso's neck ring up into the head, on the head row
+    nk = tube(neck, neck + (top - neck) * 0.4, 2, n_body, sel({19, 1}), front, 0.08 * height, 19,
+              first=torso[-1], cap_at=neck + (top - neck) * 0.45)
+    head_faces = head_mesh(body, P, sel({19}), neck, top, front, int(round(300 * detail)))
+    centre_of.extend([None] * head_faces)
 
     for side, (thigh, shin, foot) in limbs["leg"].items():
         knee, ankle, toe = J[shin], J[foot], ends["toe " + side]
@@ -254,6 +221,8 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     # wind every face so that triangle (0, 1, 2) faces away from its part's axis
     Pp = np.array(body.pos)
     for f, centre in zip(body.faces, centre_of):
+        if centre is None:               # already wound outwards (head shell)
+            continue
         a, b, c = Pp[f["v"][:3]]
         n = np.cross(b - a, c - a)
         m = (a + b + c) / 3
@@ -392,4 +361,58 @@ def add_pieces(body, P, Tr, vrow, budget, height, log=print):
     body["owner"] = owner
     body["normals"] = np.array(normals)
     log(f"{len(pieces)} loose pieces, {added} triangles")
+    return added
+
+
+def head_mesh(body, P, tris, neck, top, front, budget):
+    """Adds the head shell to body (owner row 19). Charts: the face (front, below the
+    hairline: planar, mirrored over the nose line, the most texels, as Namco's half faces),
+    the hair and sides around (cylindrical). Returns the number of faces added."""
+    import remesh
+    import decimate
+    axis = top - neck
+    hlen = float(np.linalg.norm(axis))
+    a, r, s = frame(axis, front)                      # a up the head, r forward, s sideways
+    rm = remesh.remesh(P, tris, h=hlen / 70)
+    v, f = rm["positions"], rm["triangles"]
+    # outward winding: most faces point away from the head's centre
+    hc = neck + axis * 0.5
+    n = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+    if (np.einsum("ij,ij->i", n, v[f].mean(1) - hc) > 0).mean() < 0.5:
+        f = f[:, [0, 2, 1]]
+    # importance: the face (front, between chin and brows) and the hair's outline
+    rel = v - neck
+    up_ = rel @ a / hlen
+    fwd = rel @ r
+    side = rel @ s
+    face = (fwd > 0) & (up_ > 0.2) & (up_ < 0.8) & (np.abs(side) < 0.4 * hlen)
+    imp = np.where(face, 120.0, 1.0)
+    q, used, ff, merged = decimate.decimate(v, f, budget, importance=imp)
+    keep = sorted(set(ff.ravel().tolist()))
+    idx = {k: len(body.pos) + i for i, k in enumerate(keep)}
+    body.add([q[k] for k in keep], 19)
+    Pq = q
+    face_ch = body.chart(9.0)
+    hair_ch = body.chart(1.6)
+    added = 0
+    for t in ff:
+        pts = Pq[t]
+        nrm = np.cross(pts[1] - pts[0], pts[2] - pts[0])
+        cen = pts.mean(0)
+        rc = cen - neck
+        in_face = (rc @ r > 0) and (nrm @ r > 0.35 * np.linalg.norm(nrm)) and (0.15 < (rc @ a) / hlen < 0.78)
+        if in_face:
+            # front projection (not mirrored: the simplified face has triangles across the
+            # nose line, folding them would collapse their texture)
+            flat = [((p - neck) @ s, (p - neck) @ a) for p in pts]
+            ch = face_ch
+        else:
+            ang = [np.arctan2((p - neck) @ s, (p - neck) @ r) for p in pts]
+            if max(ang) - min(ang) > np.pi:           # across the back seam
+                ang = [x + 2 * np.pi if x < 0 else x for x in ang]
+            rad = 0.5 * hlen
+            flat = [(x * rad, (p - neck) @ a) for x, p in zip(ang, pts)]
+            ch = hair_ch
+        body.faces.append({"v": [idx[k] for k in t], "chart": ch, "flat": flat})
+        added += 1
     return added

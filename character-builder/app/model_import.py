@@ -30,6 +30,8 @@ MAX_TRIS, MAX_SLOTS, MAX_NORMALS, MAX_UVS = 255, 128, 126, 255
 # merged, the original light kept within +-35 %.
 TEXTURE_STYLE = {"flat_radius": 8, "flat_strength": 0.4, "k": 8, "shade": 0.6, "passes": 1, "size": 3,
                  "merge": 40, "light": 0.35}
+# Build the body on the donor's own model (template.py) instead of tubes (lowpoly.py).
+TEMPLATE = True
 # GPU packet bytes per polygon family (flat tri, flat quad, gouraud tri, gouraud quad). The game
 # builds one packet per polygon in a fixed buffer per player; stock models use at most 32580
 # bytes, and a model needing 33596 crashed the game when the fight started (2026-10-02).
@@ -339,13 +341,33 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     budget = len(m)
     detail = (target or 1000) / 1000
     for attempt in range(8):
-        body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
-        lowpoly.add_pieces(body, P, Tr, vrow, int(260 * detail), height, log)
+        if TEMPLATE:
+            # Namco's own topology: the donor's model moved onto the import's surface
+            import template
+            to_fbx = lambda x: Q.T @ ((np.asarray(x) - W[3][1]) / s) + hips
+            ends_game = {19: g(ends["head"])}
+            for side, (collar, upper, fore, hand) in limbs["arm"].items():
+                ends_game[hand] = g(ends["hand " + side])
+            for side, (thigh, shin, foot) in limbs["leg"].items():
+                ends_game[foot] = g(ends["toe " + side])
+            body = template.build(m, X.bind(m), F, J, ends_game, to_fbx, P, Tr, trow, log if attempt == 0 else (lambda *a: None))
+        else:
+            body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
+        piece_budget = int(260 * detail)
+        if TEMPLATE:                       # what the GPU packet buffer has left after the template
+            used_b = sum(PACKET[(1 if len(f["v"]) == 4 else 0) if f.get("hard") else (3 if len(f["v"]) == 4 else 2)]
+                         for f in body["faces"])
+            # two-sided sheets and the per-piece minimum add more than asked: keep a margin
+            piece_budget = max(0, int((MAX_PACKET_BYTES - used_b) / PACKET[2] * 0.45 * detail ** 3))
+            if attempt == 0:
+                log(f"template packets {used_b} bytes, {piece_budget} triangles left for loose pieces")
+        if piece_budget >= 60:            # too little room: leave the loose pieces out
+            lowpoly.add_pieces(body, P, Tr, vrow, piece_budget, height, log)
         # Tekken 3 heads are a little large for the body; give the import its donor's proportion
         # Tekken 3 limbs are fuller than most modern models: move each limb's thickness part of
         # the way to the donor's (never thinner, at most 1.6x)
         owners = np.array(body["owner"])
-        for r, c in limb_child.items():
+        for r, c in ({} if TEMPLATE else limb_child).items():
             sel_v = owners == r
             if r not in radius_t3 or not sel_v.any():
                 continue
@@ -360,7 +382,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
             if attempt == 0:
                 log(f"row {r}: thickness donor {radius_t3[r]:.0f}, import {ours:.0f} -> x{k:.2f}")
         # hands as big as the donor's (Namco's hands are large and readable), at most 1.5x
-        for r in (14, 18):
+        for r in (() if TEMPLATE else (14, 18)):
             sel_v = owners == r
             if r not in hand_t3 or not sel_v.any():
                 continue
@@ -374,7 +396,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
         k = float(np.clip(head_t3 / max(own_head, 1e-6), 1.0, 1.35))
         if attempt == 0:
             log(f"head: donor {head_t3:.0f}, import {own_head:.0f} game units, leg {leg_t3:.0f}")
-        if k > 1.01:
+        if k > 1.01 and not TEMPLATE:
             hv = np.array(body["owner"]) == 19
             body["positions"][hv] = Jf[19] + (body["positions"][hv] - Jf[19]) * k
             if attempt == 0:
@@ -387,7 +409,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
             log(f"detail {detail:.2f}: {e}")
             detail *= 0.9
             continue
-        if len(data) > budget:
+        if len(data) > budget and not __import__("os").environ.get("T3CB_NOLIMIT"):   # NOLIMIT: offline study only
             log(f"detail {detail:.2f}: {len(data)} bytes, over the donor's {budget}")
             detail *= 0.92
             continue
@@ -440,16 +462,6 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
     by_row = {}
     for i, r in enumerate(draw):
         by_row.setdefault(r, []).append(i)
-    # the torso, pelvis and head spill into their second layer when one row cannot hold them
-    for main, second in SECOND.items():
-        ts = by_row.get(main, [])
-        verts = {v for i in ts for v in faces[i]["v"]}
-        corners = {(faces[i]["chart"], v) for i in ts for v in faces[i]["v"]}
-        if len(verts) > MAX_NORMALS or len(ts) > MAX_TRIS or len(corners) > MAX_UVS - 15:
-            ts.sort(key=lambda i: G[faces[i]["v"]].mean(0)[1])
-            half = len(ts) // 2
-            by_row[main], by_row[second] = ts[:half], ts[half:]
-
     texture = None
     if tex:
         import texture_bake as TB
@@ -481,7 +493,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         # the face crisp, as Namco paints faces: sharpened (eyes, brows, lips) and a little
         # more contrast, inside the face chart only
         from PIL import Image as _I, ImageFilter as _F
-        sharp = np.asarray(_I.fromarray(rgb).filter(_F.UnsharpMask(radius=1.2, percent=110, threshold=6)))
+        sharp = np.asarray(_I.fromarray(rgb).filter(_F.UnsharpMask(radius=1.0, percent=60, threshold=10)))
         sharp = np.clip((sharp.astype(float) - 128) * 1.06 + 128, 0, 255).astype(np.uint8)
         rgb = np.where(keep_face[..., None], sharp, styled)
         rgb = TB.vivid(rgb)
@@ -505,6 +517,33 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         texture = {"uv": tuv, "rgb": shown.astype(np.uint8), "band": band, "runs": runs, "mats": mats,
                    "palette": [c for _, p in runs for c in p], "charts": max(chart) + 1, "density": density,
                    "face8": bool(mode8)}
+
+    # the texture coordinates each polygon really stores (an 8-bit texel is a column pair)
+    def uv_keys(i):
+        if texture is None:
+            return [(0, 0)]
+        m8 = texture["mats"][faces[i]["chart"]] & 0x8000
+        return [((int(u) // 2 if m8 else int(u)) & 255, int(v) & 255) for u, v in texture["uv"][i]]
+
+    def uv_need(part):
+        return len({k for i in part for k in uv_keys(i)})
+
+    # the torso, pelvis and head spill into their second layer when one row cannot hold them
+    for main, second in SECOND.items():
+        ts = by_row.get(main, [])
+        verts = {v for i in ts for v in faces[i]["v"]}
+        if len(verts) > MAX_NORMALS or len(ts) > MAX_TRIS or uv_need(ts) > MAX_UVS:
+            ts.sort(key=lambda i: G[faces[i]["v"]].mean(0)[1])
+            # split where the two halves need about as many vertices (normals) each
+            def need(part):                  # the tighter of the two per-row limits
+                nv = (len({v for i in part if not faces[i].get("hard") for v in faces[i]["v"]})
+                      + 0.5 * sum(1 for i in part if faces[i].get("hard"))) / MAX_NORMALS
+                nu = uv_need(part) / MAX_UVS
+                return max(nv, nu)
+            best = min(range(1, len(ts)), key=lambda h: max(need(ts[:h]), need(ts[h:])))
+            by_row[main], by_row[second] = ts[:best], ts[best:]
+            if __import__("os").environ.get("T3CB_DEBUG"):
+                print(f"split row {main}: {len(ts)} polys, uv {uv_need(ts[:best])}+{uv_need(ts[best:])}, need {need(ts[:best]):.2f}/{need(ts[best:]):.2f}")
 
     # vertex lists per row: own (owner's frame) and borrowed (cache)
     own, borrow = {}, {}
@@ -591,40 +630,64 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         vb += struct.pack("<I", len(verts)) + b"".join(struct.pack("<4h", *[int(round(x)) for x in p], 0) for p in local)
         vb += pack_fields([], 9) * 3 + pack_fields([2 * entry[v] for v in dep], 9) + pack_fields([], 9) + pack_fields([], 2)
         # normals: one per vertex the row draws, in the row's frame (unit 4096), deduplicated
-        normals, nidx = [], {}
+        # (a flat-shaded polygon, "hard", has one normal of its own: the face's)
+        normals, nidx, nface = [], {}, {}
+
+        def norm_index(nl):
+            # snapped to 1/8 steps first, so nearly equal normals are stored once (the light
+            # difference is invisible; it saves bytes in the donor's model slot)
+            u = np.round(np.asarray(nl) / (np.linalg.norm(nl) + 1e-12) * 8) / 8
+            q = tuple(int(round(x * 4096 / (np.linalg.norm(u) + 1e-12))) for x in u)
+            if q not in normals:
+                normals.append(q)
+            return normals.index(q)
         for i in ts:
-            for v in faces[i]["v"]:
-                if v in nidx:
-                    continue
-                nl = Rf.T @ Nrm[v]
-                q = tuple(int(round(x * 4096 / (np.linalg.norm(nl) + 1e-12))) for x in nl)
-                if q not in normals:
-                    normals.append(q)
-                nidx[v] = normals.index(q)
+            if not faces[i].get("hard"):
+                for v in faces[i]["v"]:
+                    if v not in nidx:
+                        nidx[v] = norm_index(Rf.T @ Nrm[v])
+        for i in ts:                         # flat polygons reuse a normal within 20 degrees
+            if faces[i].get("hard"):
+                p3 = G[faces[i]["v"][:3]]
+                nl = Rf.T @ np.cross(p3[1] - p3[0], p3[2] - p3[0])
+                nl = nl / (np.linalg.norm(nl) + 1e-12)
+                if normals:
+                    arr = np.array(normals, float) / 4096
+                    j = int(np.argmax(arr @ nl))
+                    if arr[j] @ nl > 0.94:
+                        nface[i] = j
+                        continue
+                nface[i] = norm_index(nl)
         if len(normals) > MAX_NORMALS:
             raise Budget(f"row {r} needs {len(normals)} normals")
         nb = struct.pack("<4I", 4, 0, 0, len(normals)) + b"".join(struct.pack("<4h", *q, 0) for q in normals) + bytes(8)
         # polygons: gouraud triangles (family 2) and quads (family 3). Stored mirrored, corners
         # (0, 2, 1[, 3]): the game draws a triangle whose cross(b - a, c - a) points inwards.
-        fam = {2: [], 3: []}
+        fam = {0: [], 1: [], 2: [], 3: []}
         for i in ts:
-            fam[3 if len(faces[i]["v"]) == 4 else 2].append(i)
-        if max(len(fam[2]), len(fam[3])) > MAX_TRIS:
+            quad = len(faces[i]["v"]) == 4
+            fam[(1 if quad else 0) if faces[i].get("hard") else (3 if quad else 2)].append(i)
+        if max(len(x) for x in fam.values()) > MAX_TRIS:
             raise Budget(f"row {r} has too many polygons")
-        pb = struct.pack("<II", 0, 0)
-        mats, uvs, tex_entries = [], [], {2: [], 3: []}
-        for k in (2, 3):
+        pb = b""
+        mats, uvs, tex_entries = [], [], {0: [], 1: [], 2: [], 3: []}
+        for k in (0, 1, 2, 3):
             pb += struct.pack("<I", len(fam[k]))
             for i in fam[k]:
                 v = faces[i]["v"]
-                corners = [0, 2, 1] if k == 2 else [0, 2, 1, 3]
+                corners = [0, 2, 1] if k in (0, 2) else [0, 2, 1, 3]
                 sl = [slot_of(v[c]) for c in corners]
-                nn = [(nidx[v[c]] + 1) * 4 for c in corners]
                 w0 = sl[0] * 4 | (sl[1] * 4) << 7 | (sl[2] * 4) << 14
-                if k == 2:
-                    pb += struct.pack("<II", w0, nn[0] | nn[1] << 7 | nn[2] << 16)
+                if k in (1, 3):
+                    w0 |= (sl[3] * 4) << 23
+                if k < 2:
+                    pb += struct.pack("<II", w0, (nface[i] + 1) * 4)
                 else:
-                    pb += struct.pack("<III", w0 | (sl[3] * 4) << 23, nn[0], nn[1] | nn[2] << 7 | nn[3] << 16)
+                    nn = [(nidx[v[c]] + 1) * 4 for c in corners]
+                    if k == 2:
+                        pb += struct.pack("<II", w0, nn[0] | nn[1] << 7 | nn[2] << 16)
+                    else:
+                        pb += struct.pack("<III", w0, nn[0], nn[1] | nn[2] << 7 | nn[3] << 16)
                 mat = texture["mats"][faces[i]["chart"]] if texture is not None else 0
                 eight = bool(mat & 0x8000)
                 if mat not in mats:
@@ -645,8 +708,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
             raise Budget(f"row {r} needs {len(uvs)} texture coordinates")
         cb = struct.pack("<H", 2 + 2 * len(mats)) + b"".join(struct.pack("<H", x) for x in mats)
         cb += struct.pack("<H", 2 + 2 * len(uvs)) + b"".join(struct.pack("<H", e) for e in uvs)
-        cb += bytes([0, 0])
-        for k in (2, 3):
+        for k in (0, 1, 2, 3):
             cb += bytes([len(fam[k])]) + b"".join(tex_entries[k])
         w = rows[r]
         w[0] = put(nb)
@@ -659,10 +721,10 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
             w[3:12] = list(rows[19][3:12])
         rows[r - 1][12] = put(vb)
         report["polygons"] += len(ts)
-        report["triangles"] += len(fam[2]) + 2 * len(fam[3])
-        report["rows"][r] = {"tris": len(fam[2]), "quads": len(fam[3]), "own": len(verts),
+        report["triangles"] += len(fam[0]) + len(fam[2]) + 2 * (len(fam[1]) + len(fam[3]))
+        report["rows"][r] = {"fam": [len(fam[k]) for k in range(4)], "own": len(verts),
                              "borrowed": len(borrow.get(r, [])), "normals": len(normals), "uvs": len(uvs)}
-    packets = sum(PACKET[2] * v["tris"] + PACKET[3] * v["quads"] for v in report["rows"].values())
+    packets = sum(sum(PACKET[k] * v["fam"][k] for k in range(4)) for v in report["rows"].values())
     if packets > MAX_PACKET_BYTES:
         raise Budget(f"{packets} bytes of GPU packets, the game allows about {MAX_PACKET_BYTES}")
     report["packet_bytes"] = packets

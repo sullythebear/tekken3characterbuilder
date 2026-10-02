@@ -15,6 +15,18 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
 
 ## Next
 
+**Template approach (2026-10-03, offline, in progress; `template.py`, `TEMPLATE = True`):** the
+donor's own body rows 1-20 (Namco's topology, joint seams, flat/gouraud choice per polygon)
+placed in the import's row frames, stretched along the bones, then moved onto the original's
+surface (nearest point, the ray from the bone where the nearest point is an inner layer; the
+head only onto the head). Vertices that land on one spot are welded. Writer: flat families 0/1,
+flat polygons reuse a normal within 20 degrees, normals snapped to 1/8, head split over rows
+19/20 by the real UV and normal counts; loose pieces get what the GPU packet buffer has left.
+Medea over Nina: 982 triangles, 22464 bytes, body silhouette now Namco-like. Open: chest and
+shoulders crumpled where Nina's high collar / chest topology differs from Medea's; a seam in the
+face chart; loose pieces (collar) need room; Nina's own fight stance for the compare renders
+(capture with TEKKEN3_NATIVE_PROBE). The deployed MEDEA model is an unfinished state: do not test.
+
 0. **New direction (user's explanation, see knowledge/t3-model-style.md 'Namco's way of
    working')**: importance-weighted simplification of the original geometry (head first),
    keep form shading in textures, crease-angle normals, front/head/hands get the budget.
