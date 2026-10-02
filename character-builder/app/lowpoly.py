@@ -127,7 +127,8 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
             d = np.minimum(d, 1.3 * (np.roll(d, 1) + np.roll(d, -1)) / 2)
         return c + dirs * d[:, None]
 
-    def tube(a, b, segments, n, tris, ref, max_len, owner, first=None, cap_at=None, weight=1.0, min_len=0.0):
+    def tube(a, b, segments, n, tris, ref, max_len, owner, first=None, cap_at=None, weight=1.0, min_len=0.0,
+             cap_start=None):
         rings = [first] if first is not None else []
         # turn the same way round as the shared first ring: a tube pointing the other way
         # (the pelvis down from the waist) would otherwise run its ring backwards and the
@@ -151,6 +152,9 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
         if cap_at is not None:
             centre = body.add([cap_at], owner)[0]
             body.cap(rings[-1], centre, vs[-1], vs[-1] + circ / n, ch, circ)
+        if cap_start is not None:                # a rounded start (the shoulder's ball)
+            centre = body.add([cap_start], owner)[0]
+            body.cap(rings[0][::-1], centre, 0.0, -circ / n, ch, circ)
         f = lambda x, a=a, b=b: _closest(x, a, b)
         centre_of.extend([f] * (len(body.faces) - before))
         return rings
@@ -213,8 +217,9 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
              min_len=0.45 * ar)
     for side, (upper, fore, hand) in limbs["arm"].items():
         elbow, wrist, tip = J[fore], J[hand], ends["hand " + side]
-        shoulder = J[upper] + (J[upper] - elbow) * 0.2                     # starts inside the torso
-        ru = tube(shoulder, elbow, 3, n_arm, sel({upper, upper - 1}), front, 0.055 * height, upper)
+        shoulder = J[upper] + (J[upper] - elbow) * 0.12                    # starts at the shoulder's edge
+        ru = tube(shoulder, elbow, 3, n_arm, sel({upper, upper - 1}), front, 0.055 * height, upper,
+                  cap_start=J[upper] + (J[upper] - elbow) * 0.2 + up * 0.012 * height)
         rf = tube(elbow, wrist, 3, n_arm, sel({fore, upper, hand}), front, 0.045 * height, fore, first=ru[-1])
         wr = np.mean(np.linalg.norm(np.array([body.pos[i] for i in rf[-1]]) - wrist, axis=1))
         fing = ends.get("fingers " + side)
