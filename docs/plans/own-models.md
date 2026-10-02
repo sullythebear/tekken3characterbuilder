@@ -29,7 +29,8 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    most 6 flat colour areas, majority-filtered edges, soft original light +-20 %); mirrored half
    face (face chart u folded over the nose line in `lowpoly.build`); loose pieces only when more
    than 2.8 % of the height outside the tubes (belt plate gone; collar and sleeve flap stay).
-   920 triangles, 21404 bytes, 15.0 texels per unit.
+   920 triangles, 21404 bytes, 15.0 texels per unit. She floated: v21 tested in game 2026-10-02 (stands on the ground),
+   scaled by hip height above the soles.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

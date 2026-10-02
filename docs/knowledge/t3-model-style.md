@@ -55,3 +55,8 @@ Rules for imported models, so they match the originals:
   flattened per chart (divided by their own 6-texel blur to the power 0.5), a 3 x 3 median, then
   saturation 1.25 and contrast 1.08 (`texture_bake.flatten/paint/vivid`); the face skips the
   median and flattening.
+- **Standing on the ground (tested in game 2026-10-02: v20 floated):** the animations put the
+  hips at the donor's height, so an import must be scaled by its **hip height above the soles**,
+  not by its leg bones (heels and thick boots put the soles far below the ankle bone). Donor
+  hip height = lowest vertex of its standing pose below the hip joint. Medea over Nina: soles
+  now at 1256 vs Nina's 1261 (game units below the root); she is ~11 % taller than Nina overall.

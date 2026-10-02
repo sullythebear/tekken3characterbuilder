@@ -209,7 +209,15 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
                        np.linalg.norm(joint(bones, "shin", s) - joint(bones, "foot", s)) for s in "LR"])
     leg_t3 = np.mean([np.linalg.norm(W[a][1] - W[b][1]) + np.linalg.norm(W[b][1] - W[c][1])
                       for a, b, c in ((5, 6, 7), (8, 9, 10))])
-    s = leg_t3 / leg_fbx
+    # Scale by the hips' height above the soles, not by the leg bones: the animations put the
+    # hips at the donor's height, so the soles must end where the donor's do (heels, thick
+    # boots). Donor: lowest vertex of its standing pose below the hip joint (game Y points down).
+    floor_t3 = max((W[sl[0]][0] @ np.array(sl[1], float) + W[sl[0]][1])[1]
+                   for r, slots in X.bind(m).items() if r in (5, 6, 7, 8, 9, 10) for sl in slots if sl is not None)
+    hip_t3 = floor_t3 - W[3][1][1]
+    hip_fbx = hips[1] - P[:, 1].min()
+    s = hip_t3 / hip_fbx if hip_t3 > 0 and hip_fbx > 0 else leg_t3 / leg_fbx
+    log(f"scale {s:.1f} (hip height: donor {hip_t3:.0f} game units; by leg bones it was {leg_t3 / leg_fbx:.1f})")
     g = lambda x: s * (Q @ (np.asarray(x) - hips)) + W[3][1]       # FBX -> game, hips on the root
 
     # joints (game) and the frames: the donor's standing frames, turned so each limb runs

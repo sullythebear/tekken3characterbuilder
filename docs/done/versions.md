@@ -4,7 +4,8 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
-| (next) | Painted style (stylise), mirrored half face, fewer loose pieces; Medea v20 | in game 2026-10-02: works |
+| (next) | Scale by hip height above the soles (no floating); Medea v21 | in game 2026-10-02: stands |
+| 058ddf7 | Painted style (stylise), mirrored half face, fewer loose pieces; Medea v20 | in game 2026-10-02: works (floated) |
 | e8336fd | Fuller limbs, vivid and flattened textures, closed crotch, log once; Medea v19 | in game 2026-10-02: works |
 | 623a049 | Patch 12 (CLUT runs), 8-bit face, painted textures, whole loose pieces; Medea v17 | in game 2026-10-02: works |
 | ffdf692 | GPU packet limit in the importer; Medea v16 | in game 2026-10-02: works (v15 crashed: packets) |
