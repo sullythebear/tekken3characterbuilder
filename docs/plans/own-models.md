@@ -40,7 +40,13 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    palms at least 0.42x the finger width; torso and limbs measured against the donor (Medea
    already as thick except forearms x1.3-1.4 and shins x1.6; Nina only looks broader by her
    costume); colour areas under 6 % of a chart merge. The red/green marks on the armour arm are
-   the source's own design (stripes on the gauntlet), not noise. Deployed, not tested in game.
+   the source's own design (stripes on the gauntlet), not noise. Tested in game 2026-10-02: proportions right; face blurry, no shoulders, hair glitched (skin
+   patch on the crown).
+6. v26 (offline, deployed): shoulder tube on the collarbone rows 11/15 sharing its ring with the
+   upper arm (arms join the torso, the shoulder follows the collarbone); the face chart stops at
+   the forehead, the hair above the face is its own chart (no skin on the crown); face chart
+   weight 9, sharpened (unsharp 1.2/110/6) and contrast 1.06. Still behind Nina: face softer,
+   hair a smooth helmet (Namco: angular strands and a fringe over the face).
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

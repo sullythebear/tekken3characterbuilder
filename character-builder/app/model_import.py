@@ -297,7 +297,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
         ends["hand " + side] = farthest("hand", side, Jf[rows("hand")])
         ends["fingers " + side] = finger_points(bones, side)
     limbs = {"leg": {sd: (rows("thigh"), rows("shin"), rows("foot")) for sd, rows in (("L", L), ("R", R_))},
-             "arm": {sd: (rows("upper"), rows("fore"), rows("hand")) for sd, rows in (("L", L), ("R", R_))}}
+             "arm": {sd: (rows("collar"), rows("upper"), rows("fore"), rows("hand")) for sd, rows in (("L", L), ("R", R_))}}
 
     tex = None
     if source is not None:
@@ -478,7 +478,12 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         st.update(json.loads(os.environ.get("T3CB_STYLE", "{}")))     # for comparing styles offline
         flat = TB.flatten(rgb, owner, st["flat_radius"], st["flat_strength"])
         styled = TB.stylise(flat, owner, st["k"], st["shade"], st["passes"], st["size"], st["merge"], st["light"])
-        rgb = np.where(keep_face[..., None], rgb, styled)
+        # the face crisp, as Namco paints faces: sharpened (eyes, brows, lips) and a little
+        # more contrast, inside the face chart only
+        from PIL import Image as _I, ImageFilter as _F
+        sharp = np.asarray(_I.fromarray(rgb).filter(_F.UnsharpMask(radius=1.2, percent=110, threshold=6)))
+        sharp = np.clip((sharp.astype(float) - 128) * 1.06 + 128, 0, 255).astype(np.uint8)
+        rgb = np.where(keep_face[..., None], sharp, styled)
         rgb = TB.vivid(rgb)
         to_ps1 = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], dtype=np.uint8)
         if mode8:

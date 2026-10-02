@@ -193,17 +193,24 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     q = n_body // 6
     face = [(k % n_body) for k in range(-q - 1, q + 1)]
     rest = [k for k in range(n_body) if k not in face]
-    for ks, weight in ((face, 6.0), (rest[:len(rest) // 2], 1.6), (rest[len(rest) // 2:], 1.6)):
-        ch = body.chart(weight)
-        first_face = len(body.faces)
+    # The face chart stops at the forehead (ring 5, 34 degrees up); the hair above the face
+    # is a chart of its own (otherwise skin from the folded face bleeds onto the crown)
+    brow = 5
+    ch = body.chart(9.0)
+    first_face = len(body.faces)
+    body.strip(rings[:brow + 1], vs[:brow + 1], ch, circ, face)
+    # Namco's faces are half a face, mirrored over the nose line: both halves share the
+    # texels, so the face gets twice the detail in the same room
+    mid = circ * len(face) / (2 * n_body)
+    for f in body.faces[first_face:]:
+        f["flat"] = [(mid + abs(u - mid), v) for u, v in f["flat"]]
+    ch = body.chart(1.6)
+    body.strip(rings[brow:], vs[brow:], ch, circ, face)
+    body.cap(rings[-1], crown, vs[-1], vs[-1] + circ / n_body, ch, circ, face)
+    for ks in (rest[:len(rest) // 2], rest[len(rest) // 2:]):
+        ch = body.chart(1.6)
         body.strip(rings, vs, ch, circ, ks)
         body.cap(rings[-1], crown, vs[-1], vs[-1] + circ / n_body, ch, circ, ks)
-        if ks is face:
-            # Namco's faces are half a face, mirrored over the nose line: both halves share the
-            # texels, so the face gets twice the detail in the same room
-            mid = circ * len(ks) / (2 * n_body)
-            for f in body.faces[first_face:]:
-                f["flat"] = [(mid + abs(u - mid), v) for u, v in f["flat"]]
     centre_of.extend([lambda x, hc=hc: hc] * (len(body.faces) - before))
 
     for side, (thigh, shin, foot) in limbs["leg"].items():
@@ -215,11 +222,15 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
         toe = ankle + (toe - ankle) * 0.9                                  # blunt toes, like Namco's shoes
         tube(ankle, toe, 2, n_leg, sel({foot}), left, 0.06 * height, foot, first=rs[-1], cap_at=toe,
              min_len=0.45 * ar)
-    for side, (upper, fore, hand) in limbs["arm"].items():
+    for side, (collar, upper, fore, hand) in limbs["arm"].items():
         elbow, wrist, tip = J[fore], J[hand], ends["hand " + side]
-        shoulder = J[upper] + (J[upper] - elbow) * 0.12                    # starts at the shoulder's edge
-        ru = tube(shoulder, elbow, 3, n_arm, sel({upper, upper - 1}), front, 0.055 * height, upper,
-                  cap_start=J[upper] + (J[upper] - elbow) * 0.2 + up * 0.012 * height)
+        # the shoulder, as Namco builds it: a short tube on the collarbone row from inside the
+        # chest out to the upper arm, sharing its ring with the arm, so arm and torso join and
+        # the shoulder moves with the collarbone
+        base = J[collar] + (J[upper] - J[collar]) * 0.25
+        rc = tube(base, J[upper], 2, n_arm, sel({collar, upper}), front, 0.07 * height, collar,
+                  cap_start=base - (J[upper] - J[collar]) * 0.1)
+        ru = tube(J[upper], elbow, 3, n_arm, sel({upper}), front, 0.055 * height, upper, first=rc[-1])
         rf = tube(elbow, wrist, 3, n_arm, sel({fore, upper, hand}), front, 0.045 * height, fore, first=ru[-1])
         wr = np.mean(np.linalg.norm(np.array([body.pos[i] for i in rf[-1]]) - wrist, axis=1))
         fing = ends.get("fingers " + side)
