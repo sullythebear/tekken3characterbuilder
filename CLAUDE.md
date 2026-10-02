@@ -1,7 +1,17 @@
 # Working on the Tekken 3 Character Builder
 
-Read `NOTES.md` first: it holds every technical finding so far. Read `docs/vision.md`
-for the direction. Talk to the user in Dutch; the app's UI and code comments are English.
+Talk to the user in Dutch; the app's UI and code comments are English.
+
+## Working method (save tokens, lose nothing)
+
+- At the start read only `docs/INDEX.md`, then only the docs the task needs.
+- Read code only when `docs/code-map.md` is not enough, and then targeted (grep, line ranges),
+  never whole files.
+- Never read log files whole; filter for the relevant lines (`python tools/t3cb.py report`).
+- Use `tools/t3cb.py` (deploy, patch, build, report, import, setmodel) instead of manual steps.
+- After every finished step update the right `docs/` files (knowledge/, plans/, done/,
+  code-map.md) so a next session has nothing to find out again.
+- Keep messages to the user short.
 
 ## Layout
 
@@ -19,17 +29,18 @@ for the direction. Talk to the user in Dutch; the app's UI and code comments are
 - Patches are exact-text edits that must match once; a mismatch aborts without writing. Keep them small.
 - Every patch must be fully reversible (`uninstall` restores the original byte for byte).
 - Test in a COPY of the game folder, never in the user's working install.
-- When you learn something about the game, add it to `NOTES.md` (what, where, how it was verified).
+- When you learn something about the game, add it to `docs/knowledge/` (what, where, how it was verified: tested/code/inferred).
 
 ## Build and test (Windows, game folder = Tekken 3 Expanded)
 
 - Toolchain: `<game>/.setup/tools/toolchain-*/bin` (cmake, ninja, clang). Expanded's Python: `<game>/.setup/venv/Scripts/python.exe`.
-- Rebuild after source changes: `cmake --build build-release --target psx-runtime` with the toolchain on PATH
-  (the builder's Build button does the same; Expanded keeps its own CMake configuration).
+- Rebuild after source changes: `python tools/t3cb.py build` (cmake with the toolchain on PATH;
+  the builder's Build button does the same). Copy the builder first: `python tools/t3cb.py deploy`,
+  then `python tools/t3cb.py patch`.
 - Game log: run `build-release/Tekken_3_Recompiled.exe` with stderr redirected; the builder writes `character-builder/logs/game-log.txt`.
 - Custom fighter lines in the log start with `Custom fighters:`; page switches log `TTT1 characters: <page> page`.
 - Testing with the user: ask them to click **Test** in the builder (it builds if needed, plays, and
   writes a report). After every test, read `<game>/character-builder/logs/test-report.md` yourself
-  before answering (for the user's Expanded test folder:
+  before answering, summarised: `python tools/t3cb.py report` (for the user's Expanded test folder:
   `D:\Tekken 3 Recompiled	ekken3-expanded-1.1.3\character-builder\logs	est-report.md`), and
   open `game-log.txt` beside it only when the report is not enough.

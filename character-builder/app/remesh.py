@@ -162,11 +162,105 @@ def snap(v, samples, origin, h, shape, reach=2):
     return best
 
 
-def remesh(positions, triangles, cells: int = 220, close: int = 1):
+class Caster:
+    """First hit of short rays on a mesh, through a uniform grid of the triangles."""
+
+    def __init__(self, positions, triangles, cell):
+        self.P = np.asarray(positions, dtype=float).reshape(-1, 3)
+        self.T = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+        self.cell = cell
+        self.origin = self.P.min(0) - cell
+        tri = self.P[self.T]
+        lo = np.floor((tri.min(1) - self.origin) / cell).astype(int)
+        hi = np.floor((tri.max(1) - self.origin) / cell).astype(int)
+        self.grid = {}
+        for t in range(len(self.T)):
+            for x in range(lo[t, 0], hi[t, 0] + 1):
+                for y in range(lo[t, 1], hi[t, 1] + 1):
+                    for z in range(lo[t, 2], hi[t, 2] + 1):
+                        self.grid.setdefault((x, y, z), []).append(t)
+
+    def first_hit(self, origins, dirs, length):
+        """(triangle, u, v, t) of the first hit within `length` along each ray (unit dirs), the
+        triangle -1 where nothing is hit. Rays must be shorter than a grid cell."""
+        o = np.asarray(origins, float)
+        d = np.asarray(dirs, float)
+        out = np.full((len(o), 4), -1.0)
+        out[:, 3] = np.inf
+        mid = o + d * (length / 2)
+        key = np.floor((mid - self.origin) / self.cell).astype(int)
+        order = np.lexsort(key.T)
+        key_s = key[order]
+        change = np.any(np.diff(key_s, axis=0) != 0, axis=1)
+        starts = np.concatenate([[0], np.where(change)[0] + 1, [len(order)]])
+        P, T = self.P, self.T
+        for i0, i1 in zip(starts[:-1], starts[1:]):
+            idx = order[i0:i1]
+            cx, cy, cz = key_s[i0]
+            cand = set()
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for dz in (-1, 0, 1):
+                        cand.update(self.grid.get((cx + dx, cy + dy, cz + dz), ()))
+            if not cand:
+                continue
+            tris = np.fromiter(cand, dtype=np.int64)
+            a, b, c = P[T[tris, 0]], P[T[tris, 1]], P[T[tris, 2]]
+            e1, e2 = b - a, c - a
+            for j0 in range(0, len(idx), 256):
+                ii = idx[j0:j0 + 256]
+                oo = o[ii][:, None, :]
+                dd = d[ii][:, None, :]
+                p = np.cross(dd, e2[None])
+                det = np.einsum("rtk,tk->rt", p, e1)
+                ok = np.abs(det) > 1e-12
+                inv = np.where(ok, 1.0 / np.where(ok, det, 1), 0)
+                s = oo - a[None]
+                u = np.einsum("rtk,rtk->rt", s, p) * inv
+                q = np.cross(s, e1[None])
+                v = np.einsum("rtk,rtk->rt", np.broadcast_to(dd, q.shape), q) * inv
+                t = np.einsum("rtk,tk->rt", q, e2) * inv
+                hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t >= 0) & (t <= length)
+                t = np.where(hit, t, np.inf)
+                k = t.argmin(1)
+                tk = t[np.arange(len(ii)), k]
+                got = np.isfinite(tk)
+                rows = ii[got]
+                out[rows, 0] = tris[k[got]]
+                out[rows, 1] = u[np.where(got)[0], k[got]]
+                out[rows, 2] = v[np.where(got)[0], k[got]]
+                out[rows, 3] = tk[got]
+        return out
+
+
+class Sampler:
+    """Nearest point on a mesh's surface: lookup(points) -> (triangle, u, v) per point."""
+
+    def __init__(self, positions, triangles, h):
+        p = np.asarray(positions, dtype=float).reshape(-1, 3)
+        t = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+        self.h = h
+        self.origin = p.min(0) - 3 * h
+        self.shape = tuple(np.ceil((p.max(0) - p.min(0)) / h).astype(int) + 6)
+        self.samples, self.tri, self.us, self.vs = surface_samples(p, t, h)
+
+    def lookup(self, points):
+        pts = np.asarray(points, dtype=float)
+        k = snap(pts, self.samples, self.origin, self.h, self.shape)
+        miss = k < 0
+        if miss.any():                  # far from the surface: search again on an 8x coarser grid
+            h8 = self.h * 8
+            lo = np.minimum(self.samples.min(0), pts.min(0)) - 3 * h8
+            shape8 = tuple(np.ceil((np.maximum(self.samples.max(0), pts.max(0)) - lo) / h8).astype(int) + 3)
+            k[miss] = snap(pts[miss], self.samples, lo, h8, shape8)
+        return np.stack([np.where(k >= 0, self.tri[k], -1), self.us[k], self.vs[k]], 1)
+
+
+def remesh(positions, triangles, cells: int = 220, close: int = 1, h: float | None = None):
     p = np.asarray(positions, dtype=float).reshape(-1, 3)
     t = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
     lo, hi = p.min(0), p.max(0)
-    h = float((hi - lo).max()) / cells
+    h = h or float((hi - lo).max()) / cells
     origin = lo - 3 * h
     shape = tuple(np.ceil((hi - lo) / h).astype(int) + 6)
     samples, tri, us, vs = surface_samples(p, t, h)
@@ -180,4 +274,9 @@ def remesh(positions, triangles, cells: int = 220, close: int = 1):
     near = snap(v, samples, origin, h, shape)
     v[near >= 0] = samples[near[near >= 0]]
     src = np.stack([np.where(near >= 0, tri[near], -1), us[near], vs[near]], 1)
-    return {"positions": v, "triangles": f, "source": src, "cell": h}
+
+    def lookup(points):
+        """(original triangle, u, v) of the original surface nearest to each point."""
+        k = snap(np.asarray(points, dtype=float), samples, origin, h, shape)
+        return np.stack([np.where(k >= 0, tri[k], -1), us[k], vs[k]], 1)
+    return {"positions": v, "triangles": f, "source": src, "cell": h, "lookup": lookup}

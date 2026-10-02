@@ -1,0 +1,80 @@
+# Own 3D models (format, in-game replacement, FBX import)
+
+Each entry says how it is known: **tested** (seen in game), **code** (read in the projects' source), or **inferred**.
+
+## Own 3D models: import and auto-rig (phase 0 research, 2026-10-01, code reading only)
+
+Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fights in the game.
+
+- **Expanded already writes PS1 models.** `tools/ttt1/model/convert.py` turns a TTT1 3DMK
+  (30 rows) into the native Tekken 3 PS1 3DMK (27 rows) and `texpack.py` packs its textures into
+  the PS1 costume band. But it *translates* TTT1's own vertex-sharing layout; it does not build
+  one. An imported mesh needs that layout generated from scratch.
+- **3DMK file:** header u32 rows (27), u32 scale (100), magic `3DMK` (0x4B4D4433), 0, u32 0x5F8
+  (= 24 + 27 * 56, header size), first block offset; then 27 rows of 14 i32. Row words:
+  0 normals block, 1 polygons, 2 textures (materials + UV), 3..5 offset from the parent bone,
+  6 part, 7..9 rest rotation (accessories), 10 drawn flag, 12 vertex block **of the next row**
+  (row r reads row r-1's word 12), 13 hand-pose table. Block offsets are file offsets.
+- **Vertex block** (`fmt.parse_d`, `simulate.vlist`): u32 head; g1 = bytes, borrows from the
+  previous drawn row's slot list (b // 2 - 1); g2 = bytes, borrows from the shared cache
+  (b // 2); own vertices 4 x s16 (x, y, z, pad) in the bone's frame; then five tail groups of
+  9-bit fields (index & 0xFF, flag 0x100) and one of 2-bit fields: 0 = store the slot in the
+  cache (flag: average with what the cache held = the 50/50 joint seam), 1 = average with the
+  cache without storing, 2 = average with the previous list's slot, 3 = deposit into the cache,
+  4 = copy into the next list (scratch). Slot list = g1 + g2 + own, at most 128.
+- **Normals block** (word 0): same list layout as vertices (head, g1, g2, own normals).
+- **Polygon block** (word 1): four families with u32 counts; GPU packet sizes 32/40/40/52 =
+  0 flat textured triangle, 1 flat textured quad, 2 gouraud triangle, 3 gouraud quad. Record
+  sizes 8/8/8/12 bytes. First u32: slot index x 4 in 7-bit fields at shifts 0, 7, 14 (and 23 for
+  quads); top bits sometimes set (flags, not decoded). Second u32 of flat records: normal index
+  x 4 in the low bits; gouraud records hold one normal per corner. Paul's legs are flat only, so a
+  first own model can use flat polygons with one normal each.
+- **Texture block** (word 2): `fmt.parse_c_ps1`: u16 UV-table offset, u16 materials (CLUT id,
+  | 0x8000 for 8-bit, | 0x100 for the second page), u16 UVs (u | v << 8), then per family a
+  count byte and per polygon a material byte plus UV indices.
+- **Loading** (`src/tekken3_ttt1_mod.c` `read_model` / `install_model` / `follow_models`): a
+  guest's `<prefix>-arcade-P<n>.3dm`, `.relocs` (u32 file offsets of pointer words, each
+  relocated by the load address) and `.tim` (textures) from the mod folder; checks 27 rows,
+  `3DMK`, header 0x5F8; the model replaces Jin's envelope in memory and is drawn with the
+  fighter's animations. `follow_models` skips a fighter on native moves
+  (`tekken3_native_moves_id(p) < 23` keeps its own model) - that is every builder fighter, so
+  a small patch would let a custom fighter load its own model files.
+- **Plan:** phase 1 = write a disc model (e.g. Paul) back out through our own writer as a
+  custom fighter's `-arcade-P1` files and see it in game (proves writer, relocations, textures,
+  loading); phase 2 = a simple already-rigged import (Mixamo-style bone names -> the 18 T3
+  bones, one bone per vertex, flat polygons, vertex sharing at the joints); phase 3 = automatic
+  rig for unrigged meshes (estimated joints, adjustable in the 3D view), decimation to the PS1
+  budget (Tekken 3 models: 650-1100 triangles), textures to 16/256-colour CLUTs.
+
+## Own 3D models: phase 1 (T3CB-PATCH-10, tested in game 2026-10-01: works)
+
+- **Route taken:** not the guest `-arcade-P1` files (Jin's envelope, one texture page,
+  `follow_models`), but an in-place overwrite of the donor's own model after the game loaded
+  it. The game keeps its textures, animations and model slot; only the 3DMK bytes change.
+- **File:** `characters/<id>/model.bin`, copied by the builder's sync to `<Prefix>-model.bin` in
+  both mod folders (removed again when the character has none). Layout: `T3CM`, u16 version 1,
+  u16 model number it replaces, u32 new size, u32 relocation count, the stock model's 1536-byte
+  header (to recognise the loaded model in memory), the new 3DMK (file offsets), u32 relocation
+  offsets (`model_export.relocations`: header +16, row words 0/1/2/12/13 when > 2, the entries of
+  the word-13 tables). Written by `model_export.py ownmodel`.
+- **Hook:** `tekken3_ttt1_before_init(model)` (called from the wraps of 0x80035BC0, 0x80035190,
+  0x80035CE8; about 45 times per fight). Per player: the model pointer 0x8009BD28 + p * 4 must
+  match, the stock header must match relocated (pointer words = model + file offset), the new
+  size must fit the slot (size table 0x80095A9C + model * 12, first u32). Then the file words are
+  written and the relocations added.
+- **Verified:** log `own model installed at 801E9588 (P1, ...)`; a check during the fight
+  (state 8) shows P1 draws 801E9588 and only 41 words differ from the file, all in the
+  word-13 hand-pose table at +24008 (the game writes it at run time, so it is not data to
+  compare). Kuma T with the head rows 19 and 20 scaled 1.5x looked normal in game (too subtle
+  on a bear); at 2.5x the head is clearly huge (user screenshot vs Yoshimitsu). Writer,
+  relocation, size check and loading all work.
+- **Phase 2 first import (2026-10-01, tested in game: works).** `model_import.py` (with
+  `fbx.py`, `remesh.py`, `decimate.py`; numpy only): Mixamo FBX "Medea" (69 bones, 17,754
+  triangles in 202 loose pieces) -> voxel remesh (one closed skin) -> quadric simplification
+  -> 810 flat triangles, 22,412 bytes over Kuma (model 22). Drawn in game by P1 with Kuma's
+  animations, no crash, 0 words differ from the file. Format facts found on the way (Paul):
+  flat record word 1 = (normal list index + 1) x 4; a triangle faces the camera when
+  cross(b - a, c - a) points into the body, its normal (unit 4096) points out; normals block
+  head = 4 x (1 + g1 + g2), ends with two empty u32 groups; stock rows hold at most 157
+  polygons (138 in one family). Textures were still borrowed from the nearest donor triangle.
+- **Limit:** the new model must not be larger than the donor's model slot.

@@ -1,15 +1,16 @@
 """Own 3D models (phase 2): an FBX character -> a Tekken 3 PS1 3DMK model over a donor's.
 
-Pipeline: read the FBX (fbx.py) -> one closed skin (remesh.py) -> simplify to the donor's size
-budget (decimate.py) -> skin weights -> Tekken 3 rows -> local frames that match the donor's
-(so the donor's animations pose it the same way) -> the binary blocks.
+Pipeline: read the FBX (fbx.py) -> skin weights -> Tekken 3 rows -> a Tekken 3 style low-poly
+body (lowpoly.py: tubes of rings and a head shell, shaped by rays onto the original) -> local
+frames that match the donor's (so the donor's animations pose it the same way) -> a painted
+texture baked from the original (texture_bake.py) -> the binary blocks.
 
 Format notes (NOTES.md "Own 3D models"): a row's vertex block sits in the previous row's word 12;
 own vertices 4 x s16 in the row's frame; the vertices of earlier rows are borrowed through the
 cache (the owner deposits them with tail group 3, the reader lists the entry in g2; entry 0 is
-never used). Polygons here are flat textured triangles (family 0): u32 slot x 4 at shifts 0, 7,
-14; u32 (normal list index + 1) x 4. A triangle faces the camera when cross(b - a, c - a) points
-into the body; its normal (unit 4096) points out."""
+never used). Polygons are gouraud triangles and quads (families 2 and 3, record layouts in
+NOTES.md). A triangle faces the camera when cross(b - a, c - a) points into the body; normals
+(unit 4096) point out."""
 from __future__ import annotations
 import struct
 from pathlib import Path
@@ -84,6 +85,28 @@ def joint(bones, part, side=None):
     return None
 
 
+def finger_points(bones, side):
+    """Knuckle line and fingertip centre of the four fingers, thumb base and tip (bind
+    positions), from finger bones named like Mixamo's (HandIndex1..4, HandThumb1..4); None
+    when the skeleton has no finger bones."""
+    chains = {}
+    for b in bones:
+        n = b["name"].split(":")[-1].lower()
+        if not n.startswith({"L": "left", "R": "right"}[side]):
+            continue
+        for f in ("thumb", "index", "middle", "ring", "pinky"):
+            if f in n and n[-1].isdigit():
+                chains.setdefault(f, {})[int(n[-1])] = np.array([b["matrix"][k][3] for k in range(3)])
+    four = [chains[f] for f in ("index", "middle", "ring", "pinky") if f in chains]
+    if len(four) < 2 or "thumb" not in chains:
+        return None
+    knuckle = np.mean([c[min(c)] for c in four], 0)
+    tip = np.mean([c[max(c)] for c in four], 0)
+    th = chains["thumb"]
+    return {"knuckle": knuckle, "tip": tip, "thumb base": th[min(th)], "thumb tip": th[max(th)],
+            "width": max(np.linalg.norm(a[min(a)] - b[min(b)]) for a in four for b in four)}
+
+
 def first_bone(bones, key, side):
     for b in bones:
         n = b["name"].split(":")[-1].lower()
@@ -150,7 +173,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     """(stock model, new model, report)."""
     import fbx
     import remesh
-    import decimate
+    import lowpoly
     from fmt import row
     rid = X.FIRST_MODEL_RECORD + 4 * model
     m = X.records(root, [rid])[rid]
@@ -187,15 +210,15 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     # joints (game) and the frames: the donor's standing frames, turned so each limb runs
     # along the imported limb (shortest rotation), e.g. T-pose arms
     J = {1: g(hips), 3: g(hips)}
+    Jf = {1: hips, 3: hips}
     for side, rows in (("L", L), ("R", R_)):
-        for part, key in (("collar", "shoulder"), ("upper", "arm"), ("fore", "forearm"), ("hand", "hand"),
-                          ("thigh", "upleg"), ("shin", "leg"), ("foot", "foot")):
+        for part in ("collar", "upper", "fore", "hand", "thigh", "shin", "foot"):
             pos = joint(bones, part, side)
             if pos is None:
                 raise ValueError(f"No {side} {part} bone found in the skeleton.")
-            J[rows(part)] = g(pos)
+            J[rows(part)], Jf[rows(part)] = g(pos), pos
     neck = joint(bones, "head")
-    J[19] = g(neck)
+    J[19], Jf[19] = g(neck), neck
     F = {}
     child = {1: 19, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18, 5: 6, 6: 7, 8: 9, 9: 10}
     for r in (1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19):
@@ -212,83 +235,162 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     for k, v in FRAME.items():
         F[k], J[k] = F[v], J[v]
 
-    # one closed skin, simplified
-    rm = remesh.remesh(P, Tr, 200)
-    log(f"remeshed: {len(rm['positions'])} vertices")
+    # every original triangle belongs to the row whose bones weigh most on it
+    # Eyeballs (geometry hanging on eye bones) sit in the sockets; Tekken 3 paints eyes onto the
+    # face texture, so they neither shape nor colour the model.
+    eye_bones = {i for i, b in enumerate(bones) if "eye" in b["name"].split(":")[-1].lower()}
+    if eye_bones:
+        main_bone = np.array([max(wv, key=wv.get) if wv else -1 for wv in ch["weights"]])
+        eyes = np.isin(main_bone[Tr], list(eye_bones)).all(1)
+        if eyes.any():
+            log(f"{int(eyes.sum())} eyeball triangles left out")
+            Tr = Tr[~eyes]
+            ch = dict(ch, corner_uvs=list(np.array(ch["corner_uvs"]).reshape(-1, 6)[~eyes].ravel()),
+                      materials=list(np.array(ch["materials"])[~eyes]))
+    source = None
+    if ch["textures"]:
+        import texture_bake
+        source = texture_bake.Source(ch)
+        solid = ~source.transparent()
+        if solid.sum() > 0.5 * len(Tr):
+            log(f"{int((~solid).sum())} see-through triangles left out")
+            Tr_all, Tr = Tr, Tr[solid]
     rows_of_bone = bone_rows(bones, left_rows)
-    Wt = ch["weights"]
+    vrow = []
+    for wv in ch["weights"]:
+        acc = {}
+        for bi, w in wv.items():
+            acc[rows_of_bone[bi]] = acc.get(rows_of_bone[bi], 0) + w
+        vrow.append(max(acc, key=acc.get) if acc else 1)
+    vrow = np.array(vrow)
+    trow = np.array([max(set(rs), key=list(rs).count) for rs in vrow[Tr].tolist()])
+    height = float(P[:, 1].max() - P[:, 1].min())
+    cell = height / 260
 
-    def vertex_rows(src):
-        out = []
-        for t, u, v in src:
-            acc = {}
-            if t >= 0:
-                a, b, c = Tr[int(t)]
-                for vert, f in ((a, 1 - u - v), (b, u), (c, v)):
-                    for bi, w in Wt[vert].items():
-                        r = rows_of_bone[bi]
-                        acc[r] = acc.get(r, 0) + w * f
-            out.append(max(acc, key=acc.get) if acc else 1)
-        return out
+    def farthest(part, side, start):
+        pts = [np.array([b["matrix"][k][3] for k in range(3)]) for b in bones if _part(b["name"]) == (part, side)]
+        return max(pts, key=lambda q: np.linalg.norm(q - start)) if pts else None
+    ends = {"head": farthest("head", None, Jf[19])}
+    if ends["head"] is None or np.linalg.norm(ends["head"] - Jf[19]) < 0.05 * height:
+        ends["head"] = Jf[19] + np.array([0.0, 1, 0]) * (P[:, 1].max() - Jf[19][1])
+    for side, rows in (("L", L), ("R", R_)):
+        ends["toe " + side] = farthest("foot", side, Jf[rows("foot")])
+        ends["hand " + side] = farthest("hand", side, Jf[rows("hand")])
+        ends["fingers " + side] = finger_points(bones, side)
+    limbs = {"leg": {sd: (rows("thigh"), rows("shin"), rows("foot")) for sd, rows in (("L", L), ("R", R_))},
+             "arm": {sd: (rows("upper"), rows("fore"), rows("hand")) for sd, rows in (("L", L), ("R", R_))}}
 
-    donor_tris = donor_triangles(m, W)
+    tex = None
+    if source is not None:
+        keep = np.where(solid)[0] if solid.sum() > 0.5 * len(solid) else np.arange(len(solid))
+        sampler = remesh.Sampler(P, Tr, cell)
+        Qi = Q.T
+
+        def lookup(pts, sampler=sampler, keep=keep):
+            src = sampler.lookup(pts)              # triangle numbers of the solid set -> original
+            ok = src[:, 0] >= 0
+            src[ok, 0] = keep[src[ok, 0].astype(int)]
+            return src
+        caster = remesh.Caster(P, Tr, height / 30)
+        caster.numbers = keep                          # its triangles' numbers in the source's list
+        tex = {"source": source, "lookup": lookup, "caster": caster, "reach": 0.03 * height,
+               "to_source": lambda pts: (np.asarray(pts) - W[3][1]) @ Qi.T / s + hips,
+               "colours": donor_palette_size(root, model), "push": cell * s * 0.75}
+
     budget = len(m)
-    tgt = target or 900
+    detail = (target or 1000) / 1000
     for attempt in range(8):
-        pos, used, tris, merged = decimate.decimate(rm["positions"], rm["triangles"], tgt)
-        vrows = vertex_rows(rm["source"])
+        body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
+        lowpoly.add_pieces(body, P, Tr, vrow, int(260 * detail), height, log)
+        G = np.array([g(p) for p in body["positions"]])
+        Nrm = body["normals"] @ Q.T                          # normals to game axes
         try:
-            data, report = _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row)
+            data, report = _write(m, G, Nrm, body["faces"], body["owner"], body["chart_weight"], F, J, row, tex)
         except Budget as e:
-            log(f"{tgt} triangles: {e}")
-            tgt = int(tgt * 0.9)
+            log(f"detail {detail:.2f}: {e}")
+            detail *= 0.9
             continue
         if len(data) > budget:
-            log(f"{tgt} triangles: {len(data)} bytes, over the donor's {budget}")
-            tgt = int(tgt * min(0.95, budget / len(data)))
+            log(f"detail {detail:.2f}: {len(data)} bytes, over the donor's {budget}")
+            detail *= 0.92
             continue
-        report.update(triangles=len(tris), bytes=len(data), budget=budget, scale=s)
+        report.update(bytes=len(data), budget=budget, scale=s)
         return m, data, report
     raise ValueError("Could not fit the model in the donor's size.")
 
 
-def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
+def donor_palette_size(root: Path, model: int) -> int:
+    """Colours the imported texture may use: the halfwords the donor's own CLUTs fill in CLUT
+    row 0 (16-colour CLUTs at ids 0, 1, 2... then only overwrite the donor's palettes)."""
+    from tim_tool import scan_tims
+    rid = X.FIRST_MODEL_RECORD + 4 * model + 2
+    arc = X.records(root, [rid])[rid]
+    end = 0
+    for t in scan_tims(arc):
+        im = t.image
+        if t.mode == 0 and (im.x, im.y, im.width_words, im.height) == (0, 0, 8, 32):
+            continue
+        if t.clut is not None and t.clut.y == 0:
+            end = max(end, t.clut.x + t.clut.width_words)
+    return max(16, min(256, end))
+
+
+def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
+    """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
+    vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
+    normals Nrm. Each face is drawn by the latest row among its vertices; vertices of earlier rows
+    are borrowed through the cache."""
     order = {r: i for i, r in enumerate(DRAW)}
-    G = np.array([g(p) for p in pos])                 # game coordinates (T-pose)
-    # outward normals: the remesh winding is consistent; find which way it points
-    a, b, c = G[tris[:, 0]], G[tris[:, 1]], G[tris[:, 2]]
-    n = np.cross(b - a, c - a)
-    centre = G[np.unique(tris)].mean(0)
-    if (np.einsum("ij,ij->i", n, (a + b + c) / 3 - centre) > 0).mean() < 0.5:
-        tris = tris[:, [0, 2, 1]]
-        n = -n
-    # each triangle is drawn by the latest row among its vertices
-    draw = [max((vrows[v] for v in t), key=lambda r: order[r]) for t in tris]
+    draw = [max((vrows[v] for v in f["v"]), key=lambda r: order[r]) for f in faces]
     by_row = {}
     for i, r in enumerate(draw):
         by_row.setdefault(r, []).append(i)
-    # spill the torso, pelvis and head into their second layer when one row cannot hold them
+    # the torso, pelvis and head spill into their second layer when one row cannot hold them
     for main, second in SECOND.items():
         ts = by_row.get(main, [])
-        if len(ts) > MAX_TRIS or len({v for i in ts for v in tris[i]}) > MAX_SLOTS - 8:
-            ts.sort(key=lambda i: G[tris[i]].mean(0)[1])
+        verts = {v for i in ts for v in faces[i]["v"]}
+        corners = {(faces[i]["chart"], v) for i in ts for v in faces[i]["v"]}
+        if len(verts) > MAX_NORMALS or len(ts) > MAX_TRIS or len(corners) > MAX_UVS - 15:
+            ts.sort(key=lambda i: G[faces[i]["v"]].mean(0)[1])
             half = len(ts) // 2
             by_row[main], by_row[second] = ts[:half], ts[half:]
+
+    texture = None
+    if tex:
+        import texture_bake as TB
+        chart = [f["chart"] for f in faces]
+        flat = [np.array(f["flat"], float) * chart_weight[f["chart"]] ** 0.5 for f in faces]
+        tuv, density = TB.pack_faces(chart, flat)
+        tris, tri_uv, tri_chart, tri_n = [], [], [], []
+        for i, f in enumerate(faces):
+            v = f["v"]
+            for a, b, c in ([(0, 1, 2)] + ([(1, 3, 2)] if len(v) == 4 else [])):
+                tris.append([v[a], v[b], v[c]])
+                tri_uv.append([tuv[i][a], tuv[i][b], tuv[i][c]])
+                tri_chart.append(f["chart"])
+        tris = np.array(tris)
+        tri_n = np.cross(G[tris[:, 1]] - G[tris[:, 0]], G[tris[:, 2]] - G[tris[:, 0]])
+        rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
+                                tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
+        face = [c for c, w in chart_weight.items() if w >= 4]
+        idx, palette, group = TB.quantise_groups(rgb, owner, tex["colours"] // 16, own=face)
+        rgbpal = np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in palette], dtype=np.uint8)
+        shown = rgbpal[np.asarray(group)[np.maximum(owner, 0)] * 16 + idx] * (owner >= 0)[..., None]
+        texture = {"uv": tuv, "rgb": shown.astype(np.uint8), "band": TB.band4(idx), "palette": palette,
+                   "charts": max(chart) + 1, "density": density, "group": group}
+
     # vertex lists per row: own (owner's frame) and borrowed (cache)
     own, borrow = {}, {}
     for r, ts in by_row.items():
         for i in ts:
-            for v in tris[i]:
+            for v in faces[i]["v"]:
                 o = vrows[v]
                 if frame_row(o) == frame_row(r):
-                    own.setdefault(r, [])
-                    if v not in own[r]:
-                        own[r].append(v)
+                    lst = own.setdefault(r, [])
                 else:
-                    borrow.setdefault(r, [])
-                    if v not in borrow[r]:
-                        borrow[r].append(v)
-    # vertices owned by a row but only used elsewhere still have to be deposited by their owner
+                    lst = borrow.setdefault(r, [])
+                if v not in lst:
+                    lst.append(v)
     deposit = {}
     for r, vs in borrow.items():
         for v in vs:
@@ -296,7 +398,6 @@ def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
             if o not in own or v not in own[o]:
                 own.setdefault(o, []).append(v)
             deposit.setdefault(o, set()).add(v)
-    # cache entries (1..127) by live range: deposit time -> last reader
     first = {v: order[vrows[v]] for vs in deposit.values() for v in vs}
     last = {}
     for r, vs in borrow.items():
@@ -309,14 +410,10 @@ def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
             raise Budget("more than 127 seam vertices in use at once")
         entry[v] = reg
         free_at[reg] = last[v]
-    for r in by_row:
+    for r in list(own):
+        by_row.setdefault(r, [])
         dep = deposit.get(r, set())
-        own[r] = [v for v in own.get(r, []) if v in dep] + [v for v in own.get(r, []) if v not in dep]
-    for r in own:
-        if r not in by_row:
-            by_row[r] = []
-            dep = deposit.get(r, set())
-            own[r] = [v for v in own[r] if v in dep] + [v for v in own[r] if v not in dep]
+        own[r] = [v for v in own[r] if v in dep] + [v for v in own[r] if v not in dep]
 
     blocks = bytearray()
     header = X.MODEL_HEADER
@@ -334,18 +431,16 @@ def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
             w[10] = 0
         if r in (2, 4, 20) or r >= 21:
             w[3:12] = [0, 0, 0, -1, 0, 0, 0, 0, 0]
-    # offsets from the parent, in the parent's frame
     import anim_model as A
     for r, pr in A.ROW_PARENT.items():
         if pr == 0:
             continue
         o = F[pr].T @ (J[r] - J[pr])
         rows[r][3:6] = [int(round(x)) for x in o]
-    # row 0: empty blocks, as in every stock model
     rows[0][0] = put(struct.pack("<6I", 4, 0, 0, 0, 0, 0))
     rows[0][1] = put(struct.pack("<4I", 0, 0, 0, 0))
     rows[0][2] = put(struct.pack("<HH", 2, 2) + bytes(4))
-    report = {"rows": {}}
+    report = {"rows": {}, "polygons": 0, "triangles": 0}
     for r in DRAW:
         ts = by_row.get(r, [])
         if not ts and r not in own:
@@ -355,64 +450,74 @@ def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
         slots = [("b", v) for v in borrow.get(r, [])] + [("o", v) for v in own.get(r, [])]
         if len(slots) > MAX_SLOTS:
             raise Budget(f"row {r} needs {len(slots)} vertex slots")
-        if len(ts) > MAX_TRIS:
-            raise Budget(f"row {r} has {len(ts)} triangles")
         index = {sv: i for i, sv in enumerate(slots)}
         slot_of = lambda v: index.get(("b", v), index.get(("o", v)))
-        # vertices
         verts = own.get(r, [])
         local = [Rf.T @ (G[v] - Jf) for v in verts]
         if any(abs(x) > 32767 for p in local for x in p):
             raise Budget(f"row {r}: vertex out of range")
         dep = [v for v in verts if v in deposit.get(r, set())]
-        vb = struct.pack("<I", 2 * (1 + 0 + len(borrow.get(r, []))))
+        vb = struct.pack("<I", 2 * (1 + len(borrow.get(r, []))))
         vb += struct.pack("<I", 0)
         g2 = bytes(2 * entry[v] for v in borrow.get(r, []))
         vb += struct.pack("<I", len(g2)) + pad4(g2)
         vb += struct.pack("<I", len(verts)) + b"".join(struct.pack("<4h", *[int(round(x)) for x in p], 0) for p in local)
         vb += pack_fields([], 9) * 3 + pack_fields([2 * entry[v] for v in dep], 9) + pack_fields([], 9) + pack_fields([], 2)
-        # normals (local, outward, deduplicated)
-        normals, nidx = [], []
+        # normals: one per vertex the row draws, in the row's frame (unit 4096), deduplicated
+        normals, nidx = [], {}
         for i in ts:
-            nn = Rf.T @ n[i]
-            nn = nn / (np.linalg.norm(nn) + 1e-12)
-            q = tuple(int(round(x * 4096)) for x in nn)
-            key = tuple(int(round(x * 6)) for x in nn)
-            found = next((k for k, (kk, _) in enumerate(normals) if kk == key), None)
-            if found is None:
-                normals.append((key, q))
-                found = len(normals) - 1
-            nidx.append(found)
+            for v in faces[i]["v"]:
+                if v in nidx:
+                    continue
+                nl = Rf.T @ Nrm[v]
+                q = tuple(int(round(x * 4096 / (np.linalg.norm(nl) + 1e-12))) for x in nl)
+                if q not in normals:
+                    normals.append(q)
+                nidx[v] = normals.index(q)
         if len(normals) > MAX_NORMALS:
             raise Budget(f"row {r} needs {len(normals)} normals")
-        nb = struct.pack("<4I", 4, 0, 0, len(normals)) + b"".join(struct.pack("<4h", *q, 0) for _, q in normals) + bytes(8)
-        # polygons: stored corner order (a, c, b) so that cross(b - a, c - a) points inwards
-        pb = struct.pack("<I", len(ts))
-        mats, uvs, tex = [], [], []
-        cands = donor_tris.get(fr, []) or [t for v in donor_tris.values() for t in v]
-        cen_d = np.array([c for c, _, _ in cands])
-        for k, i in enumerate(ts):
-            t0, t1, t2 = tris[i]
-            corners = [t0, t2, t1]
-            sl = [slot_of(v) for v in corners]
-            pb += struct.pack("<II", (sl[0] * 4) | (sl[1] * 4) << 7 | (sl[2] * 4) << 14, (nidx[k] + 1) * 4)
-            cen = Rf.T @ (G[[t0, t1, t2]].mean(0) - Jf)
-            _, mat, uv = cands[int(np.argmin(np.linalg.norm(cen_d - cen, axis=1)))]
-            if mat not in mats:
-                mats.append(mat)
-            ui = []
-            for u, v in uv:
-                e = (u & 255) | ((v & 255) << 8)
-                if e not in uvs:
-                    uvs.append(e)
-                ui.append(uvs.index(e))
-            tex.append(bytes([mats.index(mat)] + ui))
-        pb += struct.pack("<3I", 0, 0, 0)
+        nb = struct.pack("<4I", 4, 0, 0, len(normals)) + b"".join(struct.pack("<4h", *q, 0) for q in normals) + bytes(8)
+        # polygons: gouraud triangles (family 2) and quads (family 3). Stored mirrored, corners
+        # (0, 2, 1[, 3]): the game draws a triangle whose cross(b - a, c - a) points inwards.
+        fam = {2: [], 3: []}
+        for i in ts:
+            fam[3 if len(faces[i]["v"]) == 4 else 2].append(i)
+        if max(len(fam[2]), len(fam[3])) > MAX_TRIS:
+            raise Budget(f"row {r} has too many polygons")
+        pb = struct.pack("<II", 0, 0)
+        mats, uvs, tex_entries = [], [], {2: [], 3: []}
+        for k in (2, 3):
+            pb += struct.pack("<I", len(fam[k]))
+            for i in fam[k]:
+                v = faces[i]["v"]
+                corners = [0, 2, 1] if k == 2 else [0, 2, 1, 3]
+                sl = [slot_of(v[c]) for c in corners]
+                nn = [(nidx[v[c]] + 1) * 4 for c in corners]
+                w0 = sl[0] * 4 | (sl[1] * 4) << 7 | (sl[2] * 4) << 14
+                if k == 2:
+                    pb += struct.pack("<II", w0, nn[0] | nn[1] << 7 | nn[2] << 16)
+                else:
+                    pb += struct.pack("<III", w0 | (sl[3] * 4) << 23, nn[0], nn[1] | nn[2] << 7 | nn[3] << 16)
+                mat = int(texture["group"][faces[i]["chart"]]) if texture is not None else 0
+                if mat not in mats:
+                    mats.append(mat)
+                ui = []
+                for c in corners:
+                    u, vv = texture["uv"][i][c] if texture is not None else (0, 0)
+                    e = (int(u) & 255) | ((int(vv) & 255) << 8)
+                    if e not in uvs:
+                        uvs.append(e)
+                    ui.append(uvs.index(e))
+                if len(uvs) > MAX_UVS:
+                    raise Budget(f"row {r} needs more than {MAX_UVS} texture coordinates")
+                tex_entries[k].append(bytes([mats.index(mat)] + ui))
         if len(uvs) > MAX_UVS:
             raise Budget(f"row {r} needs {len(uvs)} texture coordinates")
         cb = struct.pack("<H", 2 + 2 * len(mats)) + b"".join(struct.pack("<H", x) for x in mats)
         cb += struct.pack("<H", 2 + 2 * len(uvs)) + b"".join(struct.pack("<H", e) for e in uvs)
-        cb += bytes([len(ts)]) + b"".join(tex) + bytes([0, 0, 0])
+        cb += bytes([0, 0])
+        for k in (2, 3):
+            cb += bytes([len(fam[k])]) + b"".join(tex_entries[k])
         w = rows[r]
         w[0] = put(nb)
         w[1] = put(pb)
@@ -423,12 +528,16 @@ def _write(m, pos, tris, vrows, F, J, g, W, donor_tris, row):
         if r == 20:
             w[3:12] = list(rows[19][3:12])
         rows[r - 1][12] = put(vb)
-        report["rows"][r] = {"triangles": len(ts), "own": len(verts), "borrowed": len(borrow.get(r, [])),
-                             "deposits": len(dep), "normals": len(normals), "uvs": len(uvs)}
+        report["polygons"] += len(ts)
+        report["triangles"] += len(fam[2]) + 2 * len(fam[3])
+        report["rows"][r] = {"tris": len(fam[2]), "quads": len(fam[3]), "own": len(verts),
+                             "borrowed": len(borrow.get(r, [])), "normals": len(normals), "uvs": len(uvs)}
     hdr = struct.pack("<6I", 27, struct.unpack_from("<I", m, 4)[0], 0x4B4D4433, 0, header - 8, 0)
     body = b"".join(struct.pack("<14i", *rows[r]) for r in range(27))
     data = hdr + body + bytes(blocks)
     report["cache_entries"] = max(entry.values(), default=0)
+    if texture is not None:
+        report["texture"] = texture
     return data, report
 
 
@@ -445,9 +554,14 @@ def main():
     X.setup(a.root)
     stock, new, report = build(a.root, a.model, a.fbx, a.target)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_bytes(X.own_model_file(a.model, stock, new))
+    tx = report.pop("texture", None)
+    a.out.write_bytes(X.own_model_file(a.model, stock, new, tx))
+    if tx is not None:
+        from PIL import Image
+        Image.fromarray(tx["rgb"]).save(a.out.with_suffix(".atlas.png"))
+        print(f"texture: {tx['charts']} charts, {len(tx['palette'])} colours, {tx['density']:.3f} texels per unit")
     print(json.dumps(report, default=float))
-    print(f"OK own model over model {a.model}: {len(new)} bytes")
+    print(f"OK own model over model {a.model}: {len(new)} bytes, {report['triangles']} triangles")
 
 
 if __name__ == "__main__":

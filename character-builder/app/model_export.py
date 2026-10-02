@@ -415,16 +415,23 @@ def scaled_rows(m: bytes, rows: list[int], factor: float) -> bytes:
     return bytes(out)
 
 
-def own_model_file(model: int, stock: bytes, new: bytes) -> bytes:
-    """<prefix>-model.bin: "T3CM", u16 version 1, u16 model it replaces, u32 new size, u32
-    relocation count, the stock model's header (how the patch recognises it in memory), the new
-    3DMK model, then u32 relocation offsets."""
+def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = None) -> bytes:
+    """<prefix>-model.bin: "T3CM", u16 version (1, or 2 with a texture), u16 model it replaces,
+    u32 new size, u32 relocation count, the stock model's header (how the patch recognises it in
+    memory), the new 3DMK model, then u32 relocation offsets. Version 2 adds "T3TX", u16 band
+    width in halfwords (64), u16 rows (256), u16 CLUT id, u16 colours, the colours (PS1 15-bit, consecutive CLUTs),
+    then the band halfwords: the first texture page of the player's band."""
     import struct
     if new[8:12] != b"3DMK" or struct.unpack_from("<I", new, 0)[0] != 27:
         fail("Not a 27-row 3DMK model.")
     relocs = relocations(new)
-    return (b"T3CM" + struct.pack("<HHII", 1, model, len(new), len(relocs)) + stock[:MODEL_HEADER] + new
-            + b"".join(struct.pack("<I", r) for r in relocs))
+    out = (b"T3CM" + struct.pack("<HHII", 2 if texture else 1, model, len(new), len(relocs)) + stock[:MODEL_HEADER]
+           + new + b"".join(struct.pack("<I", r) for r in relocs))
+    if texture:
+        band, pal = texture["band"], texture["palette"]
+        out += b"T3TX" + struct.pack("<4H", band.shape[1], band.shape[0], 0, len(pal))
+        out += b"".join(struct.pack("<H", c) for c in pal) + band.astype("<u2").tobytes()
+    return out
 
 
 def main() -> None:

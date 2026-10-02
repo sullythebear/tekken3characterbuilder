@@ -30,7 +30,8 @@ preferably a copy of it, and run `Start Character Builder.cmd`. See
 
 - `character-builder/` – the app (local Python server + HTML UI) and the source patches it applies
 - `docs/vision.md` – what the ultimate app should be
-- `NOTES.md` – technical findings: addresses, formats, what was tested
+- `docs/` – documentation: start at `docs/INDEX.md` (knowledge, plans, done, code map); `NOTES.md` points there
+- `tools/t3cb.py` – helper commands for the test copy (deploy, patch, build, report, import)
 - `CLAUDE.md` – working instructions for Claude Code in this repo
 - `tools/` – earlier experiments (Dizzy probe, build script for Tekken3Recompiled)
 
