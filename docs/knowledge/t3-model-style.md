@@ -5,6 +5,12 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
 ## How Tekken 3's own fighter models are built (study 2026-10-01, all 48 models; scratch t3study)
 
 Rules for imported models, so they match the originals:
+- **GPU packet limit (tested 2026-10-02):** every polygon becomes a GPU packet (flat tri 32,
+  flat quad 40, gouraud tri 40, gouraud quad 52 bytes) in a fixed buffer per player. Stock
+  models need at most 32580 bytes; Medea v15 needed 33596 and the game crashed (exit code 1) as
+  the fight started, right after the model and texture were installed. The importer keeps
+  models under 31000 (`MAX_PACKET_BYTES` in `model_import.py`). Prefer quads (26 bytes per
+  triangle) over triangles (32-40).
 - **Budget:** 1000-1150 triangles per fighter (a quad counts 2), 24-29 KB. About 40 % of the
   polygons are quads (cheaper: 8 or 12 bytes for two triangles). Mix of flat and gouraud
   polygons; gouraud on round surfaces (head, chest, arms, thighs), flat on hard ones (boots,

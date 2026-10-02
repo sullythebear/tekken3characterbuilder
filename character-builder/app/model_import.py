@@ -24,6 +24,11 @@ SECOND = {1: 2, 3: 4, 19: 20}
 PAIRS = {"collar": (11, 15), "upper": (12, 16), "fore": (13, 17), "hand": (14, 18),
          "thigh": (5, 8), "shin": (6, 9), "foot": (7, 10)}
 MAX_TRIS, MAX_SLOTS, MAX_NORMALS, MAX_UVS = 255, 128, 126, 255
+# GPU packet bytes per polygon family (flat tri, flat quad, gouraud tri, gouraud quad). The game
+# builds one packet per polygon in a fixed buffer per player; stock models use at most 32580
+# bytes, and a model needing 33596 crashed the game when the fight started (2026-10-02).
+PACKET = (32, 40, 40, 52)
+MAX_PACKET_BYTES = 31000
 
 
 def frame_row(r):
@@ -532,6 +537,10 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         report["triangles"] += len(fam[2]) + 2 * len(fam[3])
         report["rows"][r] = {"tris": len(fam[2]), "quads": len(fam[3]), "own": len(verts),
                              "borrowed": len(borrow.get(r, [])), "normals": len(normals), "uvs": len(uvs)}
+    packets = sum(PACKET[2] * v["tris"] + PACKET[3] * v["quads"] for v in report["rows"].values())
+    if packets > MAX_PACKET_BYTES:
+        raise Budget(f"{packets} bytes of GPU packets, the game allows about {MAX_PACKET_BYTES}")
+    report["packet_bytes"] = packets
     hdr = struct.pack("<6I", 27, struct.unpack_from("<I", m, 4)[0], 0x4B4D4433, 0, header - 8, 0)
     body = b"".join(struct.pack("<14i", *rows[r]) for r in range(27))
     data = hdr + body + bytes(blocks)

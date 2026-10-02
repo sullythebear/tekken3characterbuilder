@@ -15,7 +15,9 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
 
 ## Next
 
-1. Test v15 in game (MEDEA, costume 1).
+1. Done: v15 crashed at fight start (GPU packets 33596 > stock max 32580); v16 (packet limit
+   31000, 976 triangles, 23060 bytes, 6 loose pieces) tested in game 2026-10-02: no crash,
+   2 m 07 s, model and texture installed, 0 words differ.
 2. Collar breaks in some poses (piece vertices on different rows): hang a whole piece on one
    row, or on the row of most of its area.
 3. Toes are pointy: feet cap blunter (like the hands).
