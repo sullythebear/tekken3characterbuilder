@@ -15,6 +15,10 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
 
 ## Next
 
+0. **New direction (user's explanation, see knowledge/t3-model-style.md 'Namco's way of
+   working')**: importance-weighted simplification of the original geometry (head first),
+   keep form shading in textures, crease-angle normals, front/head/hands get the budget.
+
 1. Done: v15 crashed at fight start (GPU packets 33596 > stock max 32580); v16 (packet limit
    31000, 976 triangles, 23060 bytes, 6 loose pieces) tested in game 2026-10-02: no crash,
    2 m 07 s, model and texture installed, 0 words differ.

@@ -60,3 +60,42 @@ Rules for imported models, so they match the originals:
   not by its leg bones (heels and thick boots put the soles far below the ankle bone). Donor
   hip height = lowest vertex of its standing pose below the hip joint. Medea over Nina: soles
   now at 1256 vs Nina's 1261 (game units below the root); she is ~11 % taller than Nina overall.
+
+## Namco's way of working (from the user, 2026-10-02; partly known, partly inferred from the models)
+
+- **Polygons go where shape is decided, not evenly:** silhouette first (hair, shoulders,
+  shoes, hands, clothing edges), then anatomical landmarks (jaw, nose, eye sockets, brows,
+  cheekbones, elbows, knees). Small polygons on head and hands, big ones on torso and legs.
+  "Artistic compression": 500 well-placed polygons beat 500 random ones.
+- **The face is geometry + texture:** nose volume, eye sockets, jaw, cheekbones, lips and
+  forehead are modelled; eye colour, brows, lips, make-up and small shadows are painted. A
+  low-poly sphere with a face texture is not a Tekken face.
+- **Hair = silhouette + texture:** the big locks are geometry, strands are painted.
+- **Geometry for shape, texture for information:** a belt flat on the body is texture; a belt
+  that sticks out is geometry; a visible buckle is geometry + texture. Folds, seams and zips
+  are painted, not modelled.
+- **Shadows are painted into the textures** (no PBR): the texture carries form shading, which
+  makes the low geometry read as more detailed. Do not flatten the light out of a source
+  texture; keep (or add) form shading.
+- **Shading is a mix:** not all smooth, not all flat. Polygons stay part of the visible form;
+  hard edges stay hard, round surfaces are gouraud.
+- **One connected body mesh** (new in Tekken 3 vs 1/2); accessories (hair, belts, weapons) can
+  be separate objects.
+- **Front gets more detail than back**, but the model must work from every side.
+- **Textures are small and designed for their on-screen pixel size**, not for close-ups;
+  materials are just texture + shading (leather = dark + crisp highlights + colour + shape).
+- **Recipe for today:** start low-poly (no sculpt), silhouette first, landmarks, keep some
+  facets, efficient UVs, small diffuse texture, paint details (seams, hairlines, eyes,
+  shadows, folds), simple materials, then PS1 rendering. For generated/modern models
+  (Hunyuan3D etc.): retopologise hard, re-UV, hand-painted texture.
+
+### What this means for the importer (plan 2026-10-02)
+
+1. Build the head (and later every part) from the **original geometry, simplified with
+   importance**: silhouette edges and face landmarks weigh more in the edge-collapse cost, so
+   nose, brows, jaw and hair locks survive; ~250 triangles for the head.
+2. **Keep form shading** in the texture (undo the flattening; add soft ambient occlusion from
+   the original's geometry) and paint-like simplification only for noise.
+3. **Normals with a crease angle**: shared (gouraud) on smooth surfaces, split on hard edges.
+4. Spend triangles on the front, the head, hands and silhouette; fewer on the back and big flat
+   areas.
