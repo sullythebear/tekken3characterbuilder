@@ -446,7 +446,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
                                 tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
         keep_face = np.isin(owner, face)                  # the face keeps its fine detail
-        rgb = np.where(keep_face[..., None], rgb, TB.paint(TB.flatten(rgb, owner), owner))
+        rgb = np.where(keep_face[..., None], rgb, TB.stylise(TB.flatten(rgb, owner), owner))
         rgb = TB.vivid(rgb)
         to_ps1 = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], dtype=np.uint8)
         if mode8:

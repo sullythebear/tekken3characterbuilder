@@ -25,7 +25,11 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    crotch lower (gap closed): tested in game 2026-10-02, works. v19 tested in game 2026-10-02 (works, log clean):
    baked light and dirt flattened per chart (`texture_bake.flatten`, strength 0.5); the
    'not P1's' log line now once per address (patch 12 text, rebuilt). Belt piece still a flat plate.
-4. Face resolution: a mirrored half face (like Namco) would double it.
+4. v20 tested in game 2026-10-02 (works): painted style (`texture_bake.stylise`: per chart at
+   most 6 flat colour areas, majority-filtered edges, soft original light +-20 %); mirrored half
+   face (face chart u folded over the nose line in `lowpoly.build`); loose pieces only when more
+   than 2.8 % of the height outside the tubes (belt plate gone; collar and sleeve flap stay).
+   920 triangles, 21404 bytes, 15.0 texels per unit.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

@@ -175,8 +175,15 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     rest = [k for k in range(n_body) if k not in face]
     for ks, weight in ((face, 6.0), (rest[:len(rest) // 2], 1.6), (rest[len(rest) // 2:], 1.6)):
         ch = body.chart(weight)
+        first_face = len(body.faces)
         body.strip(rings, vs, ch, circ, ks)
         body.cap(rings[-1], crown, vs[-1], vs[-1] + circ / n_body, ch, circ, ks)
+        if ks is face:
+            # Namco's faces are half a face, mirrored over the nose line: both halves share the
+            # texels, so the face gets twice the detail in the same room
+            mid = circ * len(ks) / (2 * n_body)
+            for f in body.faces[first_face:]:
+                f["flat"] = [(mid + abs(u - mid), v) for u, v in f["flat"]]
     centre_of.extend([lambda x, hc=hc: hc] * (len(body.faces) - before))
 
     for side, (thigh, shin, foot) in limbs["leg"].items():
@@ -270,7 +277,7 @@ def add_pieces(body, P, Tr, vrow, budget, height, log=print):
     n = np.cross(b - a, c - a)
     n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
     out = np.einsum("ij,ij->i", cen - q, n)
-    far = (out > 0.018 * height) & (t >= 0)
+    far = (out > 0.028 * height) & (t >= 0)       # clearly outside: a belt hugging the hips stays in the tube
     if not far.any():
         return 0
     sub = Tr[far]

@@ -301,6 +301,41 @@ def flatten(rgb, owner, radius=6, strength=0.5):
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
+def stylise(rgb, owner, k=6, shade=0.6):
+    """Namco's painted style: each chart's colours become a few flat areas (k-means, at most k
+    colours), speckles cleaned by a 3 x 3 majority filter so the areas have crisp edges, and a
+    soft version of the original light laid over them (brightness relative to the area's mean,
+    blurred, kept within +-20 %, to the power `shade`)."""
+    from PIL import Image, ImageFilter
+    x = rgb.astype(float)
+    out = x.copy()
+    lum = x.mean(2)
+    soft = np.asarray(Image.fromarray(np.clip(lum, 0, 255).astype(np.uint8)).filter(
+        ImageFilter.GaussianBlur(1.5)), dtype=float)
+    rng = np.random.default_rng(2)
+    for c in range(int(owner.max()) + 1):
+        m = owner == c
+        n = int(m.sum())
+        if n < 16:
+            continue
+        px = x[m]
+        kk = min(k, max(1, n // 24))
+        centre = px[rng.choice(n, kk, replace=False)]
+        for _ in range(10):
+            lab = ((px[:, None] - centre[None]) ** 2).sum(2).argmin(1)
+            for j in range(kk):
+                if (lab == j).any():
+                    centre[j] = px[lab == j].mean(0)
+        img = np.zeros(owner.shape, dtype=np.uint8)
+        img[m] = lab + 1
+        img = np.asarray(Image.fromarray(img).filter(ImageFilter.ModeFilter(3)))
+        lab2 = np.where(img[m] > 0, img[m] - 1, lab)
+        means = np.array([soft[m][lab2 == j].mean() if (lab2 == j).any() else 1 for j in range(kk)])
+        rel = np.clip(soft[m] / np.maximum(means[lab2], 1), 0.8, 1.2) ** shade
+        out[m] = centre[lab2] * rel[:, None]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
 def vivid(rgb, saturation=1.25, contrast=1.08):
     """Namco's palettes are saturated and contrasty; photographic sources look washed out under
     the game's light. More colour and a little more contrast."""
