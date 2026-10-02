@@ -300,13 +300,32 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
         caster.numbers = keep                          # its triangles' numbers in the source's list
         tex = {"source": source, "lookup": lookup, "caster": caster, "reach": 0.03 * height,
                "to_source": lambda pts: (np.asarray(pts) - W[3][1]) @ Qi.T / s + hips,
-               "colours": donor_palette_size(root, model), "push": cell * s * 0.75}
+               "colours": donor_palette_size(root, model), "push": cell * s * 0.75,
+               "cluts": donor_cluts(root, model)}
 
+    # the donor's head height above its neck joint (standing pose, game units)
+    head_t3 = 0.0
+    for r, slots in X.bind(m).items():
+        if r in (19, 20):
+            for sl in slots:
+                if sl is not None:
+                    p = W[sl[0]][0] @ np.array(sl[1], float) + W[sl[0]][1]
+                    head_t3 = max(head_t3, W[19][1][1] - p[1])
     budget = len(m)
     detail = (target or 1000) / 1000
     for attempt in range(8):
         body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
         lowpoly.add_pieces(body, P, Tr, vrow, int(260 * detail), height, log)
+        # Tekken 3 heads are a little large for the body; give the import its donor's proportion
+        own_head = s * np.linalg.norm(ends["head"] - Jf[19])
+        k = float(np.clip(head_t3 / max(own_head, 1e-6), 1.0, 1.35))
+        if attempt == 0:
+            log(f"head: donor {head_t3:.0f}, import {own_head:.0f} game units, leg {leg_t3:.0f}")
+        if k > 1.01:
+            hv = np.array(body["owner"]) == 19
+            body["positions"][hv] = Jf[19] + (body["positions"][hv] - Jf[19]) * k
+            if attempt == 0:
+                log(f"head scaled x{k:.2f} to the donor's proportion")
         G = np.array([g(p) for p in body["positions"]])
         Nrm = body["normals"] @ Q.T                          # normals to game axes
         try:
@@ -322,6 +341,24 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
         report.update(bytes=len(data), budget=budget, scale=s)
         return m, data, report
     raise ValueError("Could not fit the model in the donor's size.")
+
+
+def donor_cluts(root: Path, model: int) -> dict:
+    """The donor's own CLUT room: halfwords filled in CLUT rows 0 and 1, and whether it has an
+    8-bit (256-colour) CLUT at id 0 (most donors: the skin palette)."""
+    from tim_tool import scan_tims
+    rid = X.FIRST_MODEL_RECORD + 4 * model + 2
+    arc = X.records(root, [rid])[rid]
+    end = {0: 0, 1: 0}
+    has8 = False
+    for t in scan_tims(arc):
+        im = t.image
+        if t.mode == 0 and (im.x, im.y, im.width_words, im.height) == (0, 0, 8, 32):
+            continue
+        if t.clut is not None and t.clut.y in end:
+            end[t.clut.y] = max(end[t.clut.y], t.clut.x + t.clut.width_words)
+            has8 |= t.mode == 1 and t.clut.y == 0 and t.clut.x == 0
+    return {"row0": end[0], "row1": end[1], "has8": has8}
 
 
 def donor_palette_size(root: Path, model: int) -> int:
@@ -365,7 +402,12 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         import texture_bake as TB
         chart = [f["chart"] for f in faces]
         flat = [np.array(f["flat"], float) * chart_weight[f["chart"]] ** 0.5 for f in faces]
-        tuv, density = TB.pack_faces(chart, flat)
+        face = [c for c, w in chart_weight.items() if w >= 4]
+        # Namco's way when the donor has the room: the face 8-bit with the 256-colour CLUT 0
+        # (row 0), everything else 4-bit with 16-colour CLUTs in row 1 (ids 64+)
+        cl = tex.get("cluts", {})
+        mode8 = bool(face) and cl.get("has8") and cl.get("row0", 0) >= 256 and cl.get("row1", 0) >= 32
+        tuv, density = TB.pack_faces(chart, flat, wide=set(face) if mode8 else ())
         tris, tri_uv, tri_chart, tri_n = [], [], [], []
         for i, f in enumerate(faces):
             v = f["v"]
@@ -377,12 +419,28 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         tri_n = np.cross(G[tris[:, 1]] - G[tris[:, 0]], G[tris[:, 2]] - G[tris[:, 0]])
         rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
                                 tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
-        face = [c for c, w in chart_weight.items() if w >= 4]
-        idx, palette, group = TB.quantise_groups(rgb, owner, tex["colours"] // 16, own=face)
-        rgbpal = np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in palette], dtype=np.uint8)
-        shown = rgbpal[np.asarray(group)[np.maximum(owner, 0)] * 16 + idx] * (owner >= 0)[..., None]
-        texture = {"uv": tuv, "rgb": shown.astype(np.uint8), "band": TB.band4(idx), "palette": palette,
-                   "charts": max(chart) + 1, "density": density, "group": group}
+        keep_face = np.isin(owner, face)                  # the face keeps its fine detail
+        rgb = np.where(keep_face[..., None], rgb, TB.paint(rgb, owner))
+        to_ps1 = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], dtype=np.uint8)
+        if mode8:
+            rest = np.where(np.isin(owner, face), -1, owner)
+            idx, palette, group = TB.quantise_groups(rgb, rest, cl["row1"] // 16)
+            idx8, pm, pal8 = TB.face8(rgb, owner, face)
+            band = TB.band8_into(TB.band4(np.where(rest >= 0, idx, 0)), idx8, pm)
+            shown = to_ps1(palette)[np.asarray(group)[np.maximum(rest, 0)] * 16 + idx] * (rest >= 0)[..., None]
+            shown8 = np.repeat(to_ps1(pal8)[idx8], 2, axis=1)
+            shown[np.repeat(pm, 2, axis=1)] = shown8[np.repeat(pm, 2, axis=1)]
+            mats = {c: (0x8000 if c in face else 64 + int(group[c])) for c in range(max(chart) + 1)}
+            runs = [(0, pal8), (64, palette)]
+        else:
+            idx, palette, group = TB.quantise_groups(rgb, owner, tex["colours"] // 16, own=face)
+            shown = to_ps1(palette)[np.asarray(group)[np.maximum(owner, 0)] * 16 + idx] * (owner >= 0)[..., None]
+            band = TB.band4(idx)
+            mats = {c: int(group[c]) for c in range(max(chart) + 1)}
+            runs = [(0, palette)]
+        texture = {"uv": tuv, "rgb": shown.astype(np.uint8), "band": band, "runs": runs, "mats": mats,
+                   "palette": [c for _, p in runs for c in p], "charts": max(chart) + 1, "density": density,
+                   "face8": bool(mode8)}
 
     # vertex lists per row: own (owner's frame) and borrowed (cache)
     own, borrow = {}, {}
@@ -503,12 +561,15 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
                     pb += struct.pack("<II", w0, nn[0] | nn[1] << 7 | nn[2] << 16)
                 else:
                     pb += struct.pack("<III", w0 | (sl[3] * 4) << 23, nn[0], nn[1] | nn[2] << 7 | nn[3] << 16)
-                mat = int(texture["group"][faces[i]["chart"]]) if texture is not None else 0
+                mat = texture["mats"][faces[i]["chart"]] if texture is not None else 0
+                eight = bool(mat & 0x8000)
                 if mat not in mats:
                     mats.append(mat)
                 ui = []
                 for c in corners:
                     u, vv = texture["uv"][i][c] if texture is not None else (0, 0)
+                    if eight:
+                        u = int(u) // 2                    # 8-bit texels are column pairs
                     e = (int(u) & 255) | ((int(vv) & 255) << 8)
                     if e not in uvs:
                         uvs.append(e)

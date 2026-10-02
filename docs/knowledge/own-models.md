@@ -78,3 +78,24 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   head = 4 x (1 + g1 + g2), ends with two empty u32 groups; stock rows hold at most 157
   polygons (138 in one family). Textures were still borrowed from the nearest donor triangle.
 - **Limit:** the new model must not be larger than the donor's model slot.
+
+## Patch 12 and Medea v17 (2026-10-02, tested in game: works, 480 colours in 2 CLUT runs)
+
+- **T3TX with several CLUT runs (T3CB-PATCH-12):** CLUT id 0xFFFF in the T3TX header means
+  "count" runs follow, each u16 id, u16 colours, then the colours; the band follows the last
+  run. The patch validates and uploads each run to `504 + player * 4 + (id >> 6)`,
+  x `(id & 63) * 16`. Single-run files (patch 11) still work. Install/uninstall checked 4/4 byte
+  for byte; build OK.
+- **8-bit face (code: `model_import._write`, `texture_bake.face8/band8_into`):** when the donor
+  has an 8-bit CLUT at id 0 and at least 32 halfwords in CLUT row 1 (`donor_cluts`), the face
+  chart is 8-bit with a 256-colour palette in CLUT 0 (row 0, like Namco's skin palette) and all
+  other charts are 4-bit with 16-colour CLUTs in row 1 (ids 64+, as many as the donor fills).
+  The face chart is packed over column pairs (twice the 4-bit columns, on a halfword boundary,
+  never turned); polygon UVs are 8-bit texels (column / 2), material 0x8000. Nina: 256 + 14 x 16
+  = 480 colours.
+- **Painted look:** `texture_bake.paint` (3 x 3 median inside each chart) removes photo speckle;
+  the face is left out of it (keeps eyes and brows).
+- **Loose pieces hang whole on one row** (the row of most of their vertices): the collar no
+  longer tears. Toes blunt (cap at 90 %, minimum radius). Head proportion check vs the donor
+  (donor 217, Medea 288 game units above the neck joint: no scaling needed).
+- Medea v17 over Nina: 1032 triangles, 24148 bytes, GPU packets under 31000.

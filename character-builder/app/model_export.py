@@ -428,9 +428,16 @@ def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = 
     out = (b"T3CM" + struct.pack("<HHII", 2 if texture else 1, model, len(new), len(relocs)) + stock[:MODEL_HEADER]
            + new + b"".join(struct.pack("<I", r) for r in relocs))
     if texture:
-        band, pal = texture["band"], texture["palette"]
-        out += b"T3TX" + struct.pack("<4H", band.shape[1], band.shape[0], 0, len(pal))
-        out += b"".join(struct.pack("<H", c) for c in pal) + band.astype("<u2").tobytes()
+        band = texture["band"]
+        runs = texture.get("runs") or [(0, texture["palette"])]
+        if len(runs) == 1:
+            out += b"T3TX" + struct.pack("<4H", band.shape[1], band.shape[0], runs[0][0], len(runs[0][1]))
+            out += b"".join(struct.pack("<H", c) for c in runs[0][1])
+        else:          # T3CB-PATCH-12: several CLUT runs (id 0xFFFF, then id/count/colours each)
+            out += b"T3TX" + struct.pack("<4H", band.shape[1], band.shape[0], 0xFFFF, len(runs))
+            for cid, pal in runs:
+                out += struct.pack("<2H", cid, len(pal)) + b"".join(struct.pack("<H", c) for c in pal)
+        out += band.astype("<u2").tobytes()
     return out
 
 

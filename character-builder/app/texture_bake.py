@@ -60,9 +60,11 @@ def pack(chart, flat):
     return np.array(uv), scale
 
 
-def pack_faces(chart, flat):
+def pack_faces(chart, flat, wide=()):
     """Texel coordinates per face corner (faces of any corner count): the charts' bounding
-    boxes on shelves, at the highest common texel density that fits."""
+    boxes on shelves, at the highest common texel density that fits. Charts in `wide` will be
+    8-bit: they take twice the columns (coordinates here stay in 4-bit columns, twice as wide),
+    start on a halfword (4 columns) and are never turned."""
     n = max(chart) + 1
     lo = np.full((n, 2), np.inf)
     hi = np.full((n, 2), -np.inf)
@@ -75,24 +77,29 @@ def pack_faces(chart, flat):
         """Skyline packing, tallest charts first, each upright or on its side, wherever it ends
         lowest. -> (top-left per chart, turned per chart) or None."""
         dims = np.ceil(size * scale).astype(int) + 1 + 2 * GUTTER
+        for c in wide:
+            dims[c, 0] = -(-(2 * int(np.ceil(size[c, 0] * scale)) + 2 + 8) // 4) * 4
         sky = np.zeros(ATLAS_W, dtype=int)
         at = np.zeros((n, 2), dtype=int)
         turned = np.zeros(n, dtype=bool)
         for c in np.argsort(-dims.max(1), kind="stable"):
             best = None
-            for turn in (False, True):
+            for turn in ((False,) if c in wide else (False, True)):
                 w, h = (dims[c][::-1] if turn else dims[c])
                 if w > ATLAS_W:
                     continue
-                tops = np.array([sky[x:x + w].max() for x in range(ATLAS_W - w + 1)])
-                x = int(np.argmin(tops))
+                step = 4 if c in wide else 1
+                xs = range(0, ATLAS_W - w + 1, step)
+                tops = np.array([sky[x:x + w].max() for x in xs])
+                x = xs[int(np.argmin(tops))]
+                tops = {x: sky[x:x + w].max()}
                 if tops[x] + h <= ATLAS_H and (best is None or tops[x] + h < best[0]):
                     best = (tops[x] + h, x, tops[x], turn, w)
             if best is None:
                 return None
             end, x, y, turn, w = best
             sky[x:x + w] = end
-            at[c] = (x + GUTTER, y + GUTTER)
+            at[c] = (x + (4 if c in wide else GUTTER), y + GUTTER)
             turned[c] = turn
         return at, turned
 
@@ -111,6 +118,11 @@ def pack_faces(chart, flat):
         q = np.asarray(flat[i], float) - lo[c]
         if turn[c]:
             q = q[:, ::-1]
+        if c in wide:
+            q = q * [2.0, 1.0]
+            # even columns: the 8-bit texel is the column pair
+            uv.append((np.round(q * scale / [2, 1]) * [2, 1]).astype(int) + at[c])
+            continue
         uv.append(np.round(q * scale).astype(int) + at[c])
     return uv, scale
 
@@ -251,6 +263,22 @@ def bake(tris, G, uv, to_source, lookup, source, normals, chart, push=0.0, caste
     return rgb.astype(np.uint8), painted, owner
 
 
+def paint(rgb, owner):
+    """A painted look, as Namco's textures: a 3 x 3 median removes the speckle of photographic
+    sources (dirt, pores, stitch noise) but keeps edges (straps, laces); then a light smoothing
+    of what is left. Only inside each chart, so charts never bleed into each other."""
+    from PIL import Image, ImageFilter
+    out = rgb.copy()
+    med = np.asarray(Image.fromarray(rgb).filter(ImageFilter.MedianFilter(3)))
+    soft = med
+    same = np.ones(owner.shape, dtype=bool)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            same &= np.roll(np.roll(owner, dy, 0), dx, 1) == owner
+    out[same] = soft[same]
+    return out
+
+
 def ps1_colour(r, g, b):
     c = (int(r) >> 3) | ((int(g) >> 3) << 5) | ((int(b) >> 3) << 10)
     return c or 0x0421                     # 0x0000 is transparent on the PS1
@@ -325,6 +353,34 @@ def quantise_groups(rgb, owner, groups: int, own=()):
             idx[sel] = _nearest(rgb[sel].astype(float), pals[g[c]])[0]
     palette = [ps1_colour(*col) for pal in pals for col in pal]
     return idx, palette, g
+
+
+def face8(rgb, owner, charts):
+    """The 8-bit charts (stretched over column pairs in the 4-bit atlas): the pairs averaged
+    into 8-bit texels, a 256-colour palette for them. -> (index per 4-bit column pair, i.e. an
+    array of half the atlas width, mask of those pairs, PS1 palette of 256)."""
+    from PIL import Image
+    mask = np.isin(owner, list(charts))
+    pair = (rgb[:, 0::2].astype(float) + rgb[:, 1::2]) / 2
+    pm = mask[:, 0::2] | mask[:, 1::2]
+    px = pair[pm]
+    im = Image.fromarray(px.reshape(1, -1, 3).astype(np.uint8), "RGB")
+    q = im.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    pal = np.array(q.getpalette()[:765], dtype=float).reshape(255, 3)
+    idx = np.zeros(pm.shape, dtype=np.uint8)
+    idx[pm] = np.asarray(q, dtype=np.uint8).ravel() + 1          # entry 0 stays unused (black)
+    palette = [0x0421] + [ps1_colour(*c) for c in pal]
+    return idx, pm, palette
+
+
+def band8_into(band, idx8, pm):
+    """Writes 8-bit texels (one per 4-bit column pair) over the halfwords they cover."""
+    h, w8 = idx8.shape
+    q = idx8.astype(np.uint16)
+    hw = q[:, 0::2] | q[:, 1::2] << 8                              # 2 texels per halfword
+    cover = pm[:, 0::2] | pm[:, 1::2]
+    band[cover] = hw[cover]
+    return band
 
 
 def band4(idx):

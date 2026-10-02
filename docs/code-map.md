@@ -17,14 +17,14 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   - 3D preview: `donor_models`, `model_json` (runs `model_export.py`, cache `cache/model-<n>-v7.json`).
   - HTTP routes in `Handler` (`/api/...`).
 - `app/creator_patch.py` – applies/removes exact-text source patches. `PROFILES` (`recompiled`,
-  `expanded`, current revision string `T3CB-PATCH-11`), `status`, `install`, `uninstall`
+  `expanded`, current revision string `T3CB-PATCH-12`), `status`, `install`, `uninstall`
   (restores from `*.t3cb-backup`), `original_text`, `_plan` (checks every edit matches once).
 - `app/expanded_patch_data.py` – the Expanded edits: `ROSTER` (src/tekken3_ttt1_roster.c),
   `MOD` (tekken3_ttt1_mod.c), `COMBAT`, `NATIVE`; each entry `(old, new, count)`. Sections are
   marked in the C text by `T3CB-PATCH-n` comments: 2 descriptors, 3 move diagnostics, 4/7 move
   key, 5/6 Mokujin, 8 strip tiles (`custom_strips`), 9 palettes (`custom_palette_tick`),
   10 own models (`custom_model`, `tekken3_custom_model_install`), 11 own textures
-  (`custom_model_check` uploads texture + CLUT).
+  (`custom_model_check` uploads texture + CLUT), 12 several CLUT runs per texture.
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
 - `app/expanded_custom.py` (venv) – writes portrait pack, name plate, customs.txt (`install`,
@@ -45,13 +45,14 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   - `donor_frames`, `build` (axes, scale, frames F/J, weights -> rows, see-through and eyeball
     filtering, `lowpoly.build` + `lowpoly.add_pieces`, texture setup, size budget loop).
   - `_write` – the 3DMK writer: draw rows, spill to second layers, cache allocation, vertex /
-    normal / gouraud polygon / texture blocks. `donor_palette_size` (CLUT room).
+    normal / gouraud polygon / texture blocks; GPU packet limit. `donor_cluts`, `donor_palette_size` (CLUT room).
 - `app/lowpoly.py` – Tekken 3 style low-poly body: `build` (tubes of rings, head shell, hands
   with mitten + thumb, shared joint rings, smooth normals), `add_pieces` (loose clothing pieces
   outside the tubes, simplified), helpers `ray_hits`, `cast`, `frame`, `Body`.
 - `app/texture_bake.py` – texture: `Source` (FBX textures, `transparent`, `colours`),
   `pack_faces` (skyline packing), `raster`, `bake` (rays from outside inwards), 
-  `quantise_groups` (16-colour palette per chart group; face own palette), `band4`, `ps1_colour`.
+  `quantise_groups` (16-colour palette per chart group; face own palette), `face8` + `band8_into`
+  (8-bit face), `paint` (median), `band4`, `ps1_colour`.
 - `app/remesh.py` – `Caster` (first ray hit via grid), `Sampler` (nearest surface point),
   `surface_samples`, `snap`; older voxel `remesh` (not used by the importer now).
 - `app/decimate.py` – quadric edge collapse `decimate` (used for loose pieces).

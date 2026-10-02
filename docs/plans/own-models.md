@@ -18,11 +18,10 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
 1. Done: v15 crashed at fight start (GPU packets 33596 > stock max 32580); v16 (packet limit
    31000, 976 triangles, 23060 bytes, 6 loose pieces) tested in game 2026-10-02: no crash,
    2 m 07 s, model and texture installed, 0 words differ.
-2. Collar breaks in some poses (piece vertices on different rows): hang a whole piece on one
-   row, or on the row of most of its area.
-3. Toes are pointy: feet cap blunter (like the hands).
-4. Face: 8-bit (256 colours, CLUT 0) when the donor has CLUT row 0 and row 1 room; or a
-   mirrored half face like Namco's.
+2. Done (offline): collar whole on one row, blunt toes, 8-bit face (patch 12), painted texture.
+   v17 tested in game 2026-10-02: works.
+3. Pelvis front: the belt piece floats and there is a gap at the crotch.
+4. Face resolution: a mirrored half face (like Namco) would double it.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

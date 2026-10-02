@@ -184,7 +184,10 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
         hip = J[thigh] + up * 0.2 * np.linalg.norm(J[thigh] - knee)        # starts inside the pelvis
         rt = tube(hip, knee, 3, n_leg, sel({thigh}), left, 0.09 * height, thigh)
         rs = tube(knee, ankle, 3, n_leg, sel({shin}), left, 0.07 * height, shin, first=rt[-1])
-        tube(ankle, toe, 2, n_leg, sel({foot}), left, 0.06 * height, foot, first=rs[-1], cap_at=toe)
+        ar = np.mean(np.linalg.norm(np.array([body.pos[i] for i in rs[-1]]) - ankle, axis=1))
+        toe = ankle + (toe - ankle) * 0.9                                  # blunt toes, like Namco's shoes
+        tube(ankle, toe, 2, n_leg, sel({foot}), left, 0.06 * height, foot, first=rs[-1], cap_at=toe,
+             min_len=0.45 * ar)
     for side, (upper, fore, hand) in limbs["arm"].items():
         elbow, wrist, tip = J[fore], J[hand], ends["hand " + side]
         shoulder = J[upper] + (J[upper] - elbow) * 0.2                     # starts inside the torso
@@ -309,9 +312,11 @@ def add_pieces(body, P, Tr, vrow, budget, height, log=print):
             continue
         keep = sorted(set(f.ravel().tolist()))
         idmap = {v: len(pos) + i for i, v in enumerate(keep)}
-        for v in keep:
+        rows_here = [int(vrow[verts[v]]) for v in keep]
+        piece_row = max(set(rows_here), key=rows_here.count)   # the whole piece on one bone: it
+        for v in keep:                                       # moves rigidly, never tears apart
             pos.append(qp[v])
-            owner.append(int(vrow[verts[v]]))
+            owner.append(piece_row)
         # smooth normals of the piece
         pn = {v: np.zeros(3) for v in keep}
         for tri in f:
