@@ -338,6 +338,15 @@ def stylise(rgb, owner, k=6, shade=0.6, passes=2, mode=5, merge=55, light=0.2):
                 size[i] += size[j]
                 size[j] = 0
                 centre[i] = px[lab == i].mean(0)
+        # colour areas under 6 % of the chart are specks at this texel size (thin painted
+        # stripes, rivets): they join the nearest bigger area
+        size = np.bincount(lab, minlength=kk)
+        small = [j for j in range(kk) if 0 < size[j] < 0.06 * n]
+        big = [j for j in range(kk) if size[j] >= 0.06 * n]
+        for j in small:
+            if big:
+                i = min(big, key=lambda i: np.linalg.norm(centre[i] - centre[j]))
+                lab[lab == j] = i
         img = np.zeros(owner.shape, dtype=np.uint8)
         img[m] = lab + 1
         # no islands: two 5 x 5 majority passes fold specks of up to ~12 texels into their

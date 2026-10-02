@@ -36,8 +36,11 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    try others); rings smoothed (no point over 1.3x its neighbours); **pelvis ring ran backwards
    vs the waist ring -> crossed slivers at the hips: fixed (`spin` in lowpoly.tube)**; thighs
    start 0.3 above the hip joint. Compare offline: `tools/render/compare.py "10,<model.bin>" out.png`.
-   Rounded shoulder caps on the upper arms (`cap_start`). Still behind Nina: small hands, armour
-   arm specks, slim build overall. Deployed to the test folder as v24, not tested in game.
+   Rounded shoulder caps on the upper arms (`cap_start`). v25: hands scaled to the donor's reach (here none needed) and
+   palms at least 0.42x the finger width; torso and limbs measured against the donor (Medea
+   already as thick except forearms x1.3-1.4 and shins x1.6; Nina only looks broader by her
+   costume); colour areas under 6 % of a chart merge. The red/green marks on the armour arm are
+   the source's own design (stripes on the gauntlet), not noise. Deployed, not tested in game.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

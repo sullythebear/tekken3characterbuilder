@@ -327,13 +327,15 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
                     head_t3 = max(head_t3, W[19][1][1] - p[1])
     # the donor's limb thickness: median distance of each limb row's own vertices from its bone
     # (local X axis), game units
-    limb_child = {5: 6, 6: 7, 8: 9, 9: 10, 12: 13, 13: 14, 16: 17, 17: 18}
-    radius_t3 = {}
+    # (the torso too: spine row 1 along hips -> neck); and the hands' reach from the wrist
+    limb_child = {1: 19, 5: 6, 6: 7, 8: 9, 9: 10, 12: 13, 13: 14, 16: 17, 17: 18}
+    radius_t3, hand_t3 = {}, {}
     for r, slots in X.bind(m).items():
-        if r in limb_child:
-            d = [np.hypot(sl[1][1], sl[1][2]) for sl in slots if sl is not None and sl[0] == r]
-            if d:
-                radius_t3[r] = float(np.median(d))
+        own_pts = [np.array(sl[1], float) for sl in slots if sl is not None and sl[0] == r]
+        if r in limb_child and own_pts:
+            radius_t3[r] = float(np.median([np.hypot(p[1], p[2]) for p in own_pts]))
+        if r in (14, 18) and own_pts:
+            hand_t3[r] = float(np.percentile([np.linalg.norm(p) for p in own_pts], 90))
     budget = len(m)
     detail = (target or 1000) / 1000
     for attempt in range(8):
@@ -355,8 +357,19 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
             ours = s * float(np.median(np.linalg.norm(pts - base, axis=1)))
             k = float(np.clip((radius_t3[r] / max(ours, 1e-6)) ** 0.7, 1.0, 1.6))
             body["positions"][sel_v] = base + (pts - base) * k
-            if attempt == 0 and k > 1.01:
-                log(f"row {r} limb x{k:.2f}")
+            if attempt == 0:
+                log(f"row {r}: thickness donor {radius_t3[r]:.0f}, import {ours:.0f} -> x{k:.2f}")
+        # hands as big as the donor's (Namco's hands are large and readable), at most 1.5x
+        for r in (14, 18):
+            sel_v = owners == r
+            if r not in hand_t3 or not sel_v.any():
+                continue
+            pts = body["positions"][sel_v]
+            ours = s * float(np.percentile(np.linalg.norm(pts - Jf[r], axis=1), 90))
+            k = float(np.clip(hand_t3[r] / max(ours, 1e-6), 1.0, 1.5))
+            body["positions"][sel_v] = Jf[r] + (pts - Jf[r]) * k
+            if attempt == 0:
+                log(f"hand {r}: donor {hand_t3[r]:.0f}, import {ours:.0f} -> x{k:.2f}")
         own_head = s * np.linalg.norm(ends["head"] - Jf[19])
         k = float(np.clip(head_t3 / max(own_head, 1e-6), 1.0, 1.35))
         if attempt == 0:

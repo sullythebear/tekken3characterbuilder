@@ -230,7 +230,7 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
             continue
         # a Tekken 3 hand: palm, the four fingers as one mitten, and a thumb
         hand_tris = sel({hand})
-        thick = 0.25 * wr
+        thick = max(0.25 * wr, 0.42 * fing["width"])         # a broad palm, as Namco's hands
         rp = tube(wrist, fing["knuckle"], 1, n_arm, hand_tris, front, 0.04 * height, hand, first=rf[-1],
                   min_len=thick)
         end = fing["knuckle"] + (fing["tip"] - fing["knuckle"]) * 0.95
