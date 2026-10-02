@@ -4,7 +4,8 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
-| (next) | Patch 12 (CLUT runs), 8-bit face, painted textures, whole loose pieces; Medea v17 | in game 2026-10-02: works |
+| (next) | Fuller limbs, vivid and flattened textures, closed crotch, log once; Medea v19 | in game 2026-10-02: works |
+| 623a049 | Patch 12 (CLUT runs), 8-bit face, painted textures, whole loose pieces; Medea v17 | in game 2026-10-02: works |
 | ffdf692 | GPU packet limit in the importer; Medea v16 | in game 2026-10-02: works (v15 crashed: packets) |
 | 139c2cb | Patch 11: own textures; FBX import (lowpoly tubes, gouraud quads, ray-baked texture, hands, loose pieces); docs/ split, tools/ scripts | v13 in game: works |
 | 29c383a | Patch 10: own model replaces the donor's in memory; first FBX import | in game (big head, Medea over Kuma) — `knowledge/own-models.md` |

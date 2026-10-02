@@ -279,6 +279,38 @@ def paint(rgb, owner):
     return out
 
 
+def flatten(rgb, owner, radius=6, strength=0.5):
+    """Takes baked-in light and dirt out: inside each chart the brightness is divided by its own
+    heavy blur (raised to `strength`), so broad shading and stains even out while edges and
+    small details (seams, straps) stay. Tekken 3 textures are flat colour; the game's gouraud
+    light does the shading."""
+    from PIL import Image, ImageFilter
+    x = rgb.astype(float)
+    lum = x.mean(2)
+    out = x.copy()
+    for c in range(int(owner.max()) + 1):
+        m = owner == c
+        if m.sum() < 16:
+            continue
+        mean = lum[m].mean()
+        fill = np.where(m, lum, mean)
+        blur = np.asarray(Image.fromarray(np.clip(fill, 0, 255).astype(np.uint8)).filter(
+            ImageFilter.GaussianBlur(radius)), dtype=float)
+        gain = (mean / np.maximum(blur, 8)) ** strength
+        out[m] = x[m] * gain[m][:, None]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def vivid(rgb, saturation=1.25, contrast=1.08):
+    """Namco's palettes are saturated and contrasty; photographic sources look washed out under
+    the game's light. More colour and a little more contrast."""
+    x = rgb.astype(float)
+    grey = x.mean(2, keepdims=True)
+    x = grey + (x - grey) * saturation
+    x = (x - 128) * contrast + 128
+    return np.clip(x, 0, 255).astype(np.uint8)
+
+
 def ps1_colour(r, g, b):
     c = (int(r) >> 3) | ((int(g) >> 3) << 5) | ((int(b) >> 3) << 10)
     return c or 0x0421                     # 0x0000 is transparent on the PS1

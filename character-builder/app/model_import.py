@@ -311,12 +311,38 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
                 if sl is not None:
                     p = W[sl[0]][0] @ np.array(sl[1], float) + W[sl[0]][1]
                     head_t3 = max(head_t3, W[19][1][1] - p[1])
+    # the donor's limb thickness: median distance of each limb row's own vertices from its bone
+    # (local X axis), game units
+    limb_child = {5: 6, 6: 7, 8: 9, 9: 10, 12: 13, 13: 14, 16: 17, 17: 18}
+    radius_t3 = {}
+    for r, slots in X.bind(m).items():
+        if r in limb_child:
+            d = [np.hypot(sl[1][1], sl[1][2]) for sl in slots if sl is not None and sl[0] == r]
+            if d:
+                radius_t3[r] = float(np.median(d))
     budget = len(m)
     detail = (target or 1000) / 1000
     for attempt in range(8):
         body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
         lowpoly.add_pieces(body, P, Tr, vrow, int(260 * detail), height, log)
         # Tekken 3 heads are a little large for the body; give the import its donor's proportion
+        # Tekken 3 limbs are fuller than most modern models: move each limb's thickness part of
+        # the way to the donor's (never thinner, at most 1.6x)
+        owners = np.array(body["owner"])
+        for r, c in limb_child.items():
+            sel_v = owners == r
+            if r not in radius_t3 or not sel_v.any():
+                continue
+            a_, b_ = Jf[r], Jf[c]
+            pts = body["positions"][sel_v]
+            ax = b_ - a_
+            tt = np.clip((pts - a_) @ ax / (ax @ ax), 0, 1)
+            base = a_ + tt[:, None] * ax
+            ours = s * float(np.median(np.linalg.norm(pts - base, axis=1)))
+            k = float(np.clip((radius_t3[r] / max(ours, 1e-6)) ** 0.7, 1.0, 1.6))
+            body["positions"][sel_v] = base + (pts - base) * k
+            if attempt == 0 and k > 1.01:
+                log(f"row {r} limb x{k:.2f}")
         own_head = s * np.linalg.norm(ends["head"] - Jf[19])
         k = float(np.clip(head_t3 / max(own_head, 1e-6), 1.0, 1.35))
         if attempt == 0:
@@ -420,7 +446,8 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
                                 tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
         keep_face = np.isin(owner, face)                  # the face keeps its fine detail
-        rgb = np.where(keep_face[..., None], rgb, TB.paint(rgb, owner))
+        rgb = np.where(keep_face[..., None], rgb, TB.paint(TB.flatten(rgb, owner), owner))
+        rgb = TB.vivid(rgb)
         to_ps1 = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], dtype=np.uint8)
         if mode8:
             rest = np.where(np.isin(owner, face), -1, owner)

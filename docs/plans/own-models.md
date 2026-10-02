@@ -20,7 +20,11 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    2 m 07 s, model and texture installed, 0 words differ.
 2. Done (offline): collar whole on one row, blunt toes, 8-bit face (patch 12), painted texture.
    v17 tested in game 2026-10-02: works.
-3. Pelvis front: the belt piece floats and there is a gap at the crotch.
+3. v18 (offline, deployed, test pending): limbs moved part way to the donor's thickness
+   (`radius_t3`, only forearm row 17 changed: x1.51), saturated colours (`texture_bake.vivid`),
+   crotch lower (gap closed): tested in game 2026-10-02, works. v19 tested in game 2026-10-02 (works, log clean):
+   baked light and dirt flattened per chart (`texture_bake.flatten`, strength 0.5); the
+   'not P1's' log line now once per address (patch 12 text, rebuilt). Belt piece still a flat plate.
 4. Face resolution: a mirrored half face (like Namco) would double it.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
@@ -28,4 +32,4 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
 7. Builder UI: "Import 3D model (.fbx)" on the character page (pick donor costume, run
    `model_import.py`, preview in the 3D view, save `characters/<id>/model.bin`).
 8. Automatic rigging for FBX files without a skeleton (estimate joints, adjustable in the 3D view).
-9. Log spam: "model 10 at ... is not P1's" repeats ~45 times when P2 uses the donor model; log once.
+9. Done: log spam fixed.

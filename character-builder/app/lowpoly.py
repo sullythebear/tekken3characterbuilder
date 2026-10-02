@@ -144,7 +144,7 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     pelvis_tris = sel({3, 5, 8})
     knee_y = np.mean([J[r][1] for r in limbs["leg"]["L"][1:2] + limbs["leg"]["R"][1:2]])
     crotch = np.mean([J[limbs["leg"][sd][0]] for sd in ("L", "R")], 0)
-    crotch = crotch - up * 0.12 * (crotch[1] - knee_y)
+    crotch = crotch - up * 0.22 * (crotch[1] - knee_y)          # low enough to close the gap between the thighs
     waist = body.add(ring_at(hips, up, front, n_body, np.concatenate([torso_tris, pelvis_tris]), 0.2 * height), 1)
     torso = tube(hips, neck, 4, n_body, torso_tris, front, 0.2 * height, 1, first=waist, weight=1.3)
     tube(hips, crotch, 2, n_body, pelvis_tris, front, 0.2 * height, 3, first=waist, cap_at=crotch)

@@ -49,3 +49,9 @@ Rules for imported models, so they match the originals:
   6-8-sided tubes; textures are painted: flat colour areas with soft gradients and crisp
   details (armbands, straps, laces), no photographic noise; gouraud light does the shading. An imported model
   therefore has to fit the donor's size (Tekken 3 models: about 20-30 KB).
+- **Proportion and colour rules added 2026-10-02 (tested in game, Medea v19):** limbs move part
+  of the way (exponent 0.7, at most 1.6x, never thinner) to the donor's limb thickness (median
+  distance of each limb row's vertices from its bone); textures get baked light and stains
+  flattened per chart (divided by their own 6-texel blur to the power 0.5), a 3 x 3 median, then
+  saturation 1.25 and contrast 1.08 (`texture_bake.flatten/paint/vivid`); the face skips the
+  median and flattening.
