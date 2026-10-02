@@ -114,17 +114,33 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     n_leg = max(6, int(round(8 * detail)))
     n_arm = max(6, int(round(7 * detail)))
 
-    def ring_at(c, axis, ref, n, tris, max_len, min_len=0.0):
+    def ring_at(c, axis, ref, n, tris, max_len, min_len=0.0, spin=1.0):
         a, r, s = frame(axis, ref)
+        s = s * spin
         ang = 2 * np.pi * np.arange(n) / n
         dirs = np.cos(ang)[:, None] * r + np.sin(ang)[:, None] * s
-        return cast(np.repeat(c[None], n, 0), dirs, P, tris, max_len, min_len)
+        pts = cast(np.repeat(c[None], n, 0), dirs, P, tris, max_len, min_len)
+        # no single point juts out of its ring (a pouch, a buckle, a belt end): at most 1.3x
+        # the mean of its neighbours; Namco's rings are smooth outlines
+        d = np.linalg.norm(pts - c, axis=1)
+        for _ in range(3):
+            d = np.minimum(d, 1.3 * (np.roll(d, 1) + np.roll(d, -1)) / 2)
+        return c + dirs * d[:, None]
 
     def tube(a, b, segments, n, tris, ref, max_len, owner, first=None, cap_at=None, weight=1.0, min_len=0.0):
         rings = [first] if first is not None else []
+        # turn the same way round as the shared first ring: a tube pointing the other way
+        # (the pelvis down from the waist) would otherwise run its ring backwards and the
+        # strip between them would cross itself
+        spin = 1.0
+        if first is not None:
+            F0 = np.array([body.pos[i] for i in first])
+            _, r0, s0 = frame(b - a, ref)
+            k = 1 if len(first) > 1 else 0
+            spin = 1.0 if ((F0[k] - F0.mean(0)) @ s0) >= 0 else -1.0
         for j in range(0 if first is None else 1, segments + 1):
             c = a + (b - a) * j / segments
-            rings.append(body.add(ring_at(c, b - a, ref, n, tris, max_len, min_len), owner))
+            rings.append(body.add(ring_at(c, b - a, ref, n, tris, max_len, min_len, spin), owner))
         Pp = np.array(body.pos)
         circ = np.mean([np.linalg.norm(Pp[rg] - np.roll(Pp[rg], -1, 0), axis=1).sum() for rg in rings])
         length = np.linalg.norm(b - a)
@@ -144,7 +160,7 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
     pelvis_tris = sel({3, 5, 8})
     knee_y = np.mean([J[r][1] for r in limbs["leg"]["L"][1:2] + limbs["leg"]["R"][1:2]])
     crotch = np.mean([J[limbs["leg"][sd][0]] for sd in ("L", "R")], 0)
-    crotch = crotch - up * 0.22 * (crotch[1] - knee_y)          # low enough to close the gap between the thighs
+    crotch = crotch - up * 0.2 * (crotch[1] - knee_y)           # pelvis down to the crotch; thighs start inside it
     waist = body.add(ring_at(hips, up, front, n_body, np.concatenate([torso_tris, pelvis_tris]), 0.2 * height), 1)
     torso = tube(hips, neck, 4, n_body, torso_tris, front, 0.2 * height, 1, first=waist, weight=1.3)
     tube(hips, crotch, 2, n_body, pelvis_tris, front, 0.2 * height, 3, first=waist, cap_at=crotch)
@@ -188,7 +204,7 @@ def build(P, Tr, trow, J, ends, front, limbs, detail=1.0):
 
     for side, (thigh, shin, foot) in limbs["leg"].items():
         knee, ankle, toe = J[shin], J[foot], ends["toe " + side]
-        hip = J[thigh] + up * 0.2 * np.linalg.norm(J[thigh] - knee)        # starts inside the pelvis
+        hip = J[thigh] + up * 0.3 * np.linalg.norm(J[thigh] - knee)        # starts high inside the pelvis
         rt = tube(hip, knee, 3, n_leg, sel({thigh}), left, 0.09 * height, thigh)
         rs = tube(knee, ankle, 3, n_leg, sel({shin}), left, 0.07 * height, shin, first=rt[-1])
         ar = np.mean(np.linalg.norm(np.array([body.pos[i] for i in rs[-1]]) - ankle, axis=1))
@@ -310,6 +326,8 @@ def add_pieces(body, P, Tr, vrow, budget, height, log=print):
     owner = list(body["owner"])
     normals = list(body["normals"])
     for area, tris in pieces:
+        ctr = P[tris].reshape(-1, 3).mean(0); ext = np.ptp(P[tris].reshape(-1, 3), 0)
+        log(f"  piece at height {(ctr[1] - P[:, 1].min()) / height:.2f}, {len(tris)} source triangles")
         want = int(max(4, min(48, budget * area / total)))
         verts = np.unique(tris)
         local = {v: i for i, v in enumerate(verts)}

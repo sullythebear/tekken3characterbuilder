@@ -24,6 +24,12 @@ SECOND = {1: 2, 3: 4, 19: 20}
 PAIRS = {"collar": (11, 15), "upper": (12, 16), "fore": (13, 17), "hand": (14, 18),
          "thigh": (5, 8), "shin": (6, 9), "foot": (7, 10)}
 MAX_TRIS, MAX_SLOTS, MAX_NORMALS, MAX_UVS = 255, 128, 126, 255
+# Texture style (see docs/knowledge/t3-model-style.md): stain flattening, flat colour areas.
+# Chosen 2026-10-02 from four variants rendered beside Nina (scratch cmp.py): stains half
+# flattened, up to 8 colour areas per chart, one 3 x 3 majority pass, areas closer than 40 RGB
+# merged, the original light kept within +-35 %.
+TEXTURE_STYLE = {"flat_radius": 8, "flat_strength": 0.4, "k": 8, "shade": 0.6, "passes": 1, "size": 3,
+                 "merge": 40, "light": 0.35}
 # GPU packet bytes per polygon family (flat tri, flat quad, gouraud tri, gouraud quad). The game
 # builds one packet per polygon in a fixed buffer per player; stock models use at most 32580
 # bytes, and a model needing 33596 crashed the game when the fight started (2026-10-02).
@@ -454,7 +460,12 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
                                 tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
         keep_face = np.isin(owner, face)                  # the face keeps its fine detail
-        rgb = np.where(keep_face[..., None], rgb, TB.stylise(TB.flatten(rgb, owner), owner))
+        st = dict(TEXTURE_STYLE)
+        import os, json
+        st.update(json.loads(os.environ.get("T3CB_STYLE", "{}")))     # for comparing styles offline
+        flat = TB.flatten(rgb, owner, st["flat_radius"], st["flat_strength"])
+        styled = TB.stylise(flat, owner, st["k"], st["shade"], st["passes"], st["size"], st["merge"], st["light"])
+        rgb = np.where(keep_face[..., None], rgb, styled)
         rgb = TB.vivid(rgb)
         to_ps1 = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], dtype=np.uint8)
         if mode8:

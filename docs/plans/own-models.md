@@ -31,6 +31,12 @@ own fighters. Rules: `docs/knowledge/t3-model-style.md`. Format: `docs/knowledge
    than 2.8 % of the height outside the tubes (belt plate gone; collar and sleeve flap stay).
    920 triangles, 21404 bytes, 15.0 texels per unit. She floated: v21 tested in game 2026-10-02 (stands on the ground),
    scaled by hip height above the soles.
+5. v23 (offline only; the user wants it right before the next in-game test): texture style
+   chosen from 4 variants beside Nina (`TEXTURE_STYLE` in model_import.py, `T3CB_STYLE` env to
+   try others); rings smoothed (no point over 1.3x its neighbours); **pelvis ring ran backwards
+   vs the waist ring -> crossed slivers at the hips: fixed (`spin` in lowpoly.tube)**; thighs
+   start 0.3 above the hip joint. Compare offline: `tools/render/compare.py "10,<model.bin>" out.png`.
+   Still behind Nina: shoulders without volume, small hands, armour arm specks.
 5. Texture density dropped to 14 texels/unit with 67 charts: merge the loose pieces' box
    charts, or give pieces less weight.
 6. Size: v15 uses 99.8 % of Nina's slot; budget loop must keep a margin.

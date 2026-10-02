@@ -279,7 +279,7 @@ def paint(rgb, owner):
     return out
 
 
-def flatten(rgb, owner, radius=6, strength=0.5):
+def flatten(rgb, owner, radius=8, strength=0.8):
     """Takes baked-in light and dirt out: inside each chart the brightness is divided by its own
     heavy blur (raised to `strength`), so broad shading and stains even out while edges and
     small details (seams, straps) stay. Tekken 3 textures are flat colour; the game's gouraud
@@ -301,7 +301,7 @@ def flatten(rgb, owner, radius=6, strength=0.5):
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def stylise(rgb, owner, k=6, shade=0.6):
+def stylise(rgb, owner, k=6, shade=0.6, passes=2, mode=5, merge=55, light=0.2):
     """Namco's painted style: each chart's colours become a few flat areas (k-means, at most k
     colours), speckles cleaned by a 3 x 3 majority filter so the areas have crisp edges, and a
     soft version of the original light laid over them (brightness relative to the area's mean,
@@ -326,12 +326,27 @@ def stylise(rgb, owner, k=6, shade=0.6):
             for j in range(kk):
                 if (lab == j).any():
                     centre[j] = px[lab == j].mean(0)
+        # areas of nearly the same colour are one area (white and light grey armour, beige and a
+        # slightly darker beige stain); each merges into the bigger one
+        size = np.bincount(lab, minlength=kk)
+        for j in np.argsort(size):
+            near = [i for i in range(kk) if i != j and size[i] >= size[j] and size[i] > 0
+                    and np.linalg.norm(centre[i] - centre[j]) < merge]
+            if near and size[j] > 0:
+                i = min(near, key=lambda i: np.linalg.norm(centre[i] - centre[j]))
+                lab[lab == j] = i
+                size[i] += size[j]
+                size[j] = 0
+                centre[i] = px[lab == i].mean(0)
         img = np.zeros(owner.shape, dtype=np.uint8)
         img[m] = lab + 1
-        img = np.asarray(Image.fromarray(img).filter(ImageFilter.ModeFilter(3)))
+        # no islands: two 5 x 5 majority passes fold specks of up to ~12 texels into their
+        # surroundings (lace, pores, stitches read as noise at Tekken 3's texel size)
+        for _ in range(passes):
+            img = np.asarray(Image.fromarray(img).filter(ImageFilter.ModeFilter(mode)))
         lab2 = np.where(img[m] > 0, img[m] - 1, lab)
         means = np.array([soft[m][lab2 == j].mean() if (lab2 == j).any() else 1 for j in range(kk)])
-        rel = np.clip(soft[m] / np.maximum(means[lab2], 1), 0.8, 1.2) ** shade
+        rel = np.clip(soft[m] / np.maximum(means[lab2], 1), 1 - light, 1 + light) ** shade
         out[m] = centre[lab2] * rel[:, None]
     return np.clip(out, 0, 255).astype(np.uint8)
 

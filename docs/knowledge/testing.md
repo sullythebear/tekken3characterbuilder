@@ -51,3 +51,8 @@ Use these instead of doing the steps by hand. Default game folder: the Expanded 
 Tested 2026-10-02: deploy (0 changes), patch (4/4 byte for byte), build OK, report.
 Offline model renders (not in tools/ yet): scratch scripts `rast7.py` (own model, gouraud,
 textured), `stock.py` (a stock model with textures and wireframe).
+
+- `tools/render/compare.py "<stock model n or T3CM file>,..." out.png [size]` (Expanded's venv):
+  renders models side by side with the same renderer (stored gouraud normals, CLUT textures,
+  transparency), standing and Kazuya's fight stance, front and back. Use it to judge an import
+  next to its donor before asking the user to test.
