@@ -41,3 +41,4 @@ The shape-based auto rig cannot place joints reliably; every fix moves the error
 the user rigs the model in Mixamo (free) and exports FBX Binary (T-pose); `direct_import.py`
 now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
 `model_import._part/joint`, every vertex on its strongest bone). Untested until a rigged file.
+- 2026-10-03: test2.fbx (Mixamo rig, 41 bones) over Paul: same height as Paul, offline clean; v3 deployed on TOMMY (test pending).
