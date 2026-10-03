@@ -393,7 +393,10 @@ def build(root: Path, model: int, path: Path, log=print):
         # geometry on welded vertices (UVs are kept per polygon corner)
         faces.append({"v": [int(weld[x]) for x in v], "hard": False, "suv": [tuple(UV[j]) for j in v]})
     # texture: the file's own layout, 4-bit with a CLUT per UV island (group)
-    img = np.asarray(Image.open(io.BytesIO(next(iter(src["textures"].values())))).convert("RGB"))
+    if src.get("textures"):
+        img = np.asarray(Image.open(io.BytesIO(next(iter(src["textures"].values())))).convert("RGB"))
+    else:                                            # no texture in the file: plain grey
+        img = np.full((256, 256, 3), 150, np.uint8)
     th, tw = img.shape[:2]
     if (tw, th) != (256, 256):
         img = np.asarray(Image.fromarray(img).resize((256, 256), Image.LANCZOS))
@@ -470,9 +473,25 @@ def build(root: Path, model: int, path: Path, log=print):
     for v in range(len(vrow)):
         vrow_w[int(weld[v])] = vrow[v] if int(weld[v]) == v else vrow_w[int(weld[v])]
     data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)
+    # too big for the donor's slot (Mokujin's is small): flat-shade the flattest polygons first
+    # (one normal and a shorter record each) until it fits
+    if len(data) > len(m):
+        spread = [max(float(np.degrees(np.arccos(np.clip(Nrm[a] @ Nrm[b], -1, 1))))
+                      for a in f["v"] for b in f["v"]) for f in faces]
+        # then the 50/50 seams go (each holds a second copy of its vertex), joints bend harder
+        for seams, limit in ((True, 10), (True, 20), (True, 35), (False, 0), (False, 20), (False, 60), (False, 180)):
+            for f, sp in zip(faces, spread):
+                f["hard"] = sp <= limit
+            data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture},
+                                     blend=blend_w if seams else {}, zsign=-1)
+            if len(data) <= len(m):
+                log(f"to fit the donor's slot: flat shading below {limit} degrees"
+                    + ("" if seams else ", no 50/50 joint seams"))
+                break
     report.update(bytes=len(data), budget=len(m), islands=int(owner.max()) + 1, cluts=len(cid))
     if len(data) > len(m):
-        raise MI.Budget(f"{len(data)} bytes, the donor's slot holds {len(m)}")
+        raise MI.Budget(f"The model needs {len(data)} bytes but this fighting style's model slot holds {len(m)}: "
+                        "use fewer triangles or another style.")
     return m, data, texture, report
 
 

@@ -6,7 +6,7 @@ results only. Stdlib only (the import command runs Expanded's venv itself).
   python tools/t3cb.py patch    [--game G]            install the patch, prove uninstall restores the originals byte for byte, reinstall
   python tools/t3cb.py build    [--game G]            build the game, print only the outcome
   python tools/t3cb.py report   [--game G]            summarise logs/test-report.md in a few lines
-  python tools/t3cb.py import   FBX --character ID --model N [--game G]   FBX -> model.bin for a character (deployed)
+  python tools/t3cb.py import   FBX|GLB --character ID --model N [--game G]  rigged model -> model.bin (deployed)
   python tools/t3cb.py setmodel FILE --character ID [--game G]            put a T3CM model file on a character
 
 The default game folder is the user's Expanded test copy (never the working install)."""
@@ -124,9 +124,10 @@ def import_fbx(game: Path, fbx: Path, character: str, model: int) -> None:
     if not py.is_file():
         py = game / ".setup" / "venv" / "bin" / "python"
     out = game / "character-builder" / "cache" / f"import-{character}.bin"
-    r = subprocess.run([str(py), str(game / "character-builder" / "app" / "model_import.py"), str(fbx),
+    # the builder's 3D model page runs the same tool (rigged .fbx/.glb over a donor model)
+    r = subprocess.run([str(py), "direct_import.py", str(fbx),
                         "--model", str(model), "--root", str(game), "--out", str(out)],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, cwd=str(game / "character-builder" / "app"))
     lines = [l for l in (r.stdout + r.stderr).splitlines() if not l.startswith("{")]
     print("\n".join(lines[-6:]))
     if r.returncode == 0:

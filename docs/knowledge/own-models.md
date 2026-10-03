@@ -113,3 +113,19 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   copies differ (they are halved, as expected).
 - Probe frames can be cut by the sampling window (a missing row also misses its cache deposits):
   probe_render only uses frames with every drawn row.
+
+## Bind pose and joint offsets (2026-10-04, tested in game)
+
+- **Joint offsets:** the game places a child row at (x, y, -z) of its words 3..5 in the parent's
+  vertex frame (probe: Paul's row 11 sits at (350, 0, -101) for words (349, 0, 100); rows 5/8,
+  15 alike). `model_export.world` uses +z: its standing frames W mirror collarbones and hips onto
+  the other side. The writer (`_write(..., zsign=-1)` from direct_import) writes offsets with z
+  negated; verified: an import's in-game offsets equal Paul's.
+- **Bind pose:** in the pose a fighter was modelled in, both copies of every 50/50 seam vertex
+  meet. `bind_pose.solve(m, W)` turns each row (parents first) about its joint so its seam
+  copies meet the parent's (orthogonal Procrustes, pulled lightly towards W); a row with only one
+  or two seam points (upper arms) is turned about the free axis so the polygons towards the
+  parent are least stretched. Result: median seam mismatch 3-30 units on 20 donors (Ogre's arm
+  180: wings); Paul arms down, Law and Julia T-pose, Jin A-pose, head 21 degrees forward of W.
+- direct_import poses the mesh (LBS with the file's weights) into this bind pose; the head no
+  longer looks up, shoulders and hips follow like the donor's. Accessory rows (21+) are not used.

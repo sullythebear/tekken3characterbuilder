@@ -15,9 +15,11 @@ Find things here before reading code; then search (`grep -n`) instead of reading
     `write_palettes` (`<Prefix>-pal.bin`), `write_own_model` (copies `characters/<id>/model.bin`
     to `<Prefix>-model.bin`), `adopt_unlinked`/`unlinked_fighters`.
   - 3D preview: `donor_models`, `model_json` (runs `model_export.py`, cache `cache/model-<n>-v7.json`).
-  - HTTP routes in `Handler` (`/api/...`).
+  - Own 3D models: `check_model` (upload + rig check), `import_model`, `remove_model`,
+    `own_model_json` (preview), `run_import_tool` (direct_import.py).
+  - HTTP routes in `Handler` (`/api/...`; `/api/model/check|import|remove`, `/api/ownmodel/<id>`).
 - `app/creator_patch.py` – applies/removes exact-text source patches. `PROFILES` (`recompiled`,
-  `expanded`, current revision string `T3CB-PATCH-12`), `status`, `install`, `uninstall`
+  `expanded`, current revision string `T3CB-PATCH-13`), `status`, `install`, `uninstall`
   (restores from `*.t3cb-backup`), `original_text`, `_plan` (checks every edit matches once).
 - `app/expanded_patch_data.py` – the Expanded edits: `ROSTER` (src/tekken3_ttt1_roster.c),
   `MOD` (tekken3_ttt1_mod.c), `COMBAT`, `NATIVE`; each entry `(old, new, count)`. Sections are
@@ -36,7 +38,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   - `records(root, ids)` reads BNS records from the disc image; `donors(root)` model map.
   - Poses: `stance_pose`, `world`, `stand_pose`, `tweaked`, `facing`, `align`.
   - `bind(m)` slot lists per row (own copy of Expanded's, second layers fixed).
-  - `export_model(root, model)` mesh JSON (format 7) for the preview.
+  - `export_model(root, model)` mesh JSON (format 7) for the preview; `_mesh` (triangles per
+    pose); `export_own(root, file)` the same for a T3CM file (CLI `ownjson --file --out`).
   - Own models: `relocations`, `own_vertex_span`, `scaled_rows`, `own_model_file` (T3CM v1/v2
     with T3TX texture). CLI: `donors`, `model`, `ownmodel`.
 - `app/model_import.py` – FBX -> Tekken 3 model over a donor. CLI:
@@ -49,6 +52,12 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app/lowpoly.py` – Tekken 3 style low-poly body: `build` (tubes of rings, head shell, hands
   with mitten + thumb, shared joint rings, smooth normals), `add_pieces` (loose clothing pieces
   outside the tubes, simplified), helpers `ray_hits`, `cast`, `frame`, `Body`.
+- `app/direct_import.py` – rigged PS1-style model (.fbx/.glb) as it is over a donor: `load`,
+  `rig_from_skeleton` (collar fallback), `inspect` (rig check, CLI `--check`), `build` (bind pose,
+  LBS posing, rows/50-50 seams, normals, winding, texture, size fallback). CLI `--model --out`.
+- `app/bind_pose.py` – the donor's bind pose from its own 50/50 seams: `seam_pairs`,
+  `cross_edges`, `solve(m, W)`, `residuals`.
+- `app/glb.py` – glTF binary reader (meshes, UVs, textures, skin bones/weights).
 - `app/kitbash.py` – `build(root, base, parts)`: a fighter from parts of the stock models (Namco geometry and texels); CLI.
 - `app/template.py` – `build`: the donor's own model as topology template moved onto the import (default, `model_import.TEMPLATE`).
 - `app/texture_bake.py` – texture: `Source` (FBX textures, `transparent`, `colours`),
@@ -66,7 +75,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `index.html`, `style.css`.
 - `app.js` – pages, character form, donors (`renderDonors`), portrait (`drawPortrait`,
   `quantizePS1`), roster, steps/gauges, project panel.
-- `costumes.js` – WebGL preview (`createViewer`), `parseModel`, clothing pieces (`texelUse`,
+- `model3d.js` – the 3D model page (upload, check/lock, import, remove).
+- `costumes.js` – WebGL preview (shows the own model on its costume) (`createViewer`), `parseModel`, clothing pieces (`texelUse`,
   `groupParts`, `setPieceColour`), palettes (`computeCluts`, `paletteFor`), variants.
 
 ## Other

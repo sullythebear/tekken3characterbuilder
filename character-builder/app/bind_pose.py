@@ -11,6 +11,11 @@ from __future__ import annotations
 import numpy as np
 
 
+def _turn(axis, a):
+    K = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
+    return np.eye(3) + np.sin(a) * K + (1 - np.cos(a)) * K @ K
+
+
 def seam_pairs(m):
     """[((row, xyz), (row, xyz))]: the source copy (parent row) and the reading copy of every
     flagged average (tail group 0/1: with the cache, group 2: with the previous list)."""
@@ -62,10 +67,36 @@ def seam_pairs(m):
     return out
 
 
+def cross_edges(m):
+    """{row: [(own xyz, (other row, xyz))]}: polygon edges from a row's own vertex to a vertex it
+    borrows from another row. In the bind pose these polygons are not stretched."""
+    import anim_model as A
+    import model_export as X
+    from fmt import row, block, parse_b
+    out = {}
+    for r, slots in X.bind(m).items():
+        w = row(m, r)
+        for k, fam in enumerate(parse_b(block(m, w[1]))):
+            for rec in fam:
+                c = [slots[i] if i < len(slots) else None for i in A.prim_verts(k, rec)]
+                n = len(c)
+                for i in range(n):
+                    for j in ([(i + 1) % n] if n == 3 else [(i + 1) % n, (i + 2) % n]):
+                        a, b = c[i], c[j]
+                        if a is None or b is None or a[0] == b[0]:
+                            continue
+                        if a[0] != r:
+                            a, b = b, a
+                        if a[0] == r:
+                            out.setdefault(r, []).append((np.array(a[1], float), (b[0], np.array(b[1], float))))
+    return out
+
+
 def solve(m, W, prior=0.05):
     import anim_model as A
     from fmt import row, nrows
     pairs = seam_pairs(m)
+    edges = cross_edges(m)
     B = {0: W[0]}
     order = [1, 3, 19, 11, 12, 13, 14, 15, 16, 17, 18, 5, 6, 7, 8, 9, 10]
     for r in order:
@@ -79,13 +110,16 @@ def solve(m, W, prior=0.05):
         T = Tp + Rp @ (np.array(row(m, r)[3:6], float) * [1, 1, -1]) if p else Tr0
         R = Rp @ Rp0.T @ Rr0                          # turn relative to the parent kept
         X_, Y_ = [], []
+        host = {2: 1, 4: 3, 20: 19}                 # second layers draw in their main row's frame
         for (ra, va), (rb, vb) in pairs:
+            ra, rb = host.get(ra, ra), host.get(rb, rb)
             if rb == r and ra in B and ra != r:
                 X_.append(vb)
                 Y_.append(B[ra][0] @ va + B[ra][1] - T)
             elif ra == r and rb in B and rb != r:
                 X_.append(va)
                 Y_.append(B[rb][0] @ vb + B[rb][1] - T)
+        seams = len(X_)
         if X_:
             Xa, Ya = np.array(X_), np.array(Y_)
             scale = np.sqrt((Xa ** 2).sum(1).mean()) + 1.0
@@ -95,6 +129,18 @@ def solve(m, W, prior=0.05):
             U, _, Vt = np.linalg.svd(Ya.T @ Xa)
             D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))])
             R = U @ D @ Vt
+        # one or two seam points leave a turn about the axis through the joint free (an upper arm
+        # reads one): the polygons towards the parent decide it, least stretched
+        E = [(va, B[host.get(rb, rb)][0] @ vb + B[host.get(rb, rb)][1] - T)
+             for va, (rb, vb) in edges.get(r, []) if host.get(rb, rb) in B and host.get(rb, rb) != r]
+        if 0 < seams < 3 and E:
+            Ex, Ey = np.array([e[0] for e in E]), np.array([e[1] for e in E])
+            axis = R @ np.array(X_).mean(0)
+            axis /= np.linalg.norm(axis) + 1e-9
+            energy = lambda a: float((((_turn(axis, a) @ R @ Ex.T).T - Ey) ** 2).sum())
+            best = min(np.radians(np.arange(-180, 180, 3.0)), key=energy)
+            best = min(best + np.radians(np.arange(-3, 3.01, 0.25)), key=energy)
+            R = _turn(axis, best) @ R
         B[r] = (R, T)
     # second layers and accessories follow their host row
     for r in range(nrows(m)):
@@ -117,7 +163,11 @@ def solve(m, W, prior=0.05):
 def residuals(m, W):
     """{(source row, reader row): [distance]} of the seam copies under the frames W."""
     out = {}
+    host = {2: 1, 4: 3, 20: 19}
     for (ra, va), (rb, vb) in seam_pairs(m):
+        ra, rb = host.get(ra, ra), host.get(rb, rb)
+        if ra not in W or rb not in W:
+            continue
         d = np.linalg.norm(W[ra][0] @ va + W[ra][1] - W[rb][0] @ vb - W[rb][1])
         out.setdefault((ra, rb), []).append(float(d))
     return out

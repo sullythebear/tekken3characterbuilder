@@ -20,9 +20,9 @@ technically without changing its look (no remesh, no re-bake).
 
 ## Next
 
-1. A custom fighter with Paul as donor to test in game.
-2. Rig check in the fight stance (hands, shoulders), joint seams.
-3. Builder UI: "Import PS1 model" with donor costume choice and 3D preview.
+1. Done: TOMMY in game (v9), joint seams, bind pose; builder UI (3D model page).
+2. Open: a user test of TOMMY and of the 3D model page; models without textures or with more
+   than ~1100 triangles (warned, not reduced yet); partial seam dropping instead of all (Mokujin).
 
 ## In-game test 1 (2026-10-03): texture and face good, proportions wrong
 
@@ -62,3 +62,24 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   shoulder bones go with the torso (the collarbone rows shrug the shoulder top into a point).
   Probe renders over a whole fight (stance, kick, fall): no tears, no spikes; a slight point
   remains at the rear shoulder in the stance.
+
+## v7-v9 (2026-10-04): the real bind pose
+
+- The standing frames W were wrong for the donor itself (collarbones/hips mirrored, head 21
+  degrees): see `knowledge/own-models.md` "Bind pose". Imports are posed into
+  `bind_pose.solve`; Mixamo shoulder bones on the collar rows again (as Namco). In game (probe
+  renders front/side/back over whole fights): head level, shoulders and hips closed. TOMMY v9.
+- Every donor imports test2.fbx (20 of 21 directly; Mokujin's slot is 18412 bytes: flat shading,
+  then no 50/50 seams, until it fits). In game also on Law and Nina.
+
+## Builder: 3D model page (2026-10-04, tested in the browser pane and in game)
+
+- Fighter must be saved; "Choose .fbx or .glb" uploads (base64, 16 MB) -> `/api/model/check`
+  stores `characters/<id>/upload.*` + `upload.json` (direct_import `--check`: triangles,
+  texture, bones, missing Tekken bones, weights). Not rigged = locked (red, Import disabled;
+  the server refuses too). Import (costume select = the donor's costume models) -> `model.bin`,
+  `source.*`, `own_model` in character.json, synced to the game; Remove deletes them.
+- The 3D view shows the own model on its costume (`/api/ownmodel/<id>`, model_export `ownjson`,
+  in the bind pose). Previews were mirrored (shirt text backwards): the viewer flips x now.
+- .glb with a skin (Blender export) reads bones and weights; a glb made from test2.fbx imports to
+  the same model as the FBX (4 bytes of float rounding differ). Blender side names (hand.L) work.

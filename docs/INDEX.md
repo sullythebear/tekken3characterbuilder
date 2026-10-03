@@ -18,7 +18,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 - `models-costumes.md` – disc models/ARC textures, CLUTs, 3D preview, poses, palettes and colour
   variants (patch 9), clothing pieces.
 - `own-models.md` – 3DMK format, own model file T3CM, in-game replacement (patch 10), FBX import
-  results.
+  results, 50/50 seams, joint offsets (z negated) and the donor bind pose.
 - `t3-model-style.md` – how Namco's fighter models are built (budget, quads, gouraud records,
   joints, textures, face) and how the importer applies it.
 - `portraits.md` – portrait and name plate `.jui`.
@@ -29,7 +29,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 ## plans/ (what is next)
 
 - `own-models.md` – FBX import: status, next steps (paused).
-- `direct-import.md` – PS1-style models imported as they are (current).
+- `direct-import.md` – PS1-style rigged models imported as they are; builder 3D model page (current).
 - `kitbash.md` – new fighters from Namco parts (dropped by the user).
 - `later.md` – TTT1 styles as donors, open donor issues.
 

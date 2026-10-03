@@ -73,3 +73,16 @@ textured), `stock.py` (a stock model with textures and wireframe).
   character-builder/live/shots, game log character-builder/live/game-log.txt.
 - Verified: TOMMY picked, own model installed and drawn (0 words differ), 11 screenshots.
 - Also: Shift+F1..F12 saves a state in the window, F1..F12 loads (`--memcard-dir` folder).
+
+## Probe renders (`tools/render/probe_render.py`, Expanded's venv)
+
+- `probe_render.py GAME MODEL out.png [--frames n] [--pick i,j] [--size px] [--yaw deg] [--live DIR]`:
+  MODEL = stock model number or a T3CM file; the frames from `t3live.py fight --probe`
+  (`--live` another folder with probe.bin + game-log.txt, e.g. a donor reference fight);
+  `--yaw` turns the camera around the fighter; `ROWS=1` colours per row.
+- `--rest 0,90,180 [--solved] [--donor N]`: the donor's frames instead of a fight (`--solved` =
+  bind_pose.solve; `--donor` = the model number whose frames are used).
+- Donor reference: move `build-release/mods/ttt1/<Prefix>-model.bin` aside, run the fight with
+  `--probe`, copy probe.bin and game-log.txt to a folder, put the file back.
+- Builder API from a script: GET `/` holds the token (`<meta name="t3cb-token">`), send it as
+  `X-T3CB-Token` with POSTs (`/api/model/check`, `/api/model/import`, `/api/model/remove`).
