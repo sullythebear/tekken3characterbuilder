@@ -34,3 +34,10 @@ technically without changing its look (no remesh, no re-bake).
   import's root is put at the donor's ratio, then the model is scaled by that height above the
   soles; pelvis/torso split at the new root. Tommy over Paul: scale 1754, ~13 % taller than Paul.
 - v2 deployed on TOMMY (test pending).
+
+## In-game test 2 (2026-10-03): worse (chest, thin legs, long neck, shoulders, elbows folded)
+
+The shape-based auto rig cannot place joints reliably; every fix moves the error. Decision:
+the user rigs the model in Mixamo (free) and exports FBX Binary (T-pose); `direct_import.py`
+now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
+`model_import._part/joint`, every vertex on its strongest bone). Untested until a rigged file.

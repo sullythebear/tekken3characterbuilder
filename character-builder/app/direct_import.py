@@ -36,8 +36,14 @@ def load(path: Path) -> dict:
     T2 = np.arange(len(P2)).reshape(-1, 3)
     UV = uv.reshape(-1, 2).copy()
     UV[:, 1] = 1 - UV[:, 1]
-    return {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
-            "textures": {k: v for k, (n, v) in c["textures"].items()}}
+    out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
+           "textures": {k: v for k, (n, v) in c["textures"].items()}}
+    if c["bones"]:
+        # a real rig (e.g. from Mixamo): joints and the strongest bone of every vertex
+        w = c["weights"]
+        out["bones"] = c["bones"]
+        out["vbone"] = np.array([max(w[i], key=w[i].get) if w[i] else -1 for i in T.ravel()])
+    return out
 
 
 def auto_rig(P, T=None):
@@ -116,6 +122,28 @@ def auto_rig(P, T=None):
     return J, part
 
 
+def rig_from_skeleton(bones, vbone, P):
+    """Joints and per-vertex parts from a skeleton with Mixamo-like names."""
+    J = {"hips": MI.joint(bones, "pelvis"), "neck": MI.joint(bones, "head")}
+    for side in "LR":
+        for prt in ("collar", "upper", "fore", "hand", "thigh", "shin", "foot"):
+            J[prt + side] = MI.joint(bones, prt, side)
+        hp = [np.array([b["matrix"][k][3] for k in range(3)]) for b in bones if MI._part(b["name"]) == ("hand", side)]
+        J["handend" + side] = max(hp, key=lambda q: np.linalg.norm(q - J["hand" + side])) if hp else J["hand" + side]
+        fp = [np.array([b["matrix"][k][3] for k in range(3)]) for b in bones if MI._part(b["name"]) == ("foot", side)]
+        J["toe" + side] = max(fp, key=lambda q: np.linalg.norm(q - J["foot" + side])) if fp else J["foot" + side]
+    J["top"] = np.array([J["neck"][0], P[:, 1].max(), J["neck"][2]])
+    if any(v is None for v in J.values()):
+        raise ValueError("The skeleton misses bones the Tekken skeleton needs (hips, head, arms, legs).")
+    part = np.empty(len(P), dtype=object)
+    for i, b in enumerate(vbone):
+        prt, side = MI._part(bones[b]["name"]) if b >= 0 else ("spine", None)
+        if prt is None:
+            prt = "spine"
+        part[i] = (prt, side if prt in PAIRS else None)
+    return J, part
+
+
 def build(root: Path, model: int, path: Path, log=print):
     from fmt import row
     import texture_bake as TB
@@ -125,7 +153,10 @@ def build(root: Path, model: int, path: Path, log=print):
     W = MI.donor_frames(root, m)
     src = load(path)
     P, T, UV = src["P"], src["T"], src["UV"]
-    J0, part = auto_rig(P, T)
+    if "bones" in src:
+        J0, part = rig_from_skeleton(src["bones"], src["vbone"], P)
+    else:
+        J0, part = auto_rig(P, T)
     log(f"auto rig: crotch at {(J0['thighL'][1] - P[:, 1].min()) / np.ptp(P[:, 1]):.2f} of the height")
     # axes as model_import.build: glTF (Y up, faces +Z, left +X) -> game (Y down)
     up = np.array([0.0, -1, 0])
@@ -181,7 +212,7 @@ def build(root: Path, model: int, path: Path, log=print):
         F[k], J[k] = F[v], J[v]
     vrow = []
     for prt, side in part:
-        vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side))
+        vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side or "L"))
     G = np.array([g(p) for p in P])
     # smooth normals over welded positions (the file splits vertices at UV seams)
     key = {tuple(np.round(p, 5)): i for i, p in enumerate(P)}
