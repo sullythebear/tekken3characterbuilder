@@ -40,7 +40,7 @@ def load(path: Path) -> dict:
             "textures": {k: v for k, (n, v) in c["textures"].items()}}
 
 
-def auto_rig(P):
+def auto_rig(P, T=None):
     """Joints of a T/A-posed humanoid from its shape alone (glTF axes: Y up, facing +Z, the
     character's left at +X). -> joints {name: point}, and a row for every vertex."""
     y0, y1 = P[:, 1].min(), P[:, 1].max()
@@ -53,11 +53,23 @@ def auto_rig(P):
     # torso half width: widest point of the body between the waist and below the arms
     band = (y > 0.5) & (y < arm_y - 0.08)
     torso_x = float(np.percentile(ax[band], 98))
-    # crotch: the highest height where nothing sits on the centre line (the gap between legs)
+    # crotch: the lowest height where a ray through the centre line (front to back) meets the
+    # body; below it is the gap between the legs. Rays, not vertices: a low-poly model has
+    # few vertices, so "no vertex near the centre" holds almost everywhere
+    import lowpoly
     crotch = 0.45
-    for h in np.arange(0.25, 0.6, 0.005):
-        if not ((np.abs(y - h) < 0.006) & (ax < 0.02 * H)).any():
-            crotch = h
+    if T is not None:
+        zs = P[:, 2].min() - 0.1 * H
+        hs = np.arange(0.2, 0.65, 0.004)
+        o = np.array([[0.0, y0 + h * H, zs] for h in hs])
+        d = np.tile([0.0, 0, 1.0], (len(hs), 1))
+        hit = lowpoly.ray_hits(o, d, P, T, np.full(len(hs), 2 * H + 1))
+        body = ~np.isnan(hit)
+        if body.any():
+            crotch = float(hs[np.argmax(body)])
+    # baggy trousers or a skirt close the gap low down; a human crotch sits at 0.42-0.50 of
+    # the height
+    crotch = float(np.clip(crotch, 0.42, 0.5))
     knee = crotch * 0.52 + 0.05 * 0.48
     ankle = 0.06
     neck = arm_y + 0.06
@@ -113,7 +125,8 @@ def build(root: Path, model: int, path: Path, log=print):
     W = MI.donor_frames(root, m)
     src = load(path)
     P, T, UV = src["P"], src["T"], src["UV"]
-    J0, part = auto_rig(P)
+    J0, part = auto_rig(P, T)
+    log(f"auto rig: crotch at {(J0['thighL'][1] - P[:, 1].min()) / np.ptp(P[:, 1]):.2f} of the height")
     # axes as model_import.build: glTF (Y up, faces +Z, left +X) -> game (Y down)
     up = np.array([0.0, -1, 0])
     front = sum(W[r][0][:, 0] for r in (7, 10))
@@ -126,7 +139,22 @@ def build(root: Path, model: int, path: Path, log=print):
     # scale: hip height above the soles, as the donor's
     floor_t3 = max((W[sl[0]][0] @ np.array(sl[1], float) + W[sl[0]][1])[1]
                    for r, slots in X.bind(m).items() if r in (5, 6, 7, 8, 9, 10) for sl in slots if sl is not None)
-    s = (floor_t3 - W[3][1][1]) / (J0["hips"][1] - P[:, 1].min())
+    # Tekken's root (row 3, the pelvis) sits at the waist, above the hip sockets (rows 5/8): put
+    # the import's root as far above its hip sockets as the donor's (relative to the leg), then
+    # scale by that height above the soles, so the soles land on the ground and the body bends
+    # where the donor's does
+    thigh_t3 = floor_t3 - np.mean([W[5][1][1], W[8][1][1]])
+    hip_t3 = floor_t3 - W[3][1][1]
+    ratio = (hip_t3 - thigh_t3) / thigh_t3
+    sole = P[:, 1].min()
+    thigh_i = J0["thighL"][1] - sole
+    J0["hips"] = J0["hips"].copy()
+    J0["hips"][1] = sole + thigh_i * (1 + ratio)
+    s = hip_t3 / (J0["hips"][1] - sole)
+    log(f"scale {s:.0f}: root {ratio:.2f} of the leg above the hip sockets, as the donor's")
+    for i in range(len(P)):                  # pelvis below the root, torso above
+        if part[i][0] in ("pelvis", "spine"):
+            part[i] = ("pelvis" if P[i, 1] < J0["hips"][1] else "spine", None)
     g = lambda x: s * (Q @ (np.asarray(x) - J0["hips"])) + W[3][1]
     J = {1: g(J0["hips"]), 3: g(J0["hips"]), 19: g(J0["neck"])}
     for side in "LR":

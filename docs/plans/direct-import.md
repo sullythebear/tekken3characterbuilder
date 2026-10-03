@@ -23,3 +23,14 @@ technically without changing its look (no remesh, no re-bake).
 1. A custom fighter with Paul as donor to test in game.
 2. Rig check in the fight stance (hands, shoulders), joint seams.
 3. Builder UI: "Import PS1 model" with donor costume choice and 3D preview.
+
+## In-game test 1 (2026-10-03): texture and face good, proportions wrong
+
+- Cause: the auto rig's crotch came out at 0.6 of the height (a low-poly model has few
+  vertices, so "no vertex on the centre line" held almost everywhere): legs reached the chest.
+  Now rays along Z through the centre line (lowest hit = crotch), clamped to 0.42-0.50 (baggy
+  trousers close the gap low).
+- Tekken's root (row 3) sits at the waist, 0.15 of the leg above the hip sockets (Paul): the
+  import's root is put at the donor's ratio, then the model is scaled by that height above the
+  soles; pelvis/torso split at the new root. Tommy over Paul: scale 1754, ~13 % taller than Paul.
+- v2 deployed on TOMMY (test pending).
