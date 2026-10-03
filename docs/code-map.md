@@ -49,6 +49,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app/lowpoly.py` – Tekken 3 style low-poly body: `build` (tubes of rings, head shell, hands
   with mitten + thumb, shared joint rings, smooth normals), `add_pieces` (loose clothing pieces
   outside the tubes, simplified), helpers `ray_hits`, `cast`, `frame`, `Body`.
+- `app/kitbash.py` – `build(root, base, parts)`: a fighter from parts of the stock models (Namco geometry and texels); CLI.
 - `app/template.py` – `build`: the donor's own model as topology template moved onto the import (default, `model_import.TEMPLATE`).
 - `app/texture_bake.py` – texture: `Source` (FBX textures, `transparent`, `colours`),
   `pack_faces` (skyline packing), `raster`, `bake` (rays from outside inwards), 

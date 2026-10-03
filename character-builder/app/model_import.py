@@ -679,7 +679,9 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
     for i, r in enumerate(draw):
         by_row.setdefault(r, []).append(i)
     texture = None
-    if tex and all("duv" in f for f in faces):
+    if isinstance(tex, dict) and "ready" in tex:     # kitbash: texture already assembled
+        texture = tex["ready"]
+    elif tex and all("duv" in f for f in faces):
         texture = _bake_donor_layout(faces, G, Nrm, tex, side=(J[1], F[1][:, 2]))
     elif tex:
         import texture_bake as TB

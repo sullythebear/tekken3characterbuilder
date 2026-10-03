@@ -28,7 +28,8 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 
 ## plans/ (what is next)
 
-- `own-models.md` – FBX import: status, next steps.
+- `own-models.md` – FBX import: status, next steps (paused).
+- `kitbash.md` – new fighters from Namco parts: status, next steps.
 - `later.md` – TTT1 styles as donors, open donor issues.
 
 ## done/
