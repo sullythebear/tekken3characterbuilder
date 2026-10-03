@@ -43,6 +43,7 @@ def load(path: Path) -> dict:
         w = c["weights"]
         out["bones"] = c["bones"]
         out["vbone"] = np.array([max(w[i], key=w[i].get) if w[i] else -1 for i in T.ravel()])
+        out["weights"] = [w[i] for i in T.ravel()]
     return out
 
 
@@ -214,6 +215,68 @@ def build(root: Path, model: int, path: Path, log=print):
     for prt, side in part:
         vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side or "L"))
     G = np.array([g(p) for p in P])
+    if "weights" in src:
+        # Pose the mesh into the donor's standing pose with the file's own smooth weights (linear
+        # blend skinning): arms down, legs as the donor's. The game then only turns each row a
+        # little from this rest pose, so the PlayStation's one-bone-per-vertex binding no longer
+        # tears shoulders and hips (a T-pose rest needs 90 degree turns at the shoulders).
+        CH = {1: 19, 5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
+        Fd = {r: W[r][0] for r in F}
+        Jd = {r: W[r][1] for r in F}
+
+        def pose_row(xg, r):
+            fr = MI.FRAME.get(r, r)
+            loc = (xg - J[fr]) @ F[fr]
+            c = CH.get(fr)
+            if c is not None and fr not in (1,):
+                li, ld = np.linalg.norm(J[c] - J[fr]), np.linalg.norm(Jd[c] - Jd[fr])
+                ax = F[fr].T @ (J[c] - J[fr]) / max(li, 1e-9)
+                loc = loc + np.outer(loc @ ax, ax) * (ld / max(li, 1e-9) - 1)
+            return loc @ Fd[fr].T + Jd[fr]
+        bones = src["bones"]
+        brow = {}
+        for bi, b in enumerate(bones):
+            prt, side = MI._part(b["name"])
+            if prt in ("spine", "pelvis", "head"):
+                brow[bi] = {"spine": 1, "pelvis": 3, "head": 19}[prt]
+            elif prt in PAIRS and side:
+                brow[bi] = rows_of(prt, side)
+            else:                                      # unknown bones follow their parent
+                j = bi
+                while j >= 0 and j not in brow:
+                    j = bones[j]["parent"]
+                brow[bi] = brow.get(j, 1)
+        acc = np.zeros_like(G)
+        tot = np.zeros(len(G))
+        rows_needed = {}
+        for i, wv in enumerate(src["weights"]):
+            for bi, w in wv.items():
+                rows_needed.setdefault(brow[bi], []).append((i, w))
+        for r, lst in rows_needed.items():
+            idx = np.array([i for i, _ in lst])
+            ww = np.array([w for _, w in lst])
+            np.add.at(acc, idx, pose_row(G[idx], r) * ww[:, None])
+            np.add.at(tot, idx, ww)
+        G = np.where(tot[:, None] > 0, acc / np.maximum(tot, 1e-9)[:, None], G)
+        # rows per vertex from the weights: a vertex in a joint's blend zone stays with the parent
+        # row (the torso over the shoulder, the pelvis over the hip) unless the child clearly
+        # owns it; the parent's surface then covers the joint as on Namco's models
+        import anim_model as A
+        for i, wv in enumerate(src["weights"]):
+            rw = {}
+            for bi, w in wv.items():
+                rw[brow[bi]] = rw.get(brow[bi], 0) + w
+            if not rw:
+                continue
+            best = max(rw, key=rw.get)
+            par = A.ROW_PARENT.get(best)
+            # only at the hips (thigh -> pelvis) and the shoulders (collarbone -> torso); at the
+            # elbows, knees, wrists and ankles the child keeps its vertices (else spikes)
+            if best in (5, 8, 11, 15) and par in rw and rw[best] / sum(rw.values()) < 0.7:
+                best = par
+            vrow[i] = best
+        F, J = Fd, Jd
+        log("mesh posed into the donor's standing pose with the file's weights")
     # smooth normals over welded positions (the file splits vertices at UV seams)
     key = {tuple(np.round(p, 5)): i for i, p in enumerate(P)}
     weld = np.array([key[tuple(np.round(p, 5))] for p in P])

@@ -43,3 +43,18 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
 `model_import._part/joint`, every vertex on its strongest bone). Untested until a rigged file.
 - 2026-10-03: test2.fbx (Mixamo rig, 41 bones) over Paul: same height as Paul, offline clean; v3 deployed on TOMMY (test pending).
 - v3 tested in game: much better; light texture glitches (yellow on the head: overlapping UV islands with different CLUTs), hands turned, a hole at the buttocks (per-triangle winding in a crease). v4: islands with >= 6 shared core texels share a CLUT; one global winding decision. Hands: open (the model's), twist still to check.
+
+## v5 (2026-10-04): checked in game by the live setup (probe renders)
+
+- Patch 13: the renderer probe takes TEKKEN3_NATIVE_PROBE_START/_EVERY/_CALLS (defaults =
+  Expanded's), so `t3live.py fight --probe` samples two frames out of every 1500 calls over the
+  whole fight; `tools/render/probe_render.py GAME model.bin out.png [--pick i,j] [--frames n]`
+  renders the import in the exact in-game poses at high resolution (ROWS=1: colour per row).
+- Fix 1: the mesh is posed into the donor's standing pose with the file's smooth weights (LBS)
+  before writing; the game then turns rows only a little from rest, so one-bone binding no longer
+  tears shoulders (T-pose needed 90 degree turns) and hips.
+- Fix 2: vertices in the blend zone of hips (thigh -> pelvis) and shoulders (collarbone ->
+  torso), child weight < 70 %, stay on the parent row. Applying this at elbows/knees/ankles made
+  spikes: limited to hips and shoulders.
+- Probe renders of the fight stance: no wing at the shoulder, hips filled, no spikes. Deployed
+  on TOMMY (v5).

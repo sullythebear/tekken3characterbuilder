@@ -31,7 +31,7 @@ PAD = {"none": 0xFFFF, "cross": 0xBFFF, "square": 0x7FFF, "triangle": 0xEFFF, "c
 
 
 class Game:
-    def __init__(self, game: Path, visible: bool):
+    def __init__(self, game: Path, visible: bool, extra_env: dict | None = None):
         self.root = game
         self.live = game / "character-builder" / "live"
         self.saves = self.live / "saves"
@@ -60,6 +60,7 @@ class Game:
             args.append("--headless")
         env = {k: v for k, v in os.environ.items() if not k.startswith("TEKKEN3_")}
         env["SDL_AUDIO_DRIVER"] = "dummy" if not visible else env.get("SDL_AUDIO_DRIVER", "")
+        env.update(extra_env or {})
         self.log = self.live / "game-log.txt"
         self.out = self.log.open("w")
         self.proc = subprocess.Popen(args, cwd=game, stdout=self.out, stderr=self.out, env=env)
@@ -124,8 +125,15 @@ def setup(game: Path):
 
 
 def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, cell: int = 0,
-          costume_button: str = "square"):
-    g = Game(game, visible)
+          costume_button: str = "square", probe: bool = False):
+    live = game / "character-builder" / "live"
+    # the renderer probe (patch 13): 64 calls (about two frames of both players) out of every
+    # 1500, over the whole fight
+    env = {"TEKKEN3_NATIVE_PROBE": str(live / "probe.bin"), "TEKKEN3_NATIVE_PROBE_START": "300",
+           "TEKKEN3_NATIVE_PROBE_EVERY": "1500", "TEKKEN3_NATIVE_PROBE_CALLS": "60000"} if probe else {}
+    for old in live.glob("probe.bin*"):
+        old.unlink()
+    g = Game(game, visible, env)
     shots = g.live / "shots"
     shutil.rmtree(shots, ignore_errors=True)
     shots.mkdir(parents=True)
@@ -177,13 +185,14 @@ def main():
     ap.add_argument("--frames", type=int, default=600)
     ap.add_argument("--every", type=int, default=60)
     ap.add_argument("--visible", action="store_true")
+    ap.add_argument("--probe", action="store_true", help="record the renderer's per-row transforms (live/probe.bin)")
     ap.add_argument("--pages", type=int, default=2, help="R2 presses on the select screen (2 = CUSTOM page)")
     ap.add_argument("--cell", type=int, default=0, help="the fighter's place on that page (right presses)")
     a = ap.parse_args()
     if a.command == "setup":
         setup(a.game)
     else:
-        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell)
+        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, probe=a.probe)
 
 
 if __name__ == "__main__":

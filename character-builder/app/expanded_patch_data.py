@@ -343,7 +343,7 @@ ROSTER = [
  "            const unsigned char *t=b+16+CM_HEADER+size+4*count;\n"
  "            unsigned w=pal16(t+4),h=pal16(t+6),id=pal16(t+8),c=pal16(t+10),runs=id==0xFFFF?c:1,colours=0;\n"
  "            const unsigned char *at=t+12;\n"
- "            for(unsigned r=0;r<runs;r++) {                  /* T3CB-PATCH-12: several CLUT runs */\n"
+ "            for(unsigned r=0;r<runs;r++) {                  /* T3CB-PATCH-12: several CLUT runs (T3CB-PATCH-13: renderer probe options) */\n"
  "                unsigned rid=id==0xFFFF?pal16(at):id,rc=id==0xFFFF?pal16(at+2):c;\n"
  "                if(id==0xFFFF)at+=4;\n"
  "                gr_vram_transfer_in((int)((rid&63)*16),(int)(504+p*4+(rid>>6)),(int)rc,1,(const uint16_t*)at);\n"
@@ -501,3 +501,24 @@ NATIVE = [
 ]
 
 EXPANDED_EDITS = {R: ROSTER, M: MOD, C: COMBAT, N: NATIVE}
+
+# --- T3CB-PATCH-13: the renderer probe samples the whole fight (builder's live checks) ---
+# TEKKEN3_NATIVE_PROBE_START (calls before recording, default 600), _CALLS (calls recorded,
+# default 400) and _EVERY (record 64 calls out of every N, default 0 = all). Defaults keep
+# Expanded's behaviour. (marker for the patch status: tekken3_guest_native)
+REND = "src/tekken3_ttt1_renderer.c"
+RENDER = [
+("static void native_probe_record(CPUState *cpu, const uint32_t in[4],",
+ "/* T3CB-PATCH-13 (tekken3_guest_native builder): probe window from the environment. */\n"
+ "static unsigned probe_env(const char *name, unsigned dflt) {\n"
+ "    const char *v=getenv(name); return v && *v ? (unsigned)strtoul(v,NULL,10) : dflt;\n"
+ "}\n"
+ "static void native_probe_record(CPUState *cpu, const uint32_t in[4],", 1),
+("    if(++seen<600) return;",
+ "    if(++seen<probe_env(\"TEKKEN3_NATIVE_PROBE_START\",600)) return;\n"
+ "    { unsigned every=probe_env(\"TEKKEN3_NATIVE_PROBE_EVERY\",0);\n"
+ "      if(every && (seen-probe_env(\"TEKKEN3_NATIVE_PROBE_START\",600))%every>=64) return; }", 1),
+("    if(seen>=600+NATIVE_PROBE_CALLS) {",
+ "    if(seen>=probe_env(\"TEKKEN3_NATIVE_PROBE_START\",600)+probe_env(\"TEKKEN3_NATIVE_PROBE_CALLS\",NATIVE_PROBE_CALLS)) {", 1),
+]
+EXPANDED_EDITS[REND] = RENDER
