@@ -29,7 +29,8 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 ## plans/ (what is next)
 
 - `own-models.md` – FBX import: status, next steps (paused).
-- `kitbash.md` – new fighters from Namco parts: status, next steps.
+- `direct-import.md` – PS1-style models imported as they are (current).
+- `kitbash.md` – new fighters from Namco parts (dropped by the user).
 - `later.md` – TTT1 styles as donors, open donor issues.
 
 ## done/

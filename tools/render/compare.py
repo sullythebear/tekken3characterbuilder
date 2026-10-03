@@ -59,8 +59,10 @@ def tris_of(m, pose):
 def render(spec, pose, yaw, S, bounds=None):
     m, (band, vram) = load(spec)
     T = tris_of(m, pose)
-    P = np.array([t[0] for t in T], float); P[:, :, 1] *= -1
-    N = np.array([t[3] for t in T], float); N[:, :, 1] *= -1
+    # the game's camera looks along +Z with Y down, so +X is screen right as seen from -Z; this
+    # view is from +Z, so X turns over too (else the picture is a mirror image)
+    P = np.array([t[0] for t in T], float); P[:, :, 1] *= -1; P[:, :, 0] *= -1
+    N = np.array([t[3] for t in T], float); N[:, :, 1] *= -1; N[:, :, 0] *= -1
     U = np.array([t[1] for t in T], float); M = [t[2] for t in T]
     c, s = np.cos(yaw), np.sin(yaw); Rz = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
     P = P @ Rz.T; N = N @ Rz.T
@@ -74,7 +76,7 @@ def render(spec, pose, yaw, S, bounds=None):
     for j in range(len(P)):
         q = P[j]; xy = np.stack([(q[:, 0]) * sc + Wd / 2, (mx[1] - q[:, 1]) * sc + 10], 1)
         a, b, cc = xy; cross = (b[0]-a[0])*(cc[1]-a[1]) - (b[1]-a[1])*(cc[0]-a[0])
-        if cross >= 0: continue
+        if cross <= 0: continue
         x0, y0 = np.floor(xy.min(0)).astype(int); x1, y1 = np.ceil(xy.max(0)).astype(int)
         xs, ys = np.meshgrid(np.arange(max(x0,0), min(x1, Wd-1)+1), np.arange(max(y0,0), min(y1, S-1)+1))
         px = np.stack([xs.ravel()+.5, ys.ravel()+.5], 1)
@@ -103,7 +105,7 @@ def bounds_of(specs, pose):
     lo, hi = np.full(3, 1e9), np.full(3, -1e9)
     for sp in specs:
         m, _ = load(sp)
-        P = np.array([p for t in tris_of(m, pose) for p in t[0]]); P[:, 1] *= -1
+        P = np.array([p for t in tris_of(m, pose) for p in t[0]]); P[:, 1] *= -1; P[:, 0] *= -1
         lo = np.minimum(lo, P.min(0)); hi = np.maximum(hi, P.max(0))
     return lo, hi
 

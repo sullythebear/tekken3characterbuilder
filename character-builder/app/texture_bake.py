@@ -379,7 +379,9 @@ def _palette16(pixels):
     from PIL import Image
     im = Image.fromarray(pixels.reshape(1, -1, 3).astype(np.uint8), "RGB")
     q = im.quantize(colors=16, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    pal = np.array(q.getpalette()[:48], dtype=float).reshape(16, 3)
+    raw = list(q.getpalette()[:48])
+    raw += raw[-3:] * ((48 - len(raw)) // 3) if raw else [128] * 48     # fewer than 16 colours
+    pal = np.array(raw[:48], dtype=float).reshape(16, 3)
     pal = pal[np.unique(np.asarray(q))]
     return np.concatenate([pal, np.repeat(pal[-1:], 16 - len(pal), 0)]) if len(pal) < 16 else pal
 
