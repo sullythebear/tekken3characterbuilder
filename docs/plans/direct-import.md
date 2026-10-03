@@ -42,3 +42,4 @@ the user rigs the model in Mixamo (free) and exports FBX Binary (T-pose); `direc
 now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
 `model_import._part/joint`, every vertex on its strongest bone). Untested until a rigged file.
 - 2026-10-03: test2.fbx (Mixamo rig, 41 bones) over Paul: same height as Paul, offline clean; v3 deployed on TOMMY (test pending).
+- v3 tested in game: much better; light texture glitches (yellow on the head: overlapping UV islands with different CLUTs), hands turned, a hole at the buttocks (per-triangle winding in a crease). v4: islands with >= 6 shared core texels share a CLUT; one global winding decision. Hands: open (the model's), twist still to check.

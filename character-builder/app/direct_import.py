@@ -225,7 +225,9 @@ def build(root: Path, model: int, path: Path, log=print):
     Nrm /= np.linalg.norm(Nrm, axis=1, keepdims=True) + 1e-12
     # winding: game Y points down (a mirror), so the file's outward triangles flip
     test = np.cross(G[T[:, 1]] - G[T[:, 0]], G[T[:, 2]] - G[T[:, 0]])
-    outward = np.einsum("ij,ij->i", test, Nrm[T[:, 0]]) > 0
+    # the file's winding is consistent: one decision for all (per triangle, a smoothed normal in
+    # a crease - the buttocks - would flip single triangles inside out)
+    outward = np.full(len(T), (np.einsum("ij,ij->i", test, Nrm[T[:, 0]]) > 0).mean() > 0.5)
     faces = []
     for i, t in enumerate(T):
         v = list(t) if outward[i] else [t[0], t[2], t[1]]
@@ -252,6 +254,26 @@ def build(root: Path, model: int, path: Path, log=print):
                 parent[fnd(i)] = fnd(corner[k])
             else:
                 corner[k] = i
+    # islands whose texels overlap (shared or mirrored UVs) share one CLUT, or the texels would
+    # be painted with the wrong palette (the yellow patch on the head)
+    paint_owner = -np.ones((256, 256), dtype=int)
+    texel0 = [np.clip(np.array(f["suv"]) * 256, 0, 255.99) for f in faces]
+
+    shared = {}
+
+    def paint0(i, xy, bc):
+        core = (bc > 0.05).all(1)                 # inside the triangle, not its border texels
+        xy = xy[core]
+        prev = paint_owner[xy[:, 1], xy[:, 0]]
+        for q in prev[prev >= 0].tolist():
+            if fnd(q) != fnd(i):
+                k = (min(fnd(q), fnd(i)), max(fnd(q), fnd(i)))
+                shared[k] = shared.get(k, 0) + 1
+        paint_owner[xy[:, 1], xy[:, 0]] = i
+    TB.raster(texel0, paint0)
+    for (a_, b_), n_ in shared.items():
+        if n_ >= 6:                               # a real overlap, not a touching edge
+            parent[fnd(a_)] = fnd(b_)
     isl = [fnd(i) for i in range(len(faces))]
     ids = {k: n for n, k in enumerate(sorted(set(isl)))}
     isl = [ids[k] for k in isl]
