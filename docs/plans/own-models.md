@@ -31,6 +31,14 @@ projection = shrinkwrap along the template's own normals (nearest crossing, +-3 
 smoothed as a displacement field (6 rounds); donor hands not stretched; head polygons below
 the neck dropped. Open: back of the torso streaky, hands thin, legs slimmer than Medea, face
 chart seam.
+2026-10-03 later: **import posed into the donor's skeleton** (LBS with the import's weights,
+limbs to the donor's lengths, head scaled to the donor's head) and the model built on the
+donor's frames and joints: Namco's joints and seams exactly; radial volume morph (ratio of the
+import's to the template's outermost surface along rays from the bone, smoothed);
+**texture baked into the donor's own UV layout and CLUTs** (8-bit CLUT 0 + 4-bit tiles);
+mirrored texels: the second side copied into free page space with new CLUT ids after the
+donor's (78+ for Nina) - to verify in game that those CLUT slots are free. Medea v27 deployed
+(1065 triangles, 23188 bytes): first in-game test of the template approach.
 
 0. **New direction (user's explanation, see knowledge/t3-model-style.md 'Namco's way of
    working')**: importance-weighted simplification of the original geometry (head first),
