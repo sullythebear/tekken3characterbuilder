@@ -513,6 +513,14 @@ def character_list() -> list[dict]:
                             if (folder / "portrait-ps1.png").is_file() else None)
         data["source"] = (f"/characters/{folder.name}/portrait.png?v={stamp}"
                           if (folder / "portrait.png").is_file() else None)
+        data["has_model"] = (folder / "model.bin").is_file()
+        if not data["has_model"]:
+            data.pop("own_model", None)
+        try:                                       # a checked upload waiting for its import
+            data["model_upload"] = (json.loads((folder / "upload.json").read_text(encoding="utf-8"))
+                                    if (folder / "upload.json").is_file() else None)
+        except (OSError, ValueError):
+            data["model_upload"] = None
         result.append(data)
     return result
 
@@ -687,6 +695,126 @@ def donor_models() -> dict:
     return {"available": True, "donors": json.loads(path.read_text(encoding="utf-8"))}
 
 
+MODEL_SOURCES = (".fbx", ".glb")
+
+
+def run_import_tool(root: Path, args: list[str], timeout: int = 600) -> tuple[str | None, str]:
+    """Runs direct_import.py (own 3D models); returns (error or None, stdout)."""
+    try:
+        done = subprocess.run([venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout, creationflags=NO_WINDOW, cwd=str(APP))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"The model import could not run: {error}", ""
+    if done.returncode:
+        lines = (done.stdout + done.stderr).strip().splitlines()
+        errors = [l.split("ERROR", 1)[1].lstrip(": ") for l in lines if "ERROR" in l]
+        return (errors[-1] if errors else (lines[-1] if lines else "The model import failed.")), ""
+    return None, done.stdout
+
+
+def model_upload(folder: Path) -> Path | None:
+    return next((folder / f"upload{e}" for e in MODEL_SOURCES if (folder / f"upload{e}").is_file()), None)
+
+
+def check_model(cid: str, name: str, payload: str) -> dict:
+    """Stores an uploaded .fbx/.glb next to the character (upload.*) and reports what the import
+    needs to know: triangles, texture and whether it is rigged (not rigged = locked)."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("Own 3D models need Tekken 3 Expanded.")
+    folder = DATA / safe_id(cid)
+    if not (folder / "character.json").is_file():
+        raise ValueError("Save the character first.")
+    ext = Path(str(name)).suffix.lower()
+    if ext not in MODEL_SOURCES:
+        raise ValueError("Use an .fbx (FBX Binary) or .glb file.")
+    raw = base64.b64decode(payload, validate=True)
+    if len(raw) > MAX_IMPORT:
+        raise ValueError("This model file is too large (16 MB at most).")
+    for old in folder.glob("upload.*"):
+        old.unlink()
+    target = folder / f"upload{ext}"
+    target.write_bytes(raw)
+    problem, out = run_import_tool(root, [str(target), "--check"], timeout=180)
+    if problem:
+        target.unlink(missing_ok=True)
+        raise ValueError(problem)
+    info = json.loads(out.strip().splitlines()[-1])
+    info["file"] = Path(str(name)).name[:80]
+    (folder / "upload.json").write_text(json.dumps(info), encoding="utf-8")
+    if not info.get("ok"):
+        target.unlink(missing_ok=True)
+    return info
+
+
+def import_model(cid: str, costume: int) -> dict:
+    """The checked upload -> characters/<id>/model.bin over the donor's costume model."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    character = get_character(folder.name)
+    upload = model_upload(folder)
+    info = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
+    if not upload:
+        raise ValueError("Upload a model first.")
+    if not info.get("rigged"):
+        raise ValueError("This model is not rigged, so it cannot be imported. " + " ".join(info.get("problems", [])))
+    donors = donor_models()
+    if not donors.get("available"):
+        raise ValueError(donors.get("reason", "The donor models are not available."))
+    models = donors["donors"].get(str(character["donor"]), [])
+    if not 0 <= costume < len(models):
+        raise ValueError("This donor has no such costume.")
+    out = folder / "model-new.bin"
+    problem, text = run_import_tool(root, [str(upload), "--model", str(models[costume]), "--out", str(out)])
+    if problem or not out.is_file():
+        out.unlink(missing_ok=True)
+        raise ValueError(problem or "The model import failed.")
+    out.replace(folder / "model.bin")
+    for old in folder.glob("source.*"):
+        old.unlink()
+    upload.replace(folder / f"source{upload.suffix}")
+    (folder / "upload.json").unlink(missing_ok=True)
+    data = json.loads((folder / "character.json").read_text(encoding="utf-8"))
+    data["own_model"] = {"file": info.get("file", upload.name), "costume": costume, "model": models[costume],
+                         "triangles": info.get("triangles"), "textured": info.get("textured"),
+                         "imported": datetime.now().isoformat(timespec="seconds")}
+    (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return get_character(folder.name)
+
+
+def own_model_json(cid: str) -> bytes:
+    """Mesh JSON of characters/<id>/model.bin for the 3D preview (cached per file version)."""
+    root = project_root()
+    source = DATA / cid / "model.bin"
+    if not root or not source.is_file():
+        raise ValueError("This fighter has no own model.")
+    path = CACHE / "models" / f"own-{cid}-{int(source.stat().st_mtime)}-v{MODEL_FORMAT}.json"
+    with model_lock:
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            for old in path.parent.glob(f"own-{cid}-*.json"):
+                old.unlink()
+            problem, _ = run_model_tool(root, ["ownjson", "--file", str(source), "--out", str(path)])
+            if problem:
+                raise ValueError(problem)
+    return path.read_bytes()
+
+
+def remove_model(cid: str) -> dict:
+    folder = DATA / safe_id(cid)
+    for name in ("model.bin", "model-new.bin", "upload.json"):
+        (folder / name).unlink(missing_ok=True)
+    for pattern in ("source.*", "upload.*"):
+        for old in folder.glob(pattern):
+            old.unlink()
+    info = folder / "character.json"
+    data = json.loads(info.read_text(encoding="utf-8"))
+    data.pop("own_model", None)
+    info.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return get_character(folder.name)
+
+
 MODEL_FORMAT = 7   # model_export.py output; 7 = per-triangle body row (garment names)
 
 
@@ -788,6 +916,8 @@ def save_character(data: dict) -> dict:
     record = {"format": 1, "builder": APP_VERSION, "created": old.get("created", now),
               "updated": now, **clean, "slot_mode": "jun-slot-23",
               "costumes": validate_costumes(data["costumes"]) if "costumes" in data else old.get("costumes", [])}
+    if old.get("own_model") and (folder / "model.bin").is_file():
+        record["own_model"] = old["own_model"]          # set only by import_model / remove_model
     for key, filename in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                           ("portrait_full", "portrait-full.png")):
         png = decode_png(data.get(key))
@@ -926,6 +1056,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(character_list())
         if path == "/api/models":
             return self._json(donor_models())
+        if path.startswith("/api/ownmodel/"):
+            try:
+                body = own_model_json(safe_id(path.rsplit("/", 1)[1]))
+            except ValueError as error:
+                return self._error(str(error))
+            return self._send(200, body, "application/json")
         if path.startswith("/api/model/"):
             try:
                 body = model_json(int(path.rsplit("/", 1)[1]))
@@ -1012,6 +1148,15 @@ class Handler(BaseHTTPRequestHandler):
                 cid = safe_id(str(data.get("id", "")))
                 delete_character(cid)
                 return self._json({"ok": True, "warnings": sync_customs(drop=game_key(cid))})
+            if path == "/api/model/check":
+                return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
+            if path == "/api/model/import":
+                with model_lock:
+                    saved = import_model(str(data.get("id", "")), int(data.get("costume", 0)))
+                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/model/remove":
+                saved = remove_model(str(data.get("id", "")))
+                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/import":
                 imported = import_character(str(data.get("file", "")))
                 return self._json({**imported, "warnings": sync_customs(changed=imported["id"])})

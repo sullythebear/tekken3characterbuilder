@@ -46,10 +46,15 @@ def frame_row(r):
 # --- bone names -> Tekken 3 rows ------------------------------------------------------------------
 def _part(name: str):
     """(part, side) for a skeleton bone name (Mixamo and similar), side "L", "R" or None."""
-    n = name.split(":")[-1].lower().replace("_", "").replace(" ", "").replace(".", "")
+    n = name.split(":")[-1].lower()
     side = None
+    import re
+    tail = re.search(r"[._ ](l|r|left|right)$", n)          # Blender style: hand.L, upper_arm_R
+    if tail:
+        side, n = ("L" if tail.group(1)[0] == "l" else "R"), n[:tail.start()]
+    n = n.replace("_", "").replace(" ", "").replace(".", "")
     for pre, s in (("left", "L"), ("right", "R")):
-        if n.startswith(pre):
+        if side is None and n.startswith(pre):
             n, side = n[len(pre):], s
     order = [("upleg", "thigh"), ("thigh", "thigh"), ("toe", "foot"), ("foot", "foot"), ("ankle", "foot"),
              ("forearm", "fore"), ("lowerarm", "fore"), ("hand", "hand"), ("thumb", "hand"), ("index", "hand"),

@@ -42,6 +42,8 @@ const T3Costumes = (() => {
 
   /* ------------------------------------------------------------- model --- */
   function parseModel(json) {
+    // the game's axes are mirrored against the viewer's (text on a shirt read backwards)
+    json.positions = json.positions.map((v, i) => (i % 3 === 0 ? -v : v));
     const raw = Uint8Array.from(atob(json.band), (c) => c.charCodeAt(0));
     const hw = new Uint16Array(raw.buffer), words = json.band_words || 64;   // halfwords per band row
     const idx4 = new Uint8Array(words * 4 * 256), idx8 = new Uint8Array(words * 2 * 256);
@@ -349,9 +351,14 @@ const T3Costumes = (() => {
   }
   function activeVariant() { return selected.kind === "variant" ? variants()[selected.index] : null; }
 
+  // the fighter's own model (3D model page) stands in for the costume it replaces
+  function modelKey(base, n) {
+    const own = fighter().own_model;
+    return own && fighter().id && own.costume === base ? `own/${fighter().id}?v=${encodeURIComponent(own.imported || "")}` : n;
+  }
   async function loadModel(n) {
     if (models.has(n)) return models.get(n);
-    const r = await fetch(`/api/model/${n}`);
+    const r = await fetch(typeof n === "string" ? `/api/ownmodel/${n.slice(4)}` : `/api/model/${n}`);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "The model could not be loaded.");
     const m = parseModel(await r.json()); models.set(n, m); return m;
   }
@@ -365,11 +372,12 @@ const T3Costumes = (() => {
     const list = costumeModels(), status = $("model-status");
     if (!donorModels || !donorModels.available) { status.textContent = donorModels ? donorModels.reason : "Loading…"; return; }
     if (!list.length) { status.textContent = "Choose a fighting style to see the model."; current = null; renderPanel(); return; }
-    const base = Math.min(activeBase(), list.length - 1), n = list[base];
-    status.textContent = "Loading the model from your disc…";
+    const base = Math.min(activeBase(), list.length - 1), n = modelKey(base, list[base]);
+    status.textContent = typeof n === "string" ? "Loading your own model…" : "Loading the model from your disc…";
     try {
       const model = await loadModel(n);
-      if (costumeModels()[Math.min(activeBase(), list.length - 1)] !== n) return;   // changed meanwhile
+      const now = Math.min(activeBase(), list.length - 1);
+      if (modelKey(now, costumeModels()[now]) !== n) return;   // changed meanwhile
       if (!viewer) viewer = createViewer($("model-canvas"));
       if (!viewer) { status.textContent = "Your browser cannot show 3D (WebGL is off)."; return; }
       if (current !== model) { viewer.setModel(model); current = model; }

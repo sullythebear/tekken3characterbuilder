@@ -6,7 +6,8 @@ keeps its layout: texel (u, v) * size is the same texel in the fighter's page, 4
 island with a 16-colour CLUT of its own (islands grouped into as many CLUTs as the donor has
 room for).
 
-CLI: direct_import.py MODEL.glb --model N --root GAME --out model.bin"""
+CLI: direct_import.py MODEL.fbx|.glb --model N --root GAME --out model.bin
+     direct_import.py MODEL --root GAME --check     (JSON: triangles, texture, rigged, problems)"""
 from __future__ import annotations
 import argparse
 import io
@@ -25,8 +26,13 @@ def load(path: Path) -> dict:
     if path.suffix.lower() == ".glb":
         import glb
         g = glb.read(path)
-        return {"P": g["positions"], "T": g["triangles"], "UV": g["uv"], "MAT": g["materials"],
-                "textures": g["textures"]}
+        out = {"P": g["positions"], "T": g["triangles"], "UV": g["uv"], "MAT": g["materials"],
+               "textures": g["textures"]}
+        if "bones" in g:
+            w = g["weights"]
+            out["bones"], out["weights"] = g["bones"], w
+            out["vbone"] = np.array([max(x, key=x.get) if x else -1 for x in w])
+        return out
     import fbx
     c = fbx.character(path)
     P = np.array(c["positions"]).reshape(-1, 3)
@@ -134,9 +140,14 @@ def rig_from_skeleton(bones, vbone, P):
         J["handend" + side] = max(hp, key=lambda q: np.linalg.norm(q - J["hand" + side])) if hp else J["hand" + side]
         fp = [np.array([b["matrix"][k][3] for k in range(3)]) for b in bones if MI._part(b["name"]) == ("foot", side)]
         J["toe" + side] = max(fp, key=lambda q: np.linalg.norm(q - J["foot" + side])) if fp else J["foot" + side]
+    for side in "LR":                        # no shoulder bone: a collar point between neck and arm
+        if J["collar" + side] is None and J["upper" + side] is not None and J["neck"] is not None:
+            u = J["upper" + side]
+            J["collar" + side] = u + 0.65 * (np.array([J["neck"][0], u[1], u[2]]) - u)
+    missing = [k for k, v in J.items() if v is None]
+    if missing:
+        raise ValueError("The skeleton misses bones the Tekken skeleton needs: " + ", ".join(sorted(missing)) + ".")
     J["top"] = np.array([J["neck"][0], P[:, 1].max(), J["neck"][2]])
-    if any(v is None for v in J.values()):
-        raise ValueError("The skeleton misses bones the Tekken skeleton needs (hips, head, arms, legs).")
     part = np.empty(len(P), dtype=object)
     for i, b in enumerate(vbone):
         prt, side = MI._part(bones[b]["name"]) if b >= 0 else ("spine", None)
@@ -144,6 +155,45 @@ def rig_from_skeleton(bones, vbone, P):
             prt = "spine"
         part[i] = (prt, side if prt in PAIRS else None)
     return J, part
+
+
+NEEDED = {"hips": ("pelvis", None), "head": ("head", None), "left upper arm": ("upper", "L"),
+          "right upper arm": ("upper", "R"), "left forearm": ("fore", "L"), "right forearm": ("fore", "R"),
+          "left hand": ("hand", "L"), "right hand": ("hand", "R"), "left thigh": ("thigh", "L"),
+          "right thigh": ("thigh", "R"), "left shin": ("shin", "L"), "right shin": ("shin", "R"),
+          "left foot": ("foot", "L"), "right foot": ("foot", "R")}
+
+
+def inspect(path: Path) -> dict:
+    """What the builder needs to know before an import: size, texture and whether the model is
+    rigged (a skeleton with the bones Tekken needs and skin weights). `rigged` False locks the
+    import in the builder."""
+    path = Path(path)
+    if path.suffix.lower() not in (".fbx", ".glb"):
+        return {"ok": False, "rigged": False, "problems": ["Use an .fbx (FBX Binary) or .glb file."]}
+    try:
+        src = load(path)
+    except Exception as error:                        # a damaged or unsupported file
+        return {"ok": False, "rigged": False, "problems": [f"The file could not be read: {error}"]}
+    info = {"ok": True, "triangles": int(len(src["T"])), "vertices": int(len(np.unique(np.round(src["P"], 5), axis=0))),
+            "textured": bool(src.get("textures")), "bones": len(src.get("bones", [])), "problems": [], "missing": []}
+    parts = {MI._part(b["name"]) for b in src.get("bones", [])}
+    info["missing"] = [k for k, v in NEEDED.items() if v not in parts]
+    weighted = sum(1 for w in src.get("weights", []) if w) if "weights" in src else 0
+    if not src.get("bones"):
+        info["problems"].append("The model is not rigged: it has no skeleton. Rig it first (for example "
+                                "with Mixamo, then export FBX Binary in T-pose).")
+    elif info["missing"]:
+        info["problems"].append("The skeleton misses bones Tekken needs: " + ", ".join(info["missing"]) + ".")
+    elif weighted < 0.95 * len(src["P"]):
+        info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
+    info["rigged"] = not info["problems"]
+    if info["triangles"] > 1400:
+        info["problems"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100. "
+                                "Reduce the model, or the import may not fit the donor's room.")
+    if not info["textured"]:
+        info["problems"].append("The model has no embedded texture: it will be drawn without one.")
+    return info
 
 
 def build(root: Path, model: int, path: Path, log=print):
@@ -429,11 +479,20 @@ def build(root: Path, model: int, path: Path, log=print):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("model_file", type=Path)
-    ap.add_argument("--model", type=int, required=True)
+    ap.add_argument("--model", type=int)
     ap.add_argument("--root", type=Path, required=True)
-    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--out", type=Path)
+    ap.add_argument("--check", action="store_true", help="print what inspect() finds as JSON")
     a = ap.parse_args()
     X.setup(a.root)
+    if a.check:
+        print(json.dumps(inspect(a.model_file)))
+        return
+    if a.model is None or a.out is None:
+        ap.error("--model and --out are needed for an import")
+    info = inspect(a.model_file)
+    if not info["rigged"]:
+        raise SystemExit("ERROR " + " ".join(info["problems"]))
     stock, new, tx, report = build(a.root, a.model, a.model_file)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_bytes(X.own_model_file(a.model, stock, new, tx))

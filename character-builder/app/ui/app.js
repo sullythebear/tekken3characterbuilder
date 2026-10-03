@@ -270,6 +270,7 @@ function fillForm() {
   $("form-error").textContent = "";
   renderDonors();
   renderStage();
+  if (window.T3Model) T3Model.refresh();
 }
 
 async function selectCharacter(character) {
@@ -690,16 +691,21 @@ function showView(model) {
   $("portrait-frame").hidden = model;
   if (model) T3Costumes.showModel();
 }
-// editor pages: Fighter (name, style, portrait) and Colours (costume variants, uses the 3D view)
-function showPage(colours) {
-  $("tab-fighter").setAttribute("aria-selected", String(!colours));
-  $("tab-colours").setAttribute("aria-selected", String(colours));
-  $("page-fighter").hidden = colours;
-  $("page-colours").hidden = !colours;
-  if (colours && $("model-view").hidden) showView(true);
+// editor pages: Fighter (name, style, portrait), Colours (costume variants, uses the 3D view)
+// and 3D model (an own model, model3d.js)
+function showPage(page) {
+  if (page === true) page = "colours";
+  if (page === false) page = "fighter";
+  for (const name of ["fighter", "colours", "model"]) {
+    $(`tab-${name}`).setAttribute("aria-selected", String(name === page));
+    $(`page-${name}`).hidden = name !== page;
+  }
+  if (page === "colours" && $("model-view").hidden) showView(true);
+  if (page === "model" && window.T3Model) T3Model.refresh();
 }
-$("tab-fighter").addEventListener("click", () => showPage(false));
-$("tab-colours").addEventListener("click", () => showPage(true));
+$("tab-fighter").addEventListener("click", () => showPage("fighter"));
+$("tab-colours").addEventListener("click", () => showPage("colours"));
+$("tab-model").addEventListener("click", () => showPage("model"));
 $("view-portrait").addEventListener("click", () => showView(false));
 $("view-model").addEventListener("click", () => showView(true));
 loadReport(false).catch(() => {});

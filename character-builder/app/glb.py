@@ -65,15 +65,35 @@ def read(path: Path) -> dict:
         for i in s["nodes"]:
             walk(i, np.eye(4))
     P, T, UV, MAT = [], [], [], []
-    joints_w = []
+    # a skin: its joints become the bones (bind matrix = inverse of the inverse bind matrix),
+    # skinned meshes are already in bind space (glTF ignores their node transform)
+    bones, WTS, skin_of = [], [], {}
+    for si, sk in enumerate(j.get("skins", [])):
+        ibm = acc(sk["inverseBindMatrices"]).reshape(-1, 4, 4).transpose(0, 2, 1) if "inverseBindMatrices" in sk             else np.tile(np.eye(4), (len(sk["joints"]), 1, 1))
+        base = len(bones)
+        index = {nd: base + k for k, nd in enumerate(sk["joints"])}
+        parent = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}
+        for k, nd in enumerate(sk["joints"]):
+            up = parent.get(nd)
+            while up is not None and up not in index:
+                up = parent.get(up)
+            bones.append({"name": j["nodes"][nd].get("name", f"joint{k}"), "parent": index.get(up, -1),
+                          "matrix": np.linalg.inv(ibm[k]).tolist()})
+        skin_of[si] = base
     for ni, n in enumerate(j["nodes"]):
         if "mesh" not in n:
             continue
-        M = world.get(ni, np.eye(4))
+        M = world.get(ni, np.eye(4)) if "skin" not in n else np.eye(4)
         for prim in j["meshes"][n["mesh"]]["primitives"]:
             a = prim["attributes"]
             p = acc(a["POSITION"]).astype(float)
             p = (np.c_[p, np.ones(len(p))] @ M.T)[:, :3]
+            if "skin" in n and "JOINTS_0" in a and "WEIGHTS_0" in a:
+                jt = acc(a["JOINTS_0"]).astype(int) + skin_of[n["skin"]]
+                wt = acc(a["WEIGHTS_0"]).astype(float)
+                WTS += [{int(b): float(w) for b, w in zip(jr, wr) if w > 0} for jr, wr in zip(jt, wt)]
+            else:
+                WTS += [{} for _ in range(len(p))]
             idx = acc(prim["indices"]).astype(int) if "indices" in prim else np.arange(len(p))
             uv = acc(a["TEXCOORD_0"]).astype(float) if "TEXCOORD_0" in a else np.zeros((len(p), 2))
             base = sum(len(x) for x in P)
@@ -93,5 +113,8 @@ def read(path: Path) -> dict:
         img = j["images"][j["textures"][tex["index"]]["source"]]
         if "bufferView" in img:
             textures[mi] = view(img["bufferView"])[0]
-    return {"positions": P, "triangles": T, "uv": UV, "materials": np.array(MAT), "textures": textures,
-            "skinned": any("skin" in n for n in j["nodes"])}
+    out = {"positions": P, "triangles": T, "uv": UV, "materials": np.array(MAT), "textures": textures,
+           "skinned": any("skin" in n for n in j["nodes"])}
+    if bones and any(WTS):
+        out["bones"], out["weights"] = bones, WTS
+    return out

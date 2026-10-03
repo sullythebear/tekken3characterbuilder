@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/ui/style.css">
 <script src="/ui/costumes.js" defer></script>
 <script src="/ui/app.js" defer></script>
+<script src="/ui/model3d.js" defer></script>
 </head>
 <body>
 <header class="hud">
@@ -73,6 +74,7 @@
     <div class="editor-tabs" role="tablist" aria-label="Edit">
       <button type="button" class="editor-tab" id="tab-fighter" role="tab" aria-selected="true" aria-controls="page-fighter">Fighter</button>
       <button type="button" class="editor-tab" id="tab-colours" role="tab" aria-selected="false" aria-controls="page-colours">Colours</button>
+      <button type="button" class="editor-tab" id="tab-model" role="tab" aria-selected="false" aria-controls="page-model">3D model</button>
     </div>
     <form id="character-form" novalidate>
       <div class="editor-page" id="page-fighter" role="tabpanel" aria-labelledby="tab-fighter">
@@ -113,6 +115,35 @@
           <legend>Costumes and colours</legend>
           <p class="hint">Recolour the donor's costumes in the 3D preview. Each colour variant can replace a costume or become an extra costume in the game; variants are saved with your fighter.</p>
           <div id="costume-panel"></div>
+        </fieldset>
+      </div>
+
+      <div class="editor-page" id="page-model" role="tabpanel" aria-labelledby="tab-model" hidden>
+        <fieldset class="field">
+          <legend>Own 3D model</legend>
+          <p class="hint">Give your fighter its own PS1-style 3D model. It must be <strong>rigged</strong>: a skeleton
+            with skin weights (for example from Mixamo: upload, auto-rig, then download as FBX Binary in T-pose).
+            The builder fits it to the fighting style's skeleton and replaces the style's model on the costume you choose.</p>
+          <div class="own-model" id="own-model" hidden>
+            <p class="own-model-line" id="own-model-line"></p>
+            <button class="btn btn-danger" type="button" id="model-remove">Remove model</button>
+          </div>
+          <p class="hint" id="model-need-save">Save the fighter first, then add a model.</p>
+          <div id="model-upload-box" hidden>
+            <label class="btn btn-ghost file-btn">Choose .fbx or .glb<input type="file" id="model-file" accept=".fbx,.glb" hidden></label>
+            <div class="model-check" id="model-check" hidden>
+              <p class="model-file-name" id="model-file-name"></p>
+              <ul class="model-facts" id="model-facts"></ul>
+              <p class="model-lock" id="model-lock" role="status"></p>
+              <ul class="model-problems" id="model-problems"></ul>
+            </div>
+            <div class="model-import-row" id="model-import-row" hidden>
+              <label for="model-costume">Costume</label>
+              <select id="model-costume"></select>
+              <button class="btn btn-primary" type="button" id="model-import" disabled>Import model</button>
+            </div>
+            <p class="hint" id="model-progress" hidden></p>
+          </div>
         </fieldset>
       </div>
 

@@ -291,25 +291,12 @@ def bind(m) -> dict:
     return out
 
 
-def export_model(root: Path, model: int) -> dict:
+def _mesh(m, poses):
+    """Triangles of model m in each pose: positions per pose (x, -y, z), UVs, materials, the row
+    that draws each triangle."""
     import numpy as np
     import anim_model as A
     from fmt import row, block, parse_b, parse_c_ps1
-    from tim_tool import scan_tims
-
-    if not 0 <= model < 52:
-        fail("No such model.")
-    rid = FIRST_MODEL_RECORD + 4 * model
-    data = records(root, [rid, rid + 2])
-    m, arc = data[rid], data[rid + 2]
-    if m[8:12] != b"3DMK":
-        fail("This record is not a fighter model.")
-
-    stance = stance_pose(root)       # Kazuya's: the standing pose's constants were fitted on it
-    fight = world(m, stance)
-    # Standing pose; Gon (not human) keeps the stance. Fight stances are not shown: Kazuya's and
-    # the fighters' own TTT1 stances both looked wrong to the user (see NOTES).
-    poses = [facing(fight) if model in NOT_HUMAN else facing(tweaked(m, stance, world(m, stance, stand_pose(m, fight))))]
     positions, uvs, materials, triangles, bones = [[] for _ in poses], [], [], [], []
     for r, slots in bind(m).items():
         w = row(m, r)
@@ -343,6 +330,75 @@ def export_model(root: Path, model: int) -> dict:
                     triangles += [base, base + 1, base + 2]
                     bones.append(r)                  # the row (body part) that draws it
 
+    return positions, uvs, materials, triangles, bones
+
+
+def export_own(root: Path, path: Path) -> dict:
+    """Mesh JSON (format 7) of an own model file (T3CM), posed in the donor's bind pose (the pose
+    the import was fitted in, bind_pose.py), with the file's texture."""
+    import struct
+    import numpy as np
+    import bind_pose as BP
+    import model_import as MI
+    f = Path(path).read_bytes()
+    if f[:4] != b"T3CM":
+        fail("Not a builder model file.")
+    version, donor_model, size, count = struct.unpack_from("<HHII", f, 4)
+    m = f[16 + MODEL_HEADER: 16 + MODEL_HEADER + size]
+    rid = FIRST_MODEL_RECORD + 4 * donor_model
+    md = records(root, [rid])[rid]
+    W = MI.donor_frames(root, md)
+    B = BP.solve(md, W)
+    # turned as the stock preview turns the donor (facing() on its standing frames: the root is
+    # the same in both, the collarbones are not)
+    d = W[15][1] - W[11][1]
+    a = np.arctan2(d[2], d[0])
+    turn = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
+    pose = {r: (turn @ R, turn @ T) for r, (R, T) in B.items()}
+    positions, uvs, materials, triangles, bones = _mesh(m, [pose])
+    band = np.zeros((256, BAND_WORDS), dtype=np.uint16)
+    cluts = {}
+    t = 16 + MODEL_HEADER + size + 4 * count
+    if version >= 2 and f[t:t + 4] == b"T3TX":
+        w, h, cid, n = struct.unpack_from("<4H", f, t + 4)
+        at = t + 12
+        for _ in range(n if cid == 0xFFFF else 1):
+            rid_, rc = struct.unpack_from("<2H", f, at) if cid == 0xFFFF else (cid, n)
+            if cid == 0xFFFF:
+                at += 4
+            cols = list(struct.unpack_from(f"<{rc}H", f, at))
+            for k in range(0, rc, 16):          # a run holds consecutive CLUTs (16 colours each)
+                cluts[rid_ + k // 16] = cols[k:k + 256]
+            at += 2 * rc
+        own = np.frombuffer(f, "<u2", w * h, at).reshape(h, w)
+        band[:min(h, 256), :min(w, BAND_WORDS)] = own[:256, :BAND_WORDS]
+    used = sorted({int(x) & 0x7FFF for x in materials})
+    return {"format": 7, "model": donor_model, "own": True, "positions": positions[0], "uv": uvs,
+            "material": [int(x) for x in materials], "triangles": triangles, "bones": bones,
+            "band": base64.b64encode(band.tobytes()).decode(), "band_words": BAND_WORDS,
+            "cluts": {str(k): v for k, v in sorted(cluts.items())}, "missing": [u for u in used if u not in cluts]}
+
+
+def export_model(root: Path, model: int) -> dict:
+    import numpy as np
+    import anim_model as A
+    from fmt import row, block, parse_b, parse_c_ps1
+    from tim_tool import scan_tims
+
+    if not 0 <= model < 52:
+        fail("No such model.")
+    rid = FIRST_MODEL_RECORD + 4 * model
+    data = records(root, [rid, rid + 2])
+    m, arc = data[rid], data[rid + 2]
+    if m[8:12] != b"3DMK":
+        fail("This record is not a fighter model.")
+
+    stance = stance_pose(root)       # Kazuya's: the standing pose's constants were fitted on it
+    fight = world(m, stance)
+    # Standing pose; Gon (not human) keeps the stance. Fight stances are not shown: Kazuya's and
+    # the fighters' own TTT1 stances both looked wrong to the user (see NOTES).
+    poses = [facing(fight) if model in NOT_HUMAN else facing(tweaked(m, stance, world(m, stance, stand_pose(m, fight))))]
+    positions, uvs, materials, triangles, bones = _mesh(m, poses)
     band = np.zeros((256, BAND_WORDS), dtype=np.uint16)
     cluts = {}
     for t in scan_tims(arc):
@@ -443,7 +499,8 @@ def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model", "ownmodel"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson"))
+    parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
     parser.add_argument("--out", type=Path)
@@ -453,6 +510,12 @@ def main() -> None:
     setup(args.root)
     if args.command == "donors":
         print(json.dumps(donors(args.root)))
+        return
+    if args.command == "ownjson":
+        if args.file is None or args.out is None:
+            fail("ownjson needs --file and --out.")
+        args.out.write_text(json.dumps(export_own(args.root, args.file)), encoding="utf-8")
+        print(f"OK {args.out}")
         return
     if args.command == "ownmodel":
         if args.model is None or args.out is None:
