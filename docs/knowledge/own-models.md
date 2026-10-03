@@ -99,3 +99,17 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   longer tears. Toes blunt (cap at 90 %, minimum radius). Head proportion check vs the donor
   (donor 217, Medea 288 game units above the neck joint: no scaling needed).
 - Medea v17 over Nina: 1032 triangles, 24148 bytes, GPU packets under 31000.
+
+## 50/50 joint seams in the writer (2026-10-04, verified against the hardware)
+
+- `model_import._write(..., blend={vertex: earlier row})`: the earlier row also holds the vertex
+  and deposits it with tail group 3 + flag (the hardware stores half: that slot itself becomes
+  half and is not drawn); the owning later row reads it with tail group 0 + flag: slot = own / 2
+  + stored half = halfway between the two bones' transforms, and stores the full result for
+  later rows. Own list order per row: group-0 reads, full deposits, half deposits, the rest.
+- Verified with the renderer probe: re-assembling the slot lists from the recorded per-row GTE
+  transforms (`probe_render.assemble`) and projecting with the GTE's H/OFX/OFY matches the
+  game's screen coordinates in the scratchpad within 2 px for every drawn slot; only the half
+  copies differ (they are halved, as expected).
+- Probe frames can be cut by the sampling window (a missing row also misses its cache deposits):
+  probe_render only uses frames with every drawn row.

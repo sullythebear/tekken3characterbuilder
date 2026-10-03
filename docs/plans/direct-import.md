@@ -58,3 +58,7 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   spikes: limited to hips and shoulders.
 - Probe renders of the fight stance: no wing at the shoulder, hips filled, no spikes. Deployed
   on TOMMY (v5).
+- v6 (2026-10-04): vertices with two bones >= 30 % become 50/50 seams (372 on Tommy); Mixamo's
+  shoulder bones go with the torso (the collarbone rows shrug the shoulder top into a point).
+  Probe renders over a whole fight (stance, kick, fall): no tears, no spikes; a slight point
+  remains at the rear shoulder in the stance.

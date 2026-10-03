@@ -215,6 +215,7 @@ def build(root: Path, model: int, path: Path, log=print):
     for prt, side in part:
         vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side or "L"))
     G = np.array([g(p) for p in P])
+    blend = {}
     if "weights" in src:
         # Pose the mesh into the donor's standing pose with the file's own smooth weights (linear
         # blend skinning): arms down, legs as the donor's. The game then only turns each row a
@@ -239,6 +240,10 @@ def build(root: Path, model: int, path: Path, log=print):
             prt, side = MI._part(b["name"])
             if prt in ("spine", "pelvis", "head"):
                 brow[bi] = {"spine": 1, "pelvis": 3, "head": 19}[prt]
+            elif prt == "collar":
+                # the shoulder's skin goes with the torso: Tekken's collarbone rows shrug and
+                # lift the shoulder top into a point (Namco keeps them nearly empty)
+                brow[bi] = 1
             elif prt in PAIRS and side:
                 brow[bi] = rows_of(prt, side)
             else:                                      # unknown bones follow their parent
@@ -258,23 +263,23 @@ def build(root: Path, model: int, path: Path, log=print):
             np.add.at(acc, idx, pose_row(G[idx], r) * ww[:, None])
             np.add.at(tot, idx, ww)
         G = np.where(tot[:, None] > 0, acc / np.maximum(tot, 1e-9)[:, None], G)
-        # rows per vertex from the weights: a vertex in a joint's blend zone stays with the parent
-        # row (the torso over the shoulder, the pelvis over the hip) unless the child clearly
-        # owns it; the parent's surface then covers the joint as on Namco's models
-        import anim_model as A
+        # rows per vertex from the weights; a vertex shared by two bones (both >= 30 %) becomes
+        # a 50/50 seam vertex: owned by the later-drawn row, blended with the earlier one
+        DRAW_ORDER = {r: k for k, r in enumerate(MI.DRAW)}
         for i, wv in enumerate(src["weights"]):
             rw = {}
             for bi, w in wv.items():
                 rw[brow[bi]] = rw.get(brow[bi], 0) + w
             if not rw:
                 continue
-            best = max(rw, key=rw.get)
-            par = A.ROW_PARENT.get(best)
-            # only at the hips (thigh -> pelvis) and the shoulders (collarbone -> torso); at the
-            # elbows, knees, wrists and ankles the child keeps its vertices (else spikes)
-            if best in (5, 8, 11, 15) and par in rw and rw[best] / sum(rw.values()) < 0.7:
-                best = par
-            vrow[i] = best
+            tot_w = sum(rw.values())
+            top = sorted(rw, key=rw.get, reverse=True)
+            vrow[i] = top[0]
+            if len(top) > 1 and rw[top[1]] / tot_w >= 0.3:
+                a_, b_ = sorted(top[:2], key=lambda r: DRAW_ORDER.get(r, 99))
+                vrow[i] = b_
+                blend[i] = a_
+        log(f"{len(blend)} seam vertices blended 50/50 between two bones")
         F, J = Fd, Jd
         log("mesh posed into the donor's standing pose with the file's weights")
     # smooth normals over welded positions (the file splits vertices at UV seams)
@@ -409,7 +414,13 @@ def build(root: Path, model: int, path: Path, log=print):
     texture = {"uv": [[(int(u), int(v)) for u, v in tx] for tx in texel], "band": band, "runs": runs,
                "mats": {k: cid[k] for k in range(len(cid))}, "palette": palette, "charts": len(cid),
                "density": 0.0, "rgb": img}
-    data, report = MI._write(m, G, Nrm, faces, vrow, {}, F, J, row, {"ready": texture})
+    blend_w = {}
+    for v, a_ in blend.items():                      # on welded ids, as the faces
+        blend_w[int(weld[v])] = a_
+    vrow_w = list(vrow)
+    for v in range(len(vrow)):
+        vrow_w[int(weld[v])] = vrow[v] if int(weld[v]) == v else vrow_w[int(weld[v])]
+    data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w)
     report.update(bytes=len(data), budget=len(m), islands=int(owner.max()) + 1, cluts=len(cid))
     if len(data) > len(m):
         raise MI.Budget(f"{len(data)} bytes, the donor's slot holds {len(m)}")

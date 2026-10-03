@@ -668,7 +668,7 @@ def _bake_donor_layout(faces, G, Nrm, tex, side=None):
             "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0, "face8": bool(eight_mats)}
 
 
-def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
+def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None):
     """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
     vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
     normals Nrm. Each face is drawn by the latest row among its vertices; vertices of earlier rows
@@ -784,11 +784,26 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
             if o not in own or v not in own[o]:
                 own.setdefault(o, []).append(v)
             deposit.setdefault(o, set()).add(v)
+    # Namco's 50/50 joint seams: a blend vertex v (owned by the later row b) is also placed in
+    # an earlier row a, which deposits half of it (tail group 3, flag); row b reads it back with
+    # tail group 0 and the flag: slot = own / 2 + stored half, the vertex halfway between the two
+    # bones' transforms, and stores the full result for later rows. Only b and later draw it.
+    blend = {v: a for v, a in (blend or {}).items() if order.get(a, 99) < order.get(vrows[v], -1)
+             and v in own.get(vrows[v], [])}
+    half = {}
+    for v, a in blend.items():
+        half.setdefault(a, []).append(v)
+        own.setdefault(a, [])
+        deposit.get(vrows[v], set()).discard(v)        # group 0 stores it, no second deposit
     first = {v: order[vrows[v]] for vs in deposit.values() for v in vs}
+    for v, a in blend.items():
+        first[v] = order[a]
     last = {}
     for r, vs in borrow.items():
         for v in vs:
             last[v] = max(last.get(v, -1), order[r])
+    for v in blend:
+        last[v] = max(last.get(v, -1), order[vrows[v]])
     entry, free_at = {}, {}
     for v in sorted(first, key=lambda v: (first[v], last[v])):
         reg = next((e for e in range(1, 128) if free_at.get(e, -1) < first[v]), None)
@@ -799,7 +814,8 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
     for r in list(own):
         by_row.setdefault(r, [])
         dep = deposit.get(r, set())
-        own[r] = [v for v in own[r] if v in dep] + [v for v in own[r] if v not in dep]
+        reads = [v for v in own[r] if v in blend]
+        own[r] = reads + [v for v in own[r] if v in dep and v not in blend] +             [v for v in own[r] if v not in dep and v not in blend]
 
     blocks = bytearray()
     header = X.MODEL_HEADER
@@ -833,22 +849,30 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
             continue
         fr = frame_row(r)
         Rf, Jf = F[fr], J[fr]
-        slots = [("b", v) for v in borrow.get(r, [])] + [("o", v) for v in own.get(r, [])]
+        verts = own.get(r, [])
+        reads = [v for v in verts if v in blend]
+        dep = [v for v in verts if v in deposit.get(r, set()) and v not in blend]
+        halves = half.get(r, [])
+        # own list: blend reads (group 0), full deposits then half deposits (group 3), the rest;
+        # the half copies sit after the full deposits and are not drawn by this row
+        verts = reads + dep + [("h", v) for v in halves] + [v for v in verts if v not in reads and v not in dep]
+        slots = [("b", v) for v in borrow.get(r, [])] + [v if isinstance(v, tuple) else ("o", v) for v in verts]
         if len(slots) > MAX_SLOTS:
             raise Budget(f"row {r} needs {len(slots)} vertex slots")
         index = {sv: i for i, sv in enumerate(slots)}
         slot_of = lambda v: index.get(("b", v), index.get(("o", v)))
-        verts = own.get(r, [])
-        local = [Rf.T @ (G[v] - Jf) for v in verts]
+        pos_of = lambda v: G[v[1]] if isinstance(v, tuple) else G[v]
+        local = [Rf.T @ (pos_of(v) - Jf) for v in verts]
         if any(abs(x) > 32767 for p in local for x in p):
             raise Budget(f"row {r}: vertex out of range")
-        dep = [v for v in verts if v in deposit.get(r, set())]
         vb = struct.pack("<I", 2 * (1 + len(borrow.get(r, []))))
         vb += struct.pack("<I", 0)
         g2 = bytes(2 * entry[v] for v in borrow.get(r, []))
         vb += struct.pack("<I", len(g2)) + pad4(g2)
         vb += struct.pack("<I", len(verts)) + b"".join(struct.pack("<4h", *[int(round(x)) for x in p], 0) for p in local)
-        vb += pack_fields([], 9) * 3 + pack_fields([2 * entry[v] for v in dep], 9) + pack_fields([], 9) + pack_fields([], 2)
+        vb += pack_fields([0x100 | 2 * entry[v] for v in reads], 9) + pack_fields([], 9) * 2
+        vb += pack_fields([2 * entry[v] for v in dep] + [0x100 | 2 * entry[v] for v in halves], 9)
+        vb += pack_fields([], 9) + pack_fields([], 2)
         # normals: one per vertex the row draws, in the row's frame (unit 4096), deduplicated
         # (a flat-shaded polygon, "hard", has one normal of its own: the face's)
         normals, nidx, nface = [], {}, {}

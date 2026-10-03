@@ -53,6 +53,66 @@ def frames(path, model_addr):
     return out
 
 
+def assemble(m, f, X):
+    """Camera-space slot lists per row as the PlayStation builds them (0x80036CAC): borrowed
+    slots (g1: previous list, g2: cache), own vertices through the row's transform, then the
+    tail groups - 0: average with the cache (flag) and store, 1: average (flag), 2: average with
+    the previous list (flag), 3: deposit, 4: copy into the next list. Flagged deposits store
+    half on the hardware; here the full value is kept and the flagged read averages."""
+    import anim_model as A
+    from fmt import row, nrows
+    from simulate import vlist
+    order = []
+    for p in range(1, 22):
+        order.append(A.P2R[p])
+        for r in A.SECONDS:
+            if r >= nrows(m) or r in order:
+                continue
+            w = row(m, r)
+            if w[10] and w[1] > 2 and ((r in (25, 26) and (w[6] & 0xFF) == p) or X.SECOND_AFTER.get(r) == A.P2R[p]):
+                order.append(r)
+    scratch, cache, out = [None] * 128, {}, {}
+    for r in order:
+        w = row(m, r)
+        if not w[10] or w[1] <= 2 or r not in f:
+            continue
+        a = vlist(m, r)
+        if not a:
+            continue
+        R, T = f[r]
+        L = [scratch[b // 2 - 1] if 0 < b // 2 <= 128 else None for b in a["g1"]]
+        L += [cache.get(b // 2) for b in a["g2"]]
+        s0 = len(L)
+        L += [R @ np.array(v[:3], float) + T for v in a["verts"]]
+        before, cache0 = list(scratch), dict(cache)
+        s, copies = s0, []
+        for gi, grp in enumerate(a["tails"][:5]):
+            for fld in grp:
+                if s >= len(L):
+                    break
+                e, flag = (fld & 0xFF) // 2, fld & 0x100
+                if gi in (0, 1):
+                    if flag and cache0.get(e) is not None and L[s] is not None:
+                        L[s] = (L[s] + cache0[e]) / 2
+                    if gi == 0:
+                        cache[e] = L[s]
+                elif gi == 2:
+                    t = e - 1
+                    if flag and 0 <= t < 128 and before[t] is not None and L[s] is not None:
+                        L[s] = (L[s] + before[t]) / 2
+                elif gi == 3:
+                    cache[e] = L[s]
+                elif gi == 4:
+                    copies.append((e - 1, s))
+                s += 1
+        scratch[:len(L)] = L
+        for t, sl in copies:
+            if 0 <= t < 128:
+                scratch[t] = L[sl]
+        out[r] = list(L)
+    return out
+
+
 def main():
     game = Path(sys.argv[1])
     sys.path.insert(0, str(game / "character-builder" / "app"))
@@ -71,7 +131,11 @@ def main():
     import re
     addr = int(re.findall(r"installed at ([0-9A-F]{8})", log)[-1], 16)
     fr = frames(game / "character-builder" / "live" / "probe.bin", addr)
-    full = [f for f in fr if all(r in f for r in (1, 3, 5, 12, 19))]
+    # only frames with every drawn row (a sampling window can cut a frame: a missing row also
+    # misses its cache deposits, which looks like spikes that the game never draws)
+    from fmt import row as _row
+    drawn = [r for r in range(1, 21) if _row(m, r)[10] and _row(m, r)[1] > 2]
+    full = [f for f in fr if all(r in f for r in drawn)]
     if "--pick" in sys.argv:
         pick = [full[int(x)] for x in sys.argv[sys.argv.index("--pick") + 1].split(",")]
     else:
@@ -82,7 +146,10 @@ def main():
     imgs = []
     for f in pick:
         tris = []
+        cams = assemble(m, f, X)
         for r, slots in bind.items():
+            if r not in cams:
+                continue
             w = row(m, r)
             prims = parse_c_ps1(block(m, w[2]))
             i = 0
@@ -95,7 +162,9 @@ def main():
                         pts = [slots[c[j]] if c[j] < len(slots) else None for j in (a, b, cc)]
                         if None in pts or mat is None or any(p[0] not in f for p in pts):
                             continue
-                        cam = [f[p[0]][0] @ np.array(p[1], float) + f[p[0]][1] for p in pts]
+                        cam = [cams[r][c[j]] for j in (a, b, cc)]
+                        if any(x is None for x in cam):
+                            continue
                         tris.append((cam, [uv[j] for j in (a, b, cc)], mat, pts[0][0]))
         P = np.array([t[0] for t in tris])
         sx = P[:, :, 0] / P[:, :, 2]
