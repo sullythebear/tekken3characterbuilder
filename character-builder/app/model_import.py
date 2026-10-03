@@ -350,7 +350,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
                 ends_game[hand] = g(ends["hand " + side])
             for side, (thigh, shin, foot) in limbs["leg"].items():
                 ends_game[foot] = g(ends["toe " + side])
-            body = template.build(m, X.bind(m), F, J, ends_game, to_fbx, P, Tr, trow, log if attempt == 0 else (lambda *a: None))
+            body = template.build(m, X.bind(m), F, J, ends_game, to_fbx, P, Tr, trow, log if attempt == 0 else (lambda *a: None), W=W)
         else:
             body = lowpoly.build(P, Tr, trow, Jf, ends, np.array([0.0, 0, 1]), limbs, detail)
         piece_budget = int(260 * detail)

@@ -34,7 +34,7 @@ def _neighbours(r):
     return out
 
 
-def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print):
+def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
     """m: donor 3DMK; bind: model_export.bind(m); F, J: the import's row frames and joints (game
     space, T-pose); ends_game: {"head", "hand L/R" -> row 14/18 tip, "toe" per foot row} as
     {row: end point}; to_fbx: game point -> FBX point; P, Tr, trow: the original."""
@@ -57,6 +57,12 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print):
     for fr in sorted(set(owner.tolist())):
         sel = owner == fr
         p0 = verts[sel] @ F[fr].T + J[fr]
+        if W is not None and fr in (11, 15, 2):
+            # the collarbones (and the chest layer) are part of the chest: placed with the
+            # torso's transform, so they join it as on the donor (their own joint sits
+            # elsewhere on the import and would tear the chest apart)
+            Pd = verts[sel] @ W[fr][0].T + W[fr][1]
+            p0 = (Pd - W[1][1]) @ (F[1] @ W[1][0].T).T + J[1]
         end = J[CHILD[fr]] if fr in CHILD else ends_game.get(fr)
         if fr == 3:                                            # pelvis: down to between the hips
             end = (J[5] + J[8]) / 2 + (J[5] - J[1]) * 0.0
@@ -66,12 +72,32 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print):
             u /= ln
             along = (p0 - J[fr]) @ u
             ext = max(float(along.max()), 1e-6)
-            k = float(np.clip(ln / ext, 0.6, 1.7)) if fr not in (1, 3, 19) else 1.0
+            k = float(np.clip(ln / ext, 0.6, 1.7)) if fr not in (1, 3, 11, 15, 14, 18, 19) else 1.0
             p0 = p0 + np.outer(along * (k - 1), u)
         G[sel] = p0
-    # 2. push every vertex onto the original's outermost surface, along the ray from its bone
+    # 1b. faces: the donor's polygons (stored corners d0..d3 face inwards; ours (d0, d2, d1, d3))
+    faces = []
+    for r in rows:
+        w = row(m, r)
+        if w[1] <= 2:
+            continue
+        slots = bind[r]
+        for k, fam in enumerate(parse_b(block(m, w[1]))):
+            for rec in fam:
+                c = A.prim_verts(k, rec)
+                if any(i >= len(slots) or slots[i] is None for i in c):
+                    continue
+                ids = [key_id.get((slots[i][0], slots[i][1])) for i in c]
+                if None in ids or len(set(ids)) < len(ids):
+                    continue
+                v = [ids[0], ids[2], ids[1]] + ([ids[3]] if len(ids) == 4 else [])
+                # Namco's own choice of flat (families 0, 1) or gouraud (2, 3) shading
+                faces.append({"v": v, "row": frame_of(r), "hard": k < 2})
+    import os
+    noproject = bool(os.environ.get("T3CB_NOPROJECT"))      # offline study: the placed template
+    # 2. the head: onto the original's head along rays from its centre
     out = np.array([to_fbx(p) for p in G])
-    for fr in sorted(set(owner.tolist())):
+    for fr in ([] if noproject else [19]):
         sel = np.where(owner == fr)[0]
         a = to_fbx(J[fr])
         if fr == 19:
@@ -109,24 +135,69 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print):
         inner = np.linalg.norm(near - origins, axis=1) < 0.8 * np.linalg.norm(ray - origins, axis=1)
         use_ray = ~okn | (inner & good)
         out[sel] = np.where(use_ray[:, None], ray, near)
-    # 3. faces: the donor's polygons (stored corners d0..d3 face inwards; ours (d0, d2, d1, d3))
-    faces = []
-    for r in rows:
-        w = row(m, r)
-        if w[1] <= 2:
+    # 2b. the body: a shrinkwrap along each vertex's own normal (of the donor's surface, placed
+    # in the import): the nearest crossing of the original along that line, in or out, within
+    # 6 % of the height; Namco's layout of the vertices stays, only the surface moves
+    import remesh
+    height = height_of(P)
+    L = 0.06 * height
+    tn = np.zeros_like(out)
+    for f in faces:
+        v = f["v"]
+        for t in [(v[0], v[1], v[2])] + ([(v[1], v[3], v[2])] if len(v) == 4 else []):
+            tn[list(t)] += np.cross(out[t[1]] - out[t[0]], out[t[2]] - out[t[0]])
+    tn /= np.linalg.norm(tn, axis=1, keepdims=True) + 1e-12
+    disp_all = np.full(len(out), np.nan)
+    for fr in sorted(set(owner.tolist())):
+        if fr == 19 or noproject:
             continue
-        slots = bind[r]
-        for k, fam in enumerate(parse_b(block(m, w[1]))):
-            for rec in fam:
-                c = A.prim_verts(k, rec)
-                if any(i >= len(slots) or slots[i] is None for i in c):
-                    continue
-                ids = [key_id.get((slots[i][0], slots[i][1])) for i in c]
-                if None in ids or len(set(ids)) < len(ids):
-                    continue
-                v = [ids[0], ids[2], ids[1]] + ([ids[3]] if len(ids) == 4 else [])
-                # Namco's own choice of flat (families 0, 1) or gouraud (2, 3) shading
-                faces.append({"v": v, "row": frame_of(r), "hard": k < 2})
+        sel = np.where(owner == fr)[0]
+        tris = Tr[np.isin(trow, list(_neighbours(fr)))]
+        if not len(tris):
+            continue
+        cs = remesh.Caster(P, tris, L)
+        o, n = out[sel], tn[sel]
+        hout = cs.first_hit(o, n, L * 0.98)
+        hin = cs.first_hit(o, -n, L * 0.98)
+        t_out = np.where(hout[:, 0] >= 0, hout[:, 3], np.inf)
+        t_in = np.where(hin[:, 0] >= 0, hin[:, 3], np.inf)
+        best = np.where(t_out <= t_in, t_out, -t_in)
+        disp_all[sel] = np.where(np.isfinite(best), np.clip(best, -0.03 * height, 0.03 * height), np.nan)
+    # a smooth displacement field: vertices without a hit take their neighbours' mean, then a
+    # few averaging rounds (Namco's surfaces are calm; single vertices must not jump)
+    nb = [set() for _ in range(len(out))]
+    for f in faces:
+        for a_ in f["v"]:
+            nb[a_].update(x for x in f["v"] if x != a_)
+    d = disp_all.copy()
+    for _ in range(6):
+        nd = d.copy()
+        for i, ns in enumerate(nb):
+            if owner[i] == 19 or not ns:
+                continue
+            vals = [d[j] for j in ns if not np.isnan(d[j]) and owner[j] != 19]
+            if not vals:
+                continue
+            m_ = float(np.mean(vals))
+            nd[i] = m_ if np.isnan(d[i]) else 0.5 * d[i] + 0.5 * m_
+        d = nd
+    body_v = (owner != 19) & ~np.isnan(d)
+    out[body_v] += tn[body_v] * d[body_v][:, None]
+    # 3a. the donor's own extras on the head that the import has not got (Nina's ponytail):
+    # head polygons hanging below the neck joint are left out
+    neck_f = to_fbx(J[19])
+    up_f = to_fbx(J[19] + (ends_game[19] - J[19])) - neck_f
+    up_f /= np.linalg.norm(up_f)
+    dropped = 0
+    keep_f = []
+    for f in faces:
+        if owner[f["v"][0]] == 19 and all((out[i] - neck_f) @ up_f < -0.02 * height_of(P) for i in f["v"]):
+            dropped += 1
+            continue
+        keep_f.append(f)
+    faces = keep_f
+    if dropped:
+        log(f"template: {dropped} head polygons below the neck left out (the donor's own hair)")
     # 3b. vertices the projection put (nearly) on one spot, in the same row, become one; the
     # polygons that collapse with them were invisible anyway
     height = float(P[:, 1].max() - P[:, 1].min())

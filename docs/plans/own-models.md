@@ -25,7 +25,12 @@ flat polygons reuse a normal within 20 degrees, normals snapped to 1/8, head spl
 Medea over Nina: 982 triangles, 22464 bytes, body silhouette now Namco-like. Open: chest and
 shoulders crumpled where Nina's high collar / chest topology differs from Medea's; a seam in the
 face chart; loose pieces (collar) need room; Nina's own fight stance for the compare renders
-(capture with TEKKEN3_NATIVE_PROBE). The deployed MEDEA model is an unfinished state: do not test.
+(capture with TEKKEN3_NATIVE_PROBE: `character-builder/Capture Nina stance.cmd`, copy in tools/Capture-stance.cmd). The deployed MEDEA model is an unfinished state: do not test.
+2026-10-03: collarbone rows placed with the torso's transform (chest no longer torn); body
+projection = shrinkwrap along the template's own normals (nearest crossing, +-3 % height),
+smoothed as a displacement field (6 rounds); donor hands not stretched; head polygons below
+the neck dropped. Open: back of the torso streaky, hands thin, legs slimmer than Medea, face
+chart seam.
 
 0. **New direction (user's explanation, see knowledge/t3-model-style.md 'Namco's way of
    working')**: importance-weighted simplification of the original geometry (head first),
