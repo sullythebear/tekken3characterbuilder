@@ -227,7 +227,49 @@ def build(root: Path, model: int, path: Path, log=print):
     test = np.cross(G[T[:, 1]] - G[T[:, 0]], G[T[:, 2]] - G[T[:, 0]])
     # the file's winding is consistent: one decision for all (per triangle, a smoothed normal in
     # a crease - the buttocks - would flip single triangles inside out)
-    outward = np.full(len(T), (np.einsum("ij,ij->i", test, Nrm[T[:, 0]]) > 0).mean() > 0.5)
+    # make the winding consistent first (exported files can hold flipped patches): neighbours
+    # across a shared edge must run that edge in opposite directions; then per connected piece
+    # one decision (the majority of its triangles against the smoothed normals)
+    Tw = weld[T]
+    flip = np.zeros(len(T), bool)
+    seen = np.zeros(len(T), bool)
+    edges = {}
+    for i, t in enumerate(Tw):
+        for k in range(3):
+            edges.setdefault(frozenset((t[k], t[(k + 1) % 3])), []).append(i)
+    def directed(i, a_, b_):
+        t = list(Tw[i])
+        if flip[i]:
+            t = t[::-1]
+        return any(t[k] == a_ and t[(k + 1) % 3] == b_ for k in range(3))
+    pieces = []
+    for start in range(len(T)):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, piece = [start], [start]
+        while stack:
+            i = stack.pop()
+            t = Tw[i][::-1] if flip[i] else Tw[i]
+            for k in range(3):
+                a_, b_ = t[k], t[(k + 1) % 3]
+                for j in edges[frozenset((a_, b_))]:
+                    if j == i or seen[j]:
+                        continue
+                    flip[j] = directed(j, a_, b_) != flip[j] if False else False
+                    # j must run the edge b_ -> a_
+                    flip[j] = directed(j, a_, b_)
+                    seen[j] = True
+                    stack.append(j)
+                    piece.append(j)
+        pieces.append(piece)
+    sgn = np.einsum("ij,ij->i", test, Nrm[T[:, 0]]) > 0
+    outward = np.zeros(len(T), bool)
+    for piece in pieces:
+        pc = np.array(piece)
+        good = (sgn[pc] != flip[pc]).mean() > 0.5
+        outward[pc] = (~flip[pc]) if good else flip[pc]
+    log(f"winding: {int(flip.sum())} triangles turned to match their neighbours, {len(pieces)} pieces")
     faces = []
     for i, t in enumerate(T):
         v = list(t) if outward[i] else [t[0], t[2], t[1]]

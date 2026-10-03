@@ -32,6 +32,7 @@ preferably a copy of it, and run `Start Character Builder.cmd`. See
 - `docs/vision.md` – what the ultimate app should be
 - `docs/` – documentation: start at `docs/INDEX.md` (knowledge, plans, done, code map); `NOTES.md` points there
 - `tools/t3cb.py` – helper commands for the test copy (deploy, patch, build, report, import)
+- `tools/t3live.py` – live checks: boots the debug build, picks a custom fighter, screenshots the fight
 - `CLAUDE.md` – working instructions for Claude Code in this repo
 - `tools/` – earlier experiments (Dizzy probe, build script for Tekken3Recompiled)
 

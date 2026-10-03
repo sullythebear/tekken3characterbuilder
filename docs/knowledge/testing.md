@@ -56,3 +56,20 @@ textured), `stock.py` (a stock model with textures and wireframe).
   renders models side by side with the same renderer (stored gouraud normals, CLUT textures,
   transparency), standing and Kazuya's fight stance, front and back. Use it to judge an import
   next to its donor before asking the user to test.
+
+## Live checks without a player (`tools/t3live.py`, 2026-10-03, works)
+
+- Needs Expanded's debug build `build-opt-dbg` (configured from build-release's CMake cache
+  with `-DPSX_DEBUG_TOOLS=ON`, built with `cmake --build build-opt-dbg --target psx-runtime`;
+  rebuild it after patch changes too). Its debug server (`--debug-port`) takes JSON commands:
+  `ping`, `frame`, `read_ram`, `set_input` (pad bits, 0 = pressed: cross 0xBFFF, square 0x7FFF,
+  R2 0xFDFF, start 0xFFF7), `screenshot` (native 368 x 480), `savestate` (op save/load, slot).
+  Client: Expanded's `psxrecomp/tools/debug_client.py`.
+- `python tools/t3live.py fight [--pages 2] [--cell 0] [--frames 900] [--every 75]` boots a
+  private copy (character-builder/live/run, with build-release's mods), walks Title -> Arcade
+  (two Start presses reach the select screen) -> R2 x pages (Tag, Custom) -> right x cell ->
+  **square (costume 1; cross = costume 2)** twice (character, Tekken 3 moveset card), waits for
+  state 8, then screenshots every N frames while pressing attacks. Output:
+  character-builder/live/shots, game log character-builder/live/game-log.txt.
+- Verified: TOMMY picked, own model installed and drawn (0 words differ), 11 screenshots.
+- Also: Shift+F1..F12 saves a state in the window, F1..F12 loads (`--memcard-dir` folder).
