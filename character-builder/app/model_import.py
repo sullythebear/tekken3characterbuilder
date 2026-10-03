@@ -301,6 +301,51 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     limbs = {"leg": {sd: (rows("thigh"), rows("shin"), rows("foot")) for sd, rows in (("L", L), ("R", R_))},
              "arm": {sd: (rows("collar"), rows("upper"), rows("fore"), rows("hand")) for sd, rows in (("L", L), ("R", R_))}}
 
+    to_fbx = lambda x: Q.T @ ((np.asarray(x) - W[3][1]) / s) + hips
+    if TEMPLATE:
+        # Pose the import into the donor's skeleton: joints where the donor's are, limbs in the
+        # donor's directions and lengths (linear blend skinning with the import's own weights).
+        # The donor's model then fits as it is, with Namco's joints and seams; only its volume
+        # becomes the import's (template.py). From here on the model is built on the donor's
+        # frames and joints.
+        Fd = {r: W[r][0] for r in F}
+        Jd = {r: W[r][1] for r in F}
+        CH = {1: 19, 3: None, 5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
+
+        def row_map(r):
+            fr = FRAME.get(r, r)
+            c = CH.get(fr)
+            ax, k = None, 1.0
+            if c is not None and fr != 1:
+                li, ld = np.linalg.norm(J[c] - J[fr]), np.linalg.norm(Jd[c] - Jd[fr])
+                ax = F[fr].T @ (J[c] - J[fr]) / max(li, 1e-9)
+                k = ld / max(li, 1e-9)
+            return fr, ax, k
+
+        def pose(xg, r):
+            fr, ax, k = row_map(r)
+            loc = (np.atleast_2d(xg) - J[fr]) @ F[fr]
+            if ax is not None:
+                loc = loc + np.outer(loc @ ax, ax) * (k - 1)
+            return loc @ Fd[fr].T + Jd[fr]
+        Gv = np.array([g(p) for p in P])
+        acc = np.zeros_like(Gv)
+        wsum = np.zeros(len(Gv))
+        rows_used = sorted(set(rows_of_bone))
+        for r in rows_used:
+            wr = np.array([sum(w for bi, w in wv.items() if rows_of_bone[bi] == r) for wv in ch["weights"]])
+            if not wr.any():
+                continue
+            acc += pose(Gv, r) * wr[:, None]
+            wsum += wr
+        posed = np.where(wsum[:, None] > 0, acc / np.maximum(wsum, 1e-9)[:, None], Gv)
+        P = np.array([to_fbx(p) for p in posed])
+        ends["head"] = to_fbx(pose(g(ends["head"]), 19)[0])
+        for side, rows in (("L", L), ("R", R_)):
+            ends["toe " + side] = to_fbx(pose(g(ends["toe " + side]), rows("foot"))[0])
+            ends["hand " + side] = to_fbx(pose(g(ends["hand " + side]), rows("hand"))[0])
+        F, J = Fd, Jd
+        log("import posed into the donor's skeleton")
     tex = None
     if source is not None:
         keep = np.where(solid)[0] if solid.sum() > 0.5 * len(solid) else np.arange(len(solid))
@@ -344,7 +389,6 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
         if TEMPLATE:
             # Namco's own topology: the donor's model moved onto the import's surface
             import template
-            to_fbx = lambda x: Q.T @ ((np.asarray(x) - W[3][1]) / s) + hips
             ends_game = {19: g(ends["head"])}
             for side, (collar, upper, fore, hand) in limbs["arm"].items():
                 ends_game[hand] = g(ends["hand " + side])
@@ -361,7 +405,7 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
             piece_budget = max(0, int((MAX_PACKET_BYTES - used_b) / PACKET[2] * 0.45 * detail ** 3))
             if attempt == 0:
                 log(f"template packets {used_b} bytes, {piece_budget} triangles left for loose pieces")
-        if piece_budget >= 60:            # too little room: leave the loose pieces out
+        if piece_budget >= 60 and not TEMPLATE:   # (template: pieces have no place in the donor layout yet)
             lowpoly.add_pieces(body, P, Tr, vrow, piece_budget, height, log)
         # Tekken 3 heads are a little large for the body; give the import its donor's proportion
         # Tekken 3 limbs are fuller than most modern models: move each limb's thickness part of
@@ -452,6 +496,72 @@ def donor_palette_size(root: Path, model: int) -> int:
     return max(16, min(256, end))
 
 
+def _bake_donor_layout(faces, G, Nrm, tex):
+    """Medea's colours baked into the donor's own texture layout (Namco's UVs, its 8-bit CLUT 0
+    area and its 4-bit tiles with their own 16-colour CLUTs), quantised to those CLUTs."""
+    import texture_bake as TB
+    mats = sorted({f["dmat"] for f in faces})
+    chart_of = {m_: i for i, m_ in enumerate(mats)}
+    for f in faces:
+        f["chart"] = chart_of[f["dmat"]]
+    # texel coordinates in 4-bit columns of the page (an 8-bit texel is a column pair)
+    cuv = [np.array([(u * 2 if f["dmat"] & 0x8000 else u, v) for u, v in f["duv"]], float) for f in faces]
+    tris, tri_uv, tri_chart = [], [], []
+    for i, f in enumerate(faces):
+        v = f["v"]
+        for a, b, c in ([(0, 1, 2)] + ([(1, 3, 2)] if len(v) == 4 else [])):
+            tris.append([v[a], v[b], v[c]])
+            tri_uv.append([cuv[i][a], cuv[i][b], cuv[i][c]])
+            tri_chart.append(f["chart"])
+    tris = np.array(tris)
+    tri_n = np.cross(G[tris[:, 1]] - G[tris[:, 0]], G[tris[:, 2]] - G[tris[:, 0]])
+    rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
+                            tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
+    st = dict(TEXTURE_STYLE)
+    flat = TB.flatten(rgb, owner, st["flat_radius"], st["flat_strength"])
+    styled = TB.stylise(flat, owner, st["k"], st["shade"], st["passes"], st["size"], st["merge"], st["light"])
+    eight = [chart_of[m_] for m_ in mats if m_ & 0x8000]
+    keep = np.isin(owner, eight)                        # 8-bit areas (face, skin) keep detail
+    rgb = TB.vivid(np.where(keep[..., None], rgb, styled))
+    band = np.zeros((256, 64), dtype=np.uint16)
+    runs = []
+    shown = np.zeros_like(rgb)
+    to_rgb = lambda pal: np.array([[(c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3] for c in pal], np.uint8)
+    four = [m_ for m_ in mats if not m_ & 0x8000]
+    idx4 = np.zeros(owner.shape, dtype=np.uint8)
+    pal4 = {}
+    for m_ in four:
+        sel = owner == chart_of[m_]
+        pal = TB._palette16(rgb[sel].astype(float)) if sel.any() else np.full((16, 3), 128.0)
+        if sel.any():
+            idx4[sel] = TB._nearest(rgb[sel].astype(float), pal)[0]
+        pal4[m_] = [TB.ps1_colour(*c) for c in pal]
+        shown[sel] = to_rgb(pal4[m_])[idx4[sel]]
+    m4 = np.isin(owner, [chart_of[m_] for m_ in four])
+    band[:] = TB.band4(np.where(m4, idx4, 0))
+    eight_mats = [m_ for m_ in mats if m_ & 0x8000]
+    if eight_mats:
+        idx8, pm, pal8 = TB.face8(rgb, owner, eight)
+        band = TB.band8_into(band, idx8, pm)
+        shown8 = np.repeat(to_rgb(pal8)[idx8], 2, axis=1)
+        sel8 = np.repeat(pm, 2, axis=1)
+        shown[sel8] = shown8[sel8]
+        runs.append(((eight_mats[0] & 0x7fff), pal8))
+    # 4-bit CLUTs: one run per block of consecutive ids
+    ids = sorted(pal4)
+    start = None
+    for j, m_ in enumerate(ids):
+        if start is None:
+            start, colours = m_, []
+        colours += pal4[m_]
+        if j + 1 == len(ids) or ids[j + 1] != m_ + 1:
+            runs.append((start, colours))
+            start = None
+    uvs = [[(u, v) for u, v in c] for c in cuv]
+    return {"uv": uvs, "rgb": shown, "band": band, "runs": runs, "mats": {chart_of[m_]: m_ for m_ in mats},
+            "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0, "face8": bool(eight_mats)}
+
+
 def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
     """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
     vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
@@ -463,7 +573,9 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
     for i, r in enumerate(draw):
         by_row.setdefault(r, []).append(i)
     texture = None
-    if tex:
+    if tex and all("duv" in f for f in faces):
+        texture = _bake_donor_layout(faces, G, Nrm, tex)
+    elif tex:
         import texture_bake as TB
         chart = [f["chart"] for f in faces]
         flat = [np.array(f["flat"], float) * chart_weight[f["chart"]] ** 0.5 for f in faces]
