@@ -322,11 +322,26 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
                 k = ld / max(li, 1e-9)
             return fr, ax, k
 
+        # the head at the donor's size, so the donor's face features (eyes, nose, mouth) land on
+        # the import's: height of the head above the neck joint, donor vs import
+        top_d = 0.0
+        for r_, slots in X.bind(m).items():
+            if r_ in (19, 20):
+                for sl in slots:
+                    if sl is not None:
+                        p_ = W[sl[0]][0] @ np.array(sl[1], float) + W[sl[0]][1]
+                        top_d = max(top_d, W[19][1][1] - p_[1])
+        top_i = float(np.linalg.norm(g(ends["head"]) - J[19]))
+        head_k = float(np.clip(top_d / max(top_i, 1e-6), 0.5, 1.5))
+        log(f"head scaled x{head_k:.2f} to the donor's head")
+
         def pose(xg, r):
             fr, ax, k = row_map(r)
             loc = (np.atleast_2d(xg) - J[fr]) @ F[fr]
             if ax is not None:
                 loc = loc + np.outer(loc @ ax, ax) * (k - 1)
+            if fr == 19:
+                loc = loc * head_k
             return loc @ Fd[fr].T + Jd[fr]
         Gv = np.array([g(p) for p in P])
         acc = np.zeros_like(Gv)
@@ -496,7 +511,7 @@ def donor_palette_size(root: Path, model: int) -> int:
     return max(16, min(256, end))
 
 
-def _bake_donor_layout(faces, G, Nrm, tex):
+def _bake_donor_layout(faces, G, Nrm, tex, side=None):
     """Medea's colours baked into the donor's own texture layout (Namco's UVs, its 8-bit CLUT 0
     area and its 4-bit tiles with their own 16-colour CLUTs), quantised to those CLUTs."""
     import texture_bake as TB
@@ -506,16 +521,107 @@ def _bake_donor_layout(faces, G, Nrm, tex):
         f["chart"] = chart_of[f["dmat"]]
     # texel coordinates in 4-bit columns of the page (an 8-bit texel is a column pair)
     cuv = [np.array([(u * 2 if f["dmat"] & 0x8000 else u, v) for u, v in f["duv"]], float) for f in faces]
+    # mirrored texels (Namco shares texels between left and right arm, leg, half face): only
+    # one side is baked, or the import's two different sides would be averaged (grey arms)
+    skip = set()
+    if side is not None:
+        key = {}
+        for i, f in enumerate(faces):
+            key.setdefault((f["dmat"], tuple(sorted(map(tuple, cuv[i].round().astype(int).tolist())))), []).append(i)
+        for ids in key.values():
+            if len(ids) < 2:
+                continue
+            sd = [float((G[faces[i]["v"]].mean(0) - side[0]) @ side[1]) for i in ids]
+            if max(sd) > 0 and min(sd) < 0:
+                skip.update(i for i, d in zip(ids, sd) if d < 0)
+    # ...unless there is room: the mirrored side gets its own copy of the texels in the page's
+    # free space (Namco's layout fills about 60 % of it), so both sides keep their own colours
+    if skip:
+        occ = np.zeros((256, 256), bool)
+        box = {}
+        for i, f in enumerate(faces):
+            lo = np.floor(cuv[i].min(0)).astype(int) - 1
+            hi = np.ceil(cuv[i].max(0)).astype(int) + 1
+            if f["dmat"] & 0x8000:
+                hi[0] += 1
+            box[i] = (lo, hi)
+            if i not in skip:
+                occ[max(lo[1], 0):hi[1] + 1, max(lo[0], 0):hi[0] + 1] = True
+        # groups of mirrored faces whose texel boxes touch (one tile each)
+        sk = sorted(skip)
+        par = {i: i for i in sk}
+
+        def fnd(x):
+            while par[x] != x:
+                par[x] = par[par[x]]
+                x = par[x]
+            return x
+        for a_ in sk:
+            for b_ in sk:
+                if a_ < b_ and faces[a_]["dmat"] == faces[b_]["dmat"]:
+                    (l1, h1), (l2, h2) = box[a_], box[b_]
+                    if (l1 <= h2).all() and (l2 <= h1).all():
+                        par[fnd(a_)] = fnd(b_)
+        groups = {}
+        for i in sk:
+            groups.setdefault(fnd(i), []).append(i)
+        moved = 0
+        new_clut = {}
+        for ids in sorted(groups.values(), key=lambda g_: -len(g_)):
+            lo = np.min([box[i][0] for i in ids], 0)
+            hi = np.max([box[i][1] for i in ids], 0)
+            w_, h_ = hi - lo + 1
+            spot = None
+            for y in range(0, 256 - h_ + 1, 2):
+                for x in range(0, 256 - w_ + 1, 4):
+                    if not occ[y:y + h_, x:x + w_].any():
+                        spot = (x, y)
+                        break
+                if spot:
+                    break
+            if spot is None:
+                continue
+            off = np.array(spot) - lo
+            occ[spot[1]:spot[1] + h_, spot[0]:spot[0] + w_] = True
+            m0 = faces[ids[0]]["dmat"]
+            if not m0 & 0x8000:                # a 4-bit copy gets a CLUT of its own (ids after the
+                if m0 not in new_clut:         # donor's: free room in the player's CLUT row)
+                    new_clut[m0] = max(f_["dmat"] for f_ in faces if not f_["dmat"] & 0x8000) + 1
+            for i in ids:
+                cuv[i] = cuv[i] + off
+                skip.discard(i)
+                if m0 in new_clut:
+                    faces[i]["dmat"] = new_clut[m0]
+                moved += 1
+        if moved:
+            print(f"mirrored side: {moved} polygons got texels of their own, {len(new_clut)} new CLUTs")
+        mats = sorted({f["dmat"] for f in faces})
+        chart_of = {m_: i for i, m_ in enumerate(mats)}
+        for f in faces:
+            f["chart"] = chart_of[f["dmat"]]
     tris, tri_uv, tri_chart = [], [], []
     for i, f in enumerate(faces):
+        if i in skip:
+            continue
         v = f["v"]
         for a, b, c in ([(0, 1, 2)] + ([(1, 3, 2)] if len(v) == 4 else [])):
             tris.append([v[a], v[b], v[c]])
             tri_uv.append([cuv[i][a], cuv[i][b], cuv[i][c]])
             tri_chart.append(f["chart"])
     tris = np.array(tris)
+    tri_uv = np.array(tri_uv)
+    if False:
+        cen_uv = tri_uv.mean(1)
+        sd = (G[tris].mean(1) - side[0]) @ side[1]
+        drop = np.zeros(len(tris), bool)
+        for i in np.where(sd < 0)[0]:
+            near = np.where((np.abs(cen_uv - cen_uv[i]).max(1) < 1.5) & (sd > 0))[0]
+            drop[i] = len(near) > 0
+        keep_t = ~drop
+        tris, tri_uv = tris[keep_t], tri_uv[keep_t]
+        tri_chart = list(np.array(tri_chart)[keep_t])
     tri_n = np.cross(G[tris[:, 1]] - G[tris[:, 0]], G[tris[:, 2]] - G[tris[:, 0]])
-    rgb, _, owner = TB.bake(tris, G, np.array(tri_uv), tex["to_source"], tex["lookup"], tex["source"],
+    rgb, _, owner = TB.bake(tris, G, tri_uv, tex["to_source"], tex["lookup"], tex["source"],
                             tri_n, tri_chart, tex["push"], tex.get("caster"), tex.get("reach", 0.0), Nrm)
     st = dict(TEXTURE_STYLE)
     flat = TB.flatten(rgb, owner, st["flat_radius"], st["flat_strength"])
@@ -574,7 +680,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None):
         by_row.setdefault(r, []).append(i)
     texture = None
     if tex and all("duv" in f for f in faces):
-        texture = _bake_donor_layout(faces, G, Nrm, tex)
+        texture = _bake_donor_layout(faces, G, Nrm, tex, side=(J[1], F[1][:, 2]))
     elif tex:
         import texture_bake as TB
         chart = [f["chart"] for f in faces]
