@@ -668,7 +668,7 @@ def _bake_donor_layout(faces, G, Nrm, tex, side=None):
             "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0, "face8": bool(eight_mats)}
 
 
-def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None):
+def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None, zsign=1):
     """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
     vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
     normals Nrm. Each face is drawn by the latest row among its vertices; vertices of earlier rows
@@ -838,6 +838,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=Non
         if pr == 0:
             continue
         o = F[pr].T @ (J[r] - J[pr])
+        o[2] *= zsign
         rows[r][3:6] = [int(round(x)) for x in o]
     rows[0][0] = put(struct.pack("<6I", 4, 0, 0, 0, 0, 0))
     rows[0][1] = put(struct.pack("<4I", 0, 0, 0, 0))

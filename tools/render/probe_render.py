@@ -6,7 +6,8 @@ GTE control 32 u32, GTE data 32 u32, scratchpad 256, two caches 2 x 256, work 4 
 a0 = model + 16 + row * 56 + 56 - 56... (row = (a0 - model - 16) / 56). The GTE rotation and
 translation at entry put the row's own vertices in camera space.
 
-  probe_render.py GAME model.bin out.png [--frames 6] [--size 700]"""
+  probe_render.py GAME model.bin out.png [--frames 6] [--size 700] [--live DIR] [--yaw DEG]
+  (--live: a folder with probe.bin and game-log.txt, default <game>/character-builder/live)"""
 import struct
 import sys
 from pathlib import Path
@@ -127,10 +128,35 @@ def main():
     nshow = int(sys.argv[sys.argv.index("--frames") + 1]) if "--frames" in sys.argv else 6
     S = int(sys.argv[sys.argv.index("--size") + 1]) if "--size" in sys.argv else 700
     m, (band, vram) = C.load(spec)
-    log = (game / "character-builder" / "live" / "game-log.txt").read_text(errors="replace")
+    live = Path(sys.argv[sys.argv.index("--live") + 1]) if "--live" in sys.argv else game / "character-builder" / "live"
+    log = (live / "game-log.txt").read_text(errors="replace") if (live / "game-log.txt").is_file() else ""
     import re
-    addr = int(re.findall(r"installed at ([0-9A-F]{8})", log)[-1], 16)
-    fr = frames(game / "character-builder" / "live" / "probe.bin", addr)
+    found = re.findall(r"installed at ([0-9A-F]{8})", log)
+    # without an own model (the donor drawn) the probe holds one model: the most common
+    from collections import Counter
+    addr = int(found[-1], 16) if found else 0 if "--rest" in sys.argv else Counter(r["m1"] for r in records(live / "probe.bin")).most_common(1)[0][0]
+    if "--rest" in sys.argv:
+        # the donor's standing frames seen from the given yaws (degrees): the rest pose the
+        # import was posed into, through the same slot rules
+        import model_import as MI
+        rid = X.FIRST_MODEL_RECORD + 4 * int(sys.argv[sys.argv.index("--donor") + 1] if "--donor" in sys.argv else 0)
+        md = X.records(game, [rid])[rid]
+        Wd = X.world(md, None) if "--bind" in sys.argv else MI.donor_frames(game, md)
+        if "--solved" in sys.argv:                # the pose the donor was modelled in
+            import bind_pose as BP
+            Wd = BP.solve(md, Wd)
+        if "--bind" in sys.argv:                  # stand it up: feet -> head along -Y
+            v = Wd[19][1] - (Wd[7][1] + Wd[10][1]) / 2
+            R0 = X.align(v / np.linalg.norm(v), np.array([0, -1.0, 0]))
+            Wd = {r: (R0 @ R, R0 @ T) for r, (R, T) in Wd.items()}
+        fr = []
+        for yaw in sys.argv[sys.argv.index("--rest") + 1].split(","):
+            a = np.radians(float(yaw))
+            Rc = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
+            c = sum(Wd[r][1] for r in Wd) / len(Wd)
+            fr.append({r: (Rc @ Wd[r][0], Rc @ (Wd[r][1] - c) + np.array([0, 0, 6000.0])) for r in Wd})
+    else:
+        fr = frames(live / "probe.bin", addr)
     # only frames with every drawn row (a sampling window can cut a frame: a missing row also
     # misses its cache deposits, which looks like spikes that the game never draws)
     from fmt import row as _row
@@ -140,6 +166,14 @@ def main():
         pick = [full[int(x)] for x in sys.argv[sys.argv.index("--pick") + 1].split(",")]
     else:
         pick = [full[int(i)] for i in np.linspace(0, len(full) - 1, min(nshow, len(full)))]
+    if "--yaw" in sys.argv:                       # turn the camera around the fighter
+        a = np.radians(float(sys.argv[sys.argv.index("--yaw") + 1]))
+        Rc = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
+        turned = []
+        for f in pick:
+            c = sum(f[r][1] for r in f) / len(f)
+            turned.append({r: (Rc @ R, Rc @ (T - c) + c) for r, (R, T) in f.items()})
+        pick = turned
     bind = X.bind(m)
     i4 = np.stack([(band >> (4 * k)) & 15 for k in range(4)], 2).reshape(band.shape[0], -1)
     i8 = np.stack([band & 255, band >> 8], 2).reshape(band.shape[0], -1)

@@ -16,6 +16,7 @@ import numpy as np
 
 import model_export as X
 import model_import as MI
+import bind_pose as BP
 
 PAIRS = MI.PAIRS
 
@@ -151,7 +152,9 @@ def build(root: Path, model: int, path: Path, log=print):
     from PIL import Image
     rid = X.FIRST_MODEL_RECORD + 4 * model
     m = X.records(root, [rid])[rid]
-    W = MI.donor_frames(root, m)
+    # the pose the donor was modelled in (its own seam vertices meet), not the builder's
+    # standing frames: those mirror collarbones and hips and tilt the head (bind_pose.py)
+    W = BP.solve(m, MI.donor_frames(root, m))
     src = load(path)
     P, T, UV = src["P"], src["T"], src["UV"]
     if "bones" in src:
@@ -240,10 +243,6 @@ def build(root: Path, model: int, path: Path, log=print):
             prt, side = MI._part(b["name"])
             if prt in ("spine", "pelvis", "head"):
                 brow[bi] = {"spine": 1, "pelvis": 3, "head": 19}[prt]
-            elif prt == "collar":
-                # the shoulder's skin goes with the torso: Tekken's collarbone rows shrug and
-                # lift the shoulder top into a point (Namco keeps them nearly empty)
-                brow[bi] = 1
             elif prt in PAIRS and side:
                 brow[bi] = rows_of(prt, side)
             else:                                      # unknown bones follow their parent
@@ -420,7 +419,7 @@ def build(root: Path, model: int, path: Path, log=print):
     vrow_w = list(vrow)
     for v in range(len(vrow)):
         vrow_w[int(weld[v])] = vrow[v] if int(weld[v]) == v else vrow_w[int(weld[v])]
-    data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w)
+    data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)
     report.update(bytes=len(data), budget=len(m), islands=int(owner.max()) + 1, cluts=len(cid))
     if len(data) > len(m):
         raise MI.Budget(f"{len(data)} bytes, the donor's slot holds {len(m)}")
