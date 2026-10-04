@@ -588,7 +588,9 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     n_cluts = max(1, (cl["row1"] + 0) // 16 + (16 if cl["row0"] >= 256 else 0) // 1)
     n_cluts = min(n_cluts, 48)
     # group islands into CLUTs by colour
-    idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1))
+    # a reduced model's face islands get palettes of their own (16 colours each), as Namco's faces
+    face_isl = sorted({isl[i] for i in src.get("face_tris", []) if i < len(isl)})[:4]
+    idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1), own=face_isl)
     band = TB.band4(np.where(owner >= 0, idx, 0))
     # CLUT ids: row 1 from 64 (the donor's 4-bit row) then row 2 from 128
     cid = [64 + k if k < 16 else 128 + (k - 16) for k in range(len(palette) // 16)]

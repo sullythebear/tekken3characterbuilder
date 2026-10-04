@@ -118,4 +118,9 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
 - Result (Nina): 992 triangles, imported through the app in 87 s; checked in game (probe renders
   of stance, punches, high kick, falls, front and back; screenshots). TOMMY (King) and Rogue
   re-imported with own bone lengths and checked again.
+- User test 2026-10-04 15:56 (report clean) + screenshots: face soft in close-ups, white sleeve
+  shards at the arms. Fixes: the face (front of the head below the hair line) gets its own charts
+  at 5x density and its own 16-colour palettes (`face_tris` -> `quantise_groups(own=...)`);
+  triangles hanging on bones with no Tekken part (cloth, props: 144 on Medea) stay out of the
+  shell. Re-imported through the app (992 triangles, 54 s), checked in game.
 

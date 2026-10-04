@@ -45,6 +45,19 @@ def _texel(textures, mat, uv):
     return out
 
 
+def _loose(src, T):
+    """Triangles whose corners mostly hang on bones with no Tekken part (cloth, props)."""
+    import model_import as MI
+    bones = src.get("bones") or []
+    unknown = np.array([MI._part(b["name"])[0] is None and b["parent"] >= 0 for b in bones] + [False])
+    W = src.get("weights", [])
+    if not len(W):
+        return np.zeros(len(T), bool)
+    vu = np.array([sum(w for b, w in wv.items() if unknown[b]) / max(sum(wv.values()), 1e-9) if wv else 0.0
+                   for wv in W])
+    return (vu[T] > 0.5).sum(1) >= 2
+
+
 def _limb_groups(src, Tw, weld):
     """Per welded triangle: 0 trunk/head, 1/2 left/right arm, 3/4 left/right leg (the dominant
     bone of its corners), so the shell never fills the gap between two limbs."""
@@ -119,7 +132,7 @@ def _vertex_normals(V, F):
     return n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
 
 
-def _charts(V, F, head, limit=65.0):
+def _charts(V, F, head, limit=65.0):  # head: per-face class, never mixed in a chart
     """Faces grouped by similar normals (region growing over shared edges), at most `limit`
     degrees from the chart's first face; head and body faces never share a chart."""
     fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
@@ -279,6 +292,12 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     samples = [c] + [UV[T[:, k]] * 0.6 + c * 0.4 for k in range(3)]
     alpha = np.mean([_texel(textures, MAT, s)[:, 3] for s in samples], 0) / 255
     opaque = alpha > 0.5
+    # dangling cloth and props on bones Tekken has no row for (a sleeve flap on its own bone)
+    # would stick out as shards: they stay out of the shell
+    loose = _loose(src, T)
+    if loose.any() and loose.mean() < 0.15:
+        opaque &= ~loose
+        log(f"{int(loose.sum())} triangles of loose cloth/props left out")
     if _SHELL.get("src") is not src:                  # the shell is the same for every target
         groups = _limb_groups(src, Tw, weld)[opaque]
         V, F = _shell(Pw, Tw[opaque], groups, cells=180)
@@ -335,12 +354,20 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
         tot = sum(acc.values()) or 1
         weights.append({b: w / tot for b, w in acc.items() if w / tot > 0.02})
     # texture atlas
-    head = V[F].mean(1)[:, 1] > neck_y
-    chart, fn = _charts(V, F, head)
-    density = np.where(head, 2.5, 1.0)
+    # the face (front of the head below the hair line) gets its own charts at 5x the texel density,
+    # the rest of the head 2x: Namco gives the face most of the page
+    cen = V[F].mean(1)
+    fn0 = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+    fn0 /= np.linalg.norm(fn0, axis=1, keepdims=True) + 1e-12
+    top = V[:, 1].max()
+    head = cen[:, 1] > neck_y
+    face = head & (fn0[:, 2] > 0.3) & (cen[:, 1] < neck_y + 0.78 * (top - neck_y))
+    kind = np.where(face, 2, np.where(head, 1, 0))
+    chart, fn = _charts(V, F, kind)
+    density = np.choose(kind, [1.0, 2.0, 5.0])
     UVl = _pack(V, F, chart, fn, density)
     lap("charts and packing")
-    log(f"{chart.max() + 1} texture charts, head at 2.5x density")
+    log(f"{chart.max() + 1} texture charts, face at 5x and head at 2x density")
     # bake: rays from outside inwards onto the full original (transparent texels let it through)
     # short rays (the shell lies on the original) and a fine grid: a ray's cell and its
     # neighbours cover it when the cell is over half its length
@@ -413,5 +440,6 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     W = [weights[v] for v in F.ravel()]
     out = {"P": Pc, "T": Tc, "UV": UVl.reshape(-1, 2) / ATLAS, "MAT": np.zeros(len(Tc), int),
            "textures": {0: buf.getvalue()}, "bones": src["bones"], "weights": W,
-           "vbone": np.array([max(w, key=w.get) if w else -1 for w in W]), "reduced": True}
+           "vbone": np.array([max(w, key=w.get) if w else -1 for w in W]), "reduced": True,
+           "face_tris": np.where(face)[0].tolist()}
     return out
