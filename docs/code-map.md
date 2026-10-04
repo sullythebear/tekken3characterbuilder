@@ -15,7 +15,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
     `write_palettes` (`<Prefix>-pal.bin`), `write_own_model` (copies `characters/<id>/model.bin`
     to `<Prefix>-model.bin`), `adopt_unlinked`/`unlinked_fighters`.
   - 3D preview: `donor_models`, `model_json` (runs `model_export.py`, cache `cache/model-<n>-v7.json`).
-  - Own 3D models: `check_model` (upload + rig check), `import_model`, `remove_model`,
+  - Own 3D models: `check_model` (upload + rig check), `import_model`, `remove_model`, `refit_model` (style change),
     `own_model_json` (preview), `run_import_tool` (direct_import.py).
   - HTTP routes in `Handler` (`/api/...`; `/api/model/check|import|remove`, `/api/ownmodel/<id>`).
 - `app/creator_patch.py` – applies/removes exact-text source patches. `PROFILES` (`recompiled`,
@@ -52,7 +52,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app/lowpoly.py` – Tekken 3 style low-poly body: `build` (tubes of rings, head shell, hands
   with mitten + thumb, shared joint rings, smooth normals), `add_pieces` (loose clothing pieces
   outside the tubes, simplified), helpers `ray_hits`, `cast`, `frame`, `Body`.
-- `app/direct_import.py` – rigged PS1-style model (.fbx/.glb) as it is over a donor: `load`,
+- `app/direct_import.py` – rigged PS1-style model (.fbx/.glb) as it is over a donor: `load` (+ `_upright`: Z-up rigs turned from the skeleton),
   `rig_from_skeleton` (collar fallback), `inspect` (rig check, CLI `--check`), `build` (bind pose,
   LBS posing, rows/50-50 seams, normals, winding, texture, size fallback). CLI `--model --out`.
 - `app/bind_pose.py` – the donor's bind pose from its own 50/50 seams: `seam_pairs`,

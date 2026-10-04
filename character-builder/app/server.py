@@ -801,6 +801,39 @@ def own_model_json(cid: str) -> bytes:
     return path.read_bytes()
 
 
+def refit_model(cid: str) -> list[str]:
+    """After a style change: the own model was fitted to the old style's skeleton and the game
+    only puts it over the model it was made for, so it is imported again from its source."""
+    folder = DATA / safe_id(cid)
+    info_path = folder / "character.json"
+    data = json.loads(info_path.read_text(encoding="utf-8"))
+    own = data.get("own_model")
+    if not own or not (folder / "model.bin").is_file():
+        return []
+    donors = donor_models()
+    models = donors.get("donors", {}).get(str(data["donor"]), []) if donors.get("available") else []
+    if not models:
+        return []
+    costume = min(int(own.get("costume", 0)), len(models) - 1)
+    if own.get("model") == models[costume]:
+        return []
+    source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
+    if not source:
+        return ["The own model was made for another fighting style and has no source file to fit "
+                "it again: upload it again on the 3D model page."]
+    out = folder / "model-new.bin"
+    with model_lock:
+        problem, _ = run_import_tool(project_root(), [str(source), "--model", str(models[costume]), "--out", str(out)])
+    if problem or not out.is_file():
+        out.unlink(missing_ok=True)
+        return [f"The own model could not be fitted to the new fighting style: {problem}"]
+    out.replace(folder / "model.bin")
+    own.update(costume=costume, model=models[costume], imported=datetime.now().isoformat(timespec="seconds"))
+    data["own_model"] = own
+    info_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return []
+
+
 def remove_model(cid: str) -> dict:
     folder = DATA / safe_id(cid)
     for name in ("model.bin", "model-new.bin", "upload.json"):
@@ -1143,7 +1176,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._error(problem) if problem else self._json({"ok": True})
             if path == "/api/characters":
                 saved = save_character(data)
-                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+                refit = refit_model(saved["id"])             # a new style needs the model fitted again
+                if refit is not None and saved.get("own_model"):
+                    saved = get_character(saved["id"])
+                return self._json({**saved, "warnings": refit + sync_customs(changed=saved["id"])})
             if path == "/api/characters/delete":
                 cid = safe_id(str(data.get("id", "")))
                 delete_character(cid)

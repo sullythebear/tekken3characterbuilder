@@ -23,6 +23,43 @@ PAIRS = MI.PAIRS
 
 
 def load(path: Path) -> dict:
+    out = _load(path)
+    if out.get("bones"):
+        _upright(out)
+    return out
+
+
+def _upright(src: dict) -> None:
+    """Turns a rigged model into the importer's axes (Y up, facing +Z, the character's left at
+    +X) from its skeleton: up = hips -> head, left = right upper arm -> left upper arm. Character
+    Creator / 3ds Max exports are Z up; Mixamo and glTF already match (no change)."""
+    bones = src["bones"]
+    at = lambda prt, side=None: MI.joint(bones, prt, side)
+    hips, head, ul, ur = at("pelvis"), at("head"), at("upper", "L"), at("upper", "R")
+    if any(v is None for v in (hips, head, ul, ur)):
+        return
+    up = head - hips
+    up /= np.linalg.norm(up)
+    left = (ul - ur) - ((ul - ur) @ up) * up
+    left /= np.linalg.norm(left)
+    R = np.stack([left, up, np.cross(left, up)])          # rows: the new X, Y, Z
+    # exports differ by whole axis swaps: snap to the nearest one, so a slightly crooked
+    # skeleton does not tilt the model
+    S = np.zeros((3, 3))
+    for i in range(3):
+        k = int(np.argmax(np.abs(R[i])))
+        S[i, k] = np.sign(R[i, k])
+    if abs(np.linalg.det(S)) < 0.5 or np.allclose(S, np.eye(3)):
+        return
+    R = S
+    src["P"] = src["P"] @ R.T
+    for b in bones:
+        M = np.array(b["matrix"], float)
+        M[:3, :] = R @ M[:3, :]
+        b["matrix"] = M.tolist()
+
+
+def _load(path: Path) -> dict:
     if path.suffix.lower() == ".glb":
         import glb
         g = glb.read(path)

@@ -83,3 +83,14 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   in the bind pose). Previews were mirrored (shirt text backwards): the viewer flips x now.
 - .glb with a skin (Blender export) reads bones and weights; a glb made from test2.fbx imports to
   the same model as the FBX (4 bytes of float rounding differ). Blender side names (hand.L) work.
+
+## User test 2026-10-04: Rogue.fbx (Character Creator rig) over Nina came out huge, lying down
+
+- Cause: the file is Z up (Character Creator / 3ds Max); the importer assumed Y up. `load` now
+  turns every rigged model upright from its skeleton (up = hips -> head, left = right -> left
+  upper arm), snapped to whole axis swaps (Mixamo unchanged: test2 imports byte-identical).
+  Re-imported, checked in game (probe renders): right size, animations fine. Its ponytail (30
+  vertices on the head bone, up to 4000 units behind) is in the file as modelled.
+- A style change after an import: the game only puts an own model over the stock model it was
+  made for. Saving with another style now fits the model again from `source.*` (`refit_model`);
+  tested Paul -> King -> Paul.
