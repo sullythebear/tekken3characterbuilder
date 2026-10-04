@@ -94,3 +94,5 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
 - A style change after an import: the game only puts an own model over the stock model it was
   made for. Saving with another style now fits the model again from `source.*` (`refit_model`);
   tested Paul -> King -> Paul.
+- User test 2026-10-04 13:53: Rogue (TEST over Nina) "works better"; report clean (own model
+  installed, 0 words differ, no errors).
