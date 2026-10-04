@@ -21,7 +21,7 @@ technically without changing its look (no remesh, no re-bake).
 ## Next
 
 1. Done: TOMMY in game (v9), joint seams, bind pose; builder UI (3D model page).
-2. Open: a user test of TOMMY and of the 3D model page; models without textures or with more
+2. User test 2026-10-04: TOMMY "looks very good now" (report clean: own model installed, 0 words differ, no errors). Open: a user test of the 3D model page upload; models without textures or with more
    than ~1100 triangles (warned, not reduced yet); partial seam dropping instead of all (Mokujin).
 
 ## In-game test 1 (2026-10-03): texture and face good, proportions wrong
