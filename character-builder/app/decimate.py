@@ -49,7 +49,7 @@ def _boundary_quadrics(p, tris, Q, weight=1000.0):
         Q[v] += K
 
 
-def decimate(positions, triangles, target: int, keep=None, importance=None, uniform=0.0):
+def decimate(positions, triangles, target: int, keep=None, importance=None, uniform=0.0, manifold=False):
     """uniform > 0 adds that much of the edge's squared length to its cost (relative to the
     mean quadric error), so short edges go first and triangles stay even (no slivers)."""
     p = np.array(positions, dtype=float).copy()
@@ -146,6 +146,14 @@ def decimate(positions, triangles, target: int, keep=None, importance=None, unif
         x = np.array(x)
         if flips(a, b, x) or flips(b, a, x):
             continue
+        if manifold:
+            # link condition: a and b may share only the vertices opposite their common edge,
+            # or the collapse glues two sheets together (edges with 3+ faces, inside-out faces)
+            na = {v for f in vfaces[a] for v in faces[f]} - {a}
+            nb = {v for f in vfaces[b] for v in faces[f]} - {b}
+            edge = [f for f in vfaces[a] if b in faces[f]]
+            if len(na & nb) != len(edge) or not edge or len(na | nb) <= 3:
+                continue
         # collapse b into a
         p[a] = x
         Q[a] = Q[a] + Q[b]

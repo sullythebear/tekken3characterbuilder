@@ -22,6 +22,7 @@ import decimate as DC
 ATLAS = 256
 GUTTER = 2
 _SHELL = {}
+MANIFOLD = False             # link condition in the collapse (the shell itself is made manifold)
 
 
 def _weld(P):
@@ -59,7 +60,7 @@ def _loose(src, T):
 
 
 def _limb_groups(src, Tw, weld):
-    """Per welded triangle: 0 trunk/head, 1/2 left/right arm, 3/4 left/right leg (the dominant
+    """Per welded triangle: 0 trunk/head, 1/2 left/right arm, 3/4 left/right leg, 5/6 hands (the dominant
     bone of its corners), so the shell never fills the gap between two limbs."""
     import model_import as MI
     bones = src.get("bones") or []
@@ -70,8 +71,10 @@ def _limb_groups(src, Tw, weld):
             j = bones[j["parent"]]
             p = MI._part(j["name"])
         g = 0
-        if p[0] in ("upper", "fore", "hand"):
+        if p[0] in ("upper", "fore"):
             g = 1 if p[1] == "L" else 2
+        elif p[0] == "hand":
+            g = 5 if p[1] == "L" else 6
         elif p[0] in ("thigh", "shin", "foot"):
             g = 3 if p[1] == "L" else 4
         part.append(g)
@@ -83,6 +86,48 @@ def _limb_groups(src, Tw, weld):
     out = t[:, 0].copy()                      # majority of the three corners
     out[(t[:, 1] == t[:, 2])] = t[t[:, 1] == t[:, 2], 1]
     return out
+
+
+def _nm(F):
+    """Edges shared by more than two faces (debug count)."""
+    from collections import Counter
+    E = Counter()
+    for t in np.asarray(F):
+        for i in range(3):
+            E[(min(t[i], t[(i + 1) % 3]), max(t[i], t[(i + 1) % 3]))] += 1
+    return sum(1 for c in E.values() if c > 2)
+
+
+def _manifold_voxels(v):
+    """Fills voxels so no two solid voxels touch only along an edge or at a corner: surface nets
+    would give edges shared by four faces there (inside-out faces, holes on the PlayStation)."""
+    v = v.copy()
+    for _ in range(10):
+        changed = False
+        for ax in range(3):                         # edge contacts in each axis plane
+            a, b = [(1, 2), (0, 2), (0, 1)][ax]
+            s = lambda i, j: tuple(slice(i, v.shape[k] - 1 + i) if k == a else slice(j, v.shape[k] - 1 + j)
+                                   if k == b else slice(None) for k in range(3))
+            p00, p11, p01, p10 = v[s(0, 0)], v[s(1, 1)], v[s(0, 1)], v[s(1, 0)]
+            d1 = p00 & p11 & ~p01 & ~p10
+            d2 = p01 & p10 & ~p00 & ~p11
+            if d1.any() or d2.any():
+                changed = True
+                v[s(0, 1)] |= d1
+                v[s(0, 0)] |= d2
+        # corner contacts: opposite corners of a 2x2x2 cube with nothing else in it
+        c = lambda i, j, k: v[i:v.shape[0] - 1 + i, j:v.shape[1] - 1 + j, k:v.shape[2] - 1 + k]
+        cube = [c(i, j, k) for i in (0, 1) for j in (0, 1) for k in (0, 1)]
+        count = sum(x.astype(int) for x in cube)
+        for i, j, k in ((0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1)):
+            x, y = c(i, j, k), c(1 - i, 1 - j, 1 - k)
+            lone = x & y & (count == 2)
+            if lone.any():
+                changed = True
+                v[i:v.shape[0] - 1 + i, 1 - j:v.shape[1] - j, k:v.shape[2] - 1 + k] |= lone
+        if not changed:
+            break
+    return v
 
 
 def _shell(P, T, groups, cells=180, close=1):
@@ -116,12 +161,156 @@ def _shell(P, T, groups, cells=180, close=1):
     for g in np.unique(groups):
         own |= RM.solid(samples[groups[tri] == g], origin, h, shape, close)
     inside &= ~(bridge & ~own)
+    # hands: flat hands with fingers come out as thin paddles at this size; Namco's are sturdy
+    # mittens. Their volume grows by two voxels before the surface is taken
+    for g in (5, 6):
+        sel = groups[tri] == g
+        if sel.sum() > 20:
+            hand = RM.solid(samples[sel], origin, h, shape, close)
+            for _ in range(2):
+                hand = RM._dilate(hand)
+            inside |= hand
+    # one voxel thicker: thin sheets (a collar) would fold flat in the collapse (the vertices go
+    # back onto the original surface afterwards)
+    inside = _manifold_voxels(inside)
     v, f = RM.surface_nets(inside, origin, h)
     v = RM.smooth(v, f, rounds=3)
     near = RM.snap(v, samples, origin, h, shape)
     v[near >= 0] = samples[near[near >= 0]]
     v = RM.smooth(v, f, rounds=1, lam=0.3)
     return v, np.asarray(f)
+
+
+def _outward(V, F):
+    """Every face turned to look outwards: a ray from just in front of it along its normal must
+    cross the surface an even number of times (the PlayStation culls faces that look inwards)."""
+    a, b, c = V[F[:, 0]], V[F[:, 1]], V[F[:, 2]]
+    n = np.cross(b - a, c - a)
+    n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
+    e1, e2 = b - a, c - a
+    flip = np.zeros(len(F), bool)
+    for i in range(len(F)):
+        o = (a[i] + b[i] + c[i]) / 3 + n[i] * 1e-4 * np.ptp(V, 0).max()
+        d = n[i]
+        # three slightly different directions, majority vote (grazing hits on edges)
+        votes = 0
+        for jit in (np.zeros(3), np.array([0.013, 0.007, -0.011]), np.array([-0.009, 0.012, 0.005])):
+            dd = d + jit
+            dd /= np.linalg.norm(dd)
+            p = np.cross(dd, e2)
+            det = (e1 * p).sum(1)
+            ok = np.abs(det) > 1e-12
+            inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
+            s = o - a
+            u = (s * p).sum(1) * inv
+            q = np.cross(s, e1)
+            v = (q * dd).sum(1) * inv
+            t = (q * e2).sum(1) * inv
+            hits = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0)
+            hits[i] = False
+            votes += int(hits.sum()) % 2
+        flip[i] = votes >= 2
+    F = F.copy()
+    F[flip] = F[flip][:, [0, 2, 1]]
+    return F
+
+
+def _mittens(V, F, weights, src, log):
+    """Each hand replaced by a closed mitten: the hand's faces (all corners on hand bones, past the
+    wrist) go, and the hole's rim is lofted along the hand bone through two rings and a cap,
+    sized from the original hand (width and thickness across the bone, made a little sturdier)."""
+    import model_import as MI
+    bones = src.get("bones") or []
+    P0, W0 = src["P"], src.get("weights", [])
+    at = lambda b: np.array([b["matrix"][k][3] for k in range(3)])
+    V, F, weights = V.copy(), F.copy(), list(weights)
+    dom = lambda w: MI._part(bones[max(w, key=w.get)]["name"]) if w else (None, None)
+    for side in "LR":
+        hand_ids = [k for k, b in enumerate(bones) if MI._part(b["name"]) == ("hand", side)]
+        wrist = MI.joint(bones, "hand", side)
+        if not hand_ids or wrist is None:
+            continue
+        tip = max((at(bones[k]) for k in hand_ids), key=lambda q: np.linalg.norm(q - wrist))
+        L = float(np.linalg.norm(tip - wrist))
+        if L < 1e-6:
+            continue
+        a = (tip - wrist) / L
+        # the original hand across the bone: width (widest) and thickness
+        sel = [i for i, w in enumerate(W0) if w and dom(w) == ("hand", side) and (P0[i] - wrist) @ a > 0]
+        if len(sel) < 10:
+            continue
+        Q = P0[sel] - wrist
+        Q = Q - np.outer(Q @ a, a)
+        _, _, vt = np.linalg.svd(Q - Q.mean(0), full_matrices=False)
+        wv, tv = vt[0], vt[1]
+        wv = wv - (wv @ a) * a
+        wv /= np.linalg.norm(wv)
+        tv = np.cross(a, wv)
+        Wd = float(np.clip(np.ptp(Q @ wv), 0.3 * L, 0.8 * L)) * 1.1
+        Tk = float(np.clip(np.ptp(Q @ tv), 0.55 * Wd, 0.8 * Wd))
+        # faces of the hand
+        on_hand = np.array([dom(w) == ("hand", side) for w in weights])
+        past = (V - wrist) @ a > 0.12 * L
+        cut = (on_hand[F] & past[F]).all(1)
+        if not cut.any():
+            continue
+        rest = F[~cut]
+        # the rim of the hole: directed edges of the remaining faces without a twin
+        de = {}
+        for t in rest:
+            for k in range(3):
+                de[(t[k], t[(k + 1) % 3])] = True
+        rim = {u: v for (u, v) in de if (v, u) not in de}
+        loops, seen = [], set()
+        for u in rim:
+            if u in seen:
+                continue
+            loop, x = [], u
+            while x in rim and x not in seen:
+                seen.add(x)
+                loop.append(x)
+                x = rim[x]
+            if len(loop) >= 3 and x == u:
+                loops.append(loop)
+        if not loops:
+            continue
+        loop = min(loops, key=lambda lp: np.linalg.norm(V[lp].mean(0) - (wrist + a * 0.12 * L)))
+        if len(loops) > 1 or len(loop) > 24:
+            log(f"{side} hand: the cut left an irregular rim, the hand is kept as it is")
+            continue
+        n = len(loop)
+        base = V[loop] - wrist
+        ang = np.arctan2(base @ tv, base @ wv)
+        rings = [list(loop)]
+        newV, newW = [], []
+        hand_w = {hand_ids[0]: 1.0}
+        for s_, f_ in ((0.45, 1.0), (0.85, 0.95)):
+            ring = []
+            for th in ang:
+                newV.append(wrist + a * s_ * L + wv * (Wd / 2) * np.cos(th) * f_ + tv * (Tk / 2) * np.sin(th) * f_)
+                newW.append(dict(hand_w))
+                ring.append(len(V) + len(newV) - 1)
+            rings.append(ring)
+        newV.append(wrist + a * 1.0 * L)
+        newW.append(dict(hand_w))
+        cap = len(V) + len(newV) - 1
+        faces = []
+        for r0, r1 in zip(rings[:-1], rings[1:]):
+            for i in range(n):
+                j = (i + 1) % n
+                # the rim runs r0[i] -> r0[j] in the remaining faces: new faces run it backwards
+                faces += [(r0[j], r0[i], r1[i]), (r0[j], r1[i], r1[j])]
+        last = rings[-1]
+        for i in range(n):
+            faces.append((last[(i + 1) % n], last[i], cap))
+        V = np.vstack([V, np.array(newV)])
+        weights += newW
+        F = np.vstack([rest, np.array(faces)])
+        log(f"{side} hand: mitten {Wd:.2f} x {Tk:.2f} x {L:.2f} ({len(faces)} triangles for {int(cut.sum())})")
+    used = np.unique(F)
+    remap = -np.ones(len(V), int)
+    remap[used] = np.arange(len(used))
+    return V[used], remap[F], [weights[i] for i in used]
 
 
 def _vertex_normals(V, F):
@@ -309,8 +498,24 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     neck = MI.joint(src["bones"], "head") if src.get("bones") else None
     neck_y = neck[1] if neck is not None else Pw[:, 1].max() - 0.13 * H
     imp = np.where(V[:, 1] > neck_y, 4.0, 1.0)
-    V, _, F, _ = DC.decimate(V, F, target, importance=imp, uniform=0.3)
+    # hands are small: without extra weight the collapse turns them into points
+    for side in "LR":
+        hj = MI.joint(src["bones"], "hand", side) if src.get("bones") else None
+        if hj is not None:
+            imp[np.linalg.norm(V - hj, axis=1) < 0.09 * H] = 8.0
+    # most of the collapse freely, the last third with the link condition (thin sheets such as a
+    # collar would otherwise fold into edges shared by four faces)
+    dbg = __import__("os").environ.get("T3CB_DEBUG")
+    if dbg:
+        log(f"  non-manifold edges: shell {_nm(F)}")
+    V, kept, F, _ = DC.decimate(V, F, int(target * 1.5), importance=imp, uniform=0.3)
     F = np.asarray(F)
+    if dbg:
+        log(f"  non-manifold edges: collapse 1 {_nm(F)}")
+    V, _, F, _ = DC.decimate(V, F, target, importance=imp, uniform=0.3, manifold=True)
+    F = np.asarray(F)
+    if dbg:
+        log(f"  non-manifold edges: collapse 2 {_nm(F)}")
     used = np.unique(F)
     # relax along the surface, then back onto the original
     S = RM.Sampler(Pw, Tw[opaque], H / 400)
@@ -354,6 +559,8 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     remap = -np.ones(len(V), int)
     remap[used] = np.arange(len(used))
     V, F = V[used], remap[F]
+    area = np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1)
+    F = F[area > 1e-9 * H * H]                      # points the relaxing put together draw nothing
     lap("shell, collapse, relax")
     log(f"reduced to {len(F)} triangles (shell of the opaque surface, quadric collapse)")
     # skin weights from the nearest original point
@@ -373,24 +580,24 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
                 acc[b] = acc.get(b, 0) + w * bw
         tot = sum(acc.values()) or 1
         weights.append({b: w / tot for b, w in acc.items() if w / tot > 0.02})
-    # Namco draws forearms and hands sturdier than life, so they read at PS1 sizes: thicken them
-    # about the bone (forearm 1.25, hand 1.35)
+    # Namco draws forearms sturdier than life (x1.2 about the bone) and hands as solid mittens:
+    # a flat hand with fingers becomes a thin paddle at this size, so it is replaced (_mittens)
     bones = src.get("bones") or []
-    at = lambda b: np.array([b["matrix"][k][3] for k in range(3)])
     for side in "LR":
         fore, hand = MI.joint(bones, "fore", side), MI.joint(bones, "hand", side)
         if fore is None or hand is None:
             continue
-        tips = [at(b) for b in bones if MI._part(b["name"]) == ("hand", side)]
-        tip = max(tips, key=lambda q: np.linalg.norm(q - hand)) if tips else hand + (hand - fore) * 0.4
-        for a, b, k, part in ((fore, hand, 1.25, "fore"), (hand, tip, 1.35, "hand")):
-            ids = [i for i, w in enumerate(weights) if w and MI._part(bones[max(w, key=w.get)]["name"]) == (part, side)]
-            if not ids:
-                continue
-            ax = (b - a) / max(np.linalg.norm(b - a), 1e-9)
-            d = V[ids] - a
+        ids = [i for i, w in enumerate(weights) if w and MI._part(bones[max(w, key=w.get)]["name"]) == ("fore", side)]
+        if ids:
+            ax = (hand - fore) / max(np.linalg.norm(hand - fore), 1e-9)
+            d = V[ids] - fore
             along = (d @ ax)[:, None] * ax
-            V[ids] = a + along + (d - along) * k
+            V[ids] = fore + along + (d - along) * 1.2
+    if __import__("os").environ.get("T3CB_DEBUG"):
+        log(f"  non-manifold edges: before mittens {_nm(F)}")
+    V, F, weights = _mittens(V, F, weights, src, log)
+    if __import__("os").environ.get("T3CB_DEBUG"):
+        log(f"  non-manifold edges: after mittens {_nm(F)}")
     # texture atlas
     # the face (front of the head below the hair line) gets its own charts at 5x the texel density,
     # the rest of the head 2x: Namco gives the face most of the page

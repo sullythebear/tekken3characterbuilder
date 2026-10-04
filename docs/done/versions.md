@@ -4,6 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
+| (this) | Flat quads only (PS1 culls quads by the first triangle), manifold voxel shell, per-face winding for reduced models, mitten hands, seam cache fallback; Medea 912 tris | offline PS1 emulation (QUADCULL/PAINTER) all sides; live fight |
 | (this) | Patch 14 (own texture every frame: the donor's face texture reload showed through), thicker reduced forearms/hands, vertices pushed onto the surface; Medea v12 | VRAM snapshots match at 3 moments; live fight renders |
 | (this) | High-poly import: reduce.py (shell, collapse, bake), quads, own bone lengths, palette refinement, gutter ownership; Medea 992 tris | live in game: MEDEA (Nina), TOMMY (King), Rogue; app import clicked in the browser pane |
 | (this) | Builder 3D model page: upload .fbx/.glb, rig lock, import over a costume, remove, own-model preview; glb skins; bind solver: free turns by unstretched polygons; Mokujin fits (flat shading / no seams fallback) | live in game: TOMMY (Paul), DREAMER (Law), UPTEST (Nina); UI driven in the browser pane; user test 2026-10-04: TOMMY looks very good, no errors |

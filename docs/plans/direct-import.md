@@ -128,4 +128,13 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   thin round parts shrank between surface points (vertices pushed out by their faces' mean gap)
   and are thicker on Namco's fighters too (reduced models: forearms x1.25, hands x1.35 about the
   bone). Re-imported through the app (43 s), checked in game with the rebuilt game.
+- User test 2026-10-04 21:10: thin stumps for hands, see-through in many places. Causes: bent
+  triangle pairs sent as quads (culled whole by their first triangle) and winding passed across
+  non-manifold edges; hands collapsed to wedges (a flat hand with fingers is a thin paddle at
+  this size). Fixes: flat quads only; voxel shell made manifold (`_manifold_voxels`), reduced
+  models keep their per-face winding; hands replaced by mittens lofted from the wrist rim
+  (`_mittens`, sized from the original hand); forearms x1.2; seams dropped weakest-first when
+  more than 127 are live at once. Packet estimate 34 bytes per triangle (fits first try:
+  912 triangles, 56 s through the app). Checked offline with PS1 culling/ordering emulation from
+  every side and in game (stance, kicks, back views).
 

@@ -204,7 +204,7 @@ NEEDED = {"hips": ("pelvis", None), "head": ("head", None), "left upper arm": ("
 REDUCE_ABOVE = 1100          # more triangles: reduce.py makes a PS1-sized model first
 
 
-def _pair_quads(faces, uvs):
+def _pair_quads(faces, uvs, G=None, max_bend=12.0):
     """Neighbouring triangles with the same texels on their shared edge and the same CLUT go out
     as one quad (corners a, b, c, d: the GPU draws (a, b, c) and (b, d, c), the same two
     triangles): 52 bytes of GPU packets instead of 80, as Namco's models do."""
@@ -230,6 +230,14 @@ def _pair_quads(faces, uvs):
                 ub, uc = uvs[i][(k + 1) % 3], uvs[i][(k + 2) % 3]
                 if uvs[j][kk] != uc or uvs[j][(kk + 1) % 3] != ub:
                     continue
+                # nearly flat only: the PlayStation culls a quad by its first triangle, so a bent
+                # pair vanishes whole when that half turns away (holes at the crotch, the wrists)
+                if G is not None:
+                    n1 = np.cross(G[v[1]] - G[v[0]], G[v[2]] - G[v[0]])
+                    n2 = np.cross(G[w[1]] - G[w[0]], G[w[2]] - G[w[0]])
+                    c = n1 @ n2 / (np.linalg.norm(n1) * np.linalg.norm(n2) + 1e-12)
+                    if c < np.cos(np.radians(max_bend)):
+                        continue
                 best = (k, j, (kk + 2) % 3)
                 break
             if best:
@@ -290,11 +298,11 @@ def build(root: Path, model: int, path: Path, log=print):
     if len(src["T"]) <= REDUCE_ABOVE:
         return _build(root, model, src, log)
     import reduce as RD
-    # a first guess from what reduced models need (quads included): ~28.7 bytes of GPU packets
+    # a first guess from what reduced models need (flat quads included): ~34 bytes of GPU packets
     # and ~25.5 bytes of model per triangle; then 7 % fewer per failed try
     rid = X.FIRST_MODEL_RECORD + 4 * model
     slot = len(X.records(root, [rid])[rid])
-    target = int(min(MI.MAX_PACKET_BYTES / 28.7, slot / 25.5) * 0.97)
+    target = int(min(MI.MAX_PACKET_BYTES / 34.0, slot / 25.5) * 0.97)
     for k in range(6):
         low = RD.reduce(src, target, log=log)
         try:
@@ -376,7 +384,7 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     for prt, side in part:
         vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side or "L"))
     G = np.array([g(p) for p in P])
-    blend = {}
+    blend, blend_score = {}, {}
     if "weights" in src:
         # Pose the mesh into the donor's standing pose with the file's own smooth weights (linear
         # blend skinning): arms down, legs as the donor's. The game then only turns each row a
@@ -458,6 +466,7 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
                 a_, b_ = sorted(top[:2], key=lambda r: DRAW_ORDER.get(r, 99))
                 vrow[i] = b_
                 blend[i] = a_
+                blend_score[i] = rw[top[1]] / tot_w
         log(f"{len(blend)} seam vertices blended 50/50 between two bones")
         F, J = Fd, Jp
         log("mesh posed into the donor's standing pose with the file's weights")
@@ -490,6 +499,12 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
             t = t[::-1]
         return any(t[k] == a_ and t[(k + 1) % 3] == b_ for k in range(3))
     pieces = []
+    if src.get("reduced"):
+        # a reduced model's faces come from a voxel surface: each already faces out (or all in);
+        # passing the winding along neighbours would cross the few edges where two sheets touch
+        # and turn whole patches inside out (holes on the PlayStation)
+        seen[:] = True
+        pieces.append(list(range(len(T))))
     for start in range(len(T)):
         if seen[start]:
             continue
@@ -608,7 +623,7 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
                "mats": {k: cid[k] for k in range(len(cid))}, "palette": palette, "charts": len(cid),
                "density": 0.0, "rgb": img}
     if src.get("reduced"):
-        faces, texture["uv"] = _pair_quads(faces, texture["uv"])
+        faces, texture["uv"] = _pair_quads(faces, texture["uv"], G)
         log(f"{sum(1 for f in faces if len(f['v']) == 4)} triangle pairs sent as quads")
     blend_w = {}
     for v, a_ in blend.items():                      # on welded ids, as the faces
@@ -616,7 +631,21 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     vrow_w = list(vrow)
     for v in range(len(vrow)):
         vrow_w[int(weld[v])] = vrow[v] if int(weld[v]) == v else vrow_w[int(weld[v])]
-    data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)
+    # the game keeps at most 127 seam vertices in its cache at once: when a model needs more, the
+    # weakest seams (least weight on the second bone) become plain one-bone vertices
+    score = {}
+    for v, s_ in blend_score.items():
+        score[int(weld[v])] = max(score.get(int(weld[v]), 0), s_)
+    while True:
+        try:
+            data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)
+            break
+        except MI.Budget as error:
+            if "seam vertices" not in str(error) or not blend_w:
+                raise
+            for v in sorted(blend_w, key=lambda v: score.get(v, 0))[:max(1, len(blend_w) // 8)]:
+                blend_w.pop(v)
+            log(f"too many seam vertices at once: {len(blend_w)} kept")
     # too big for the donor's slot (Mokujin's is small): flat-shade the flattest polygons first
     # (one normal and a shorter record each) until it fits
     if len(data) > len(m) and degrade:

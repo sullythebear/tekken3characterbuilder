@@ -98,4 +98,7 @@ textured), `stock.py` (a stock model with textures and wireframe).
   inserted first) without a depth buffer, as the PlayStation; diff against the normal render.
 - The debug build must be rebuilt after patch changes: `cmake --build build-opt-dbg --target
   psx-runtime` with the toolchain on PATH.
+- `QUADCULL=1` culls each quad by its first triangle and `MAGENTA=1` paints the background
+  magenta: with `PAINTER=16` this is the closest offline view of what the PlayStation draws;
+  look for magenta inside the silhouette (holes).
 

@@ -145,4 +145,11 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   checked has that TIM). Own textures were re-uploaded once a second, so whatever an import kept
   there flickered (Medea's crotch and hair). T3CB-PATCH-14 uploads the texels every frame;
   snapshots at calls 1200, 2000 and 3500 then match the file texel for texel.
+- **A quad is culled by its first triangle** (inferred from the user's screenshots, reproduced
+  offline: `QUADCULL=1 probe_render.py` shows the same holes at the crotch and the wrists of
+  Medea v12; gone with flat quads, checked in game). Only nearly flat triangle pairs (bend
+  <= 12 degrees) may be sent as quads; Namco's quads are flat too.
+- A reduced model keeps the winding of its voxel surface per face (one global in/out decision):
+  passing the winding along neighbours crossed edges where two sheets touch (a thin collar) and
+  turned patches inside out (a hole on top of the hair).
 

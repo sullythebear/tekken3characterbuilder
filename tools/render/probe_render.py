@@ -16,6 +16,7 @@ import numpy as np
 import os
 ROWS = bool(os.environ.get("ROWS"))
 PAINTER = bool(os.environ.get("PAINTER"))   # draw by polygon depth order (the PS1 way)
+QUADCULL = bool(os.environ.get("QUADCULL"))  # cull quads by their first triangle (the PS1 way)
 REC_WORDS = 8 + 32 + 32 + 256 + 256 + 256 + 1024
 
 
@@ -214,7 +215,8 @@ def main():
                         cam = [cams[r][c[j]] for j in (a, b, cc)]
                         if any(x is None for x in cam):
                             continue
-                        tris.append((cam, [uv[j] for j in (a, b, cc)], mat, pts[0][0]))
+                        first = [cams[r][c[j]] for j in (0, 1, 2)]   # the quad's culling triangle
+                        tris.append((cam, [uv[j] for j in (a, b, cc)], mat, pts[0][0], first))
         P = np.array([t[0] for t in tris])
         sx = P[:, :, 0] / P[:, :, 2]
         sy = P[:, :, 1] / P[:, :, 2]
@@ -223,7 +225,7 @@ def main():
         sc = (S - 20) / max(hi - lo)
         W_ = int((hi - lo)[0] * sc) + 20
         img = np.zeros((S, W_, 3), np.uint8)
-        img[:] = (20, 25, 50)
+        img[:] = (255, 0, 255) if os.environ.get("MAGENTA") else (20, 25, 50)
         zb = np.full((S, W_), np.inf)
         if PAINTER:                              # as the PlayStation: no depth buffer, polygons
             # into ordering-table slots by mean z (PAINTER = slot size in z units); a slot's list
@@ -231,12 +233,17 @@ def main():
             b = float(os.environ.get("PAINTER", "1")) or 1.0
             order = sorted(range(len(tris)), key=lambda i: (-int(np.mean([p[2] for p in tris[i][0]]) // b), -i))
             tris = [tris[i] for i in order]
-        for (cam, uvs, mt, rw) in tris:
+        for (cam, uvs, mt, rw, first) in tris:
             cam = np.array(cam)
+            if QUADCULL:                         # cull a quad by its first triangle only
+                fc = np.array(first)
+                fxy = np.stack([(fc[:, 0] / fc[:, 2] - lo[0]) * sc, (fc[:, 1] / fc[:, 2] - lo[1]) * sc], 1)
+                if (fxy[1, 0] - fxy[0, 0]) * (fxy[2, 1] - fxy[0, 1]) - (fxy[1, 1] - fxy[0, 1]) * (fxy[2, 0] - fxy[0, 0]) <= 0:
+                    continue
             xy = np.stack([(cam[:, 0] / cam[:, 2] - lo[0]) * sc + 10, (cam[:, 1] / cam[:, 2] - lo[1]) * sc + 10], 1)
             a, b, cc = xy
             cross = (b[0] - a[0]) * (cc[1] - a[1]) - (b[1] - a[1]) * (cc[0] - a[0])
-            if cross <= 0:                       # the game culls these (back faces)
+            if cross <= 0 and not QUADCULL:      # the game culls these (back faces)
                 continue
             x0, y0 = np.floor(xy.min(0)).astype(int)
             x1, y1 = np.ceil(xy.max(0)).astype(int)
