@@ -383,7 +383,18 @@ def _palette16(pixels):
     raw += raw[-3:] * ((48 - len(raw)) // 3) if raw else [128] * 48     # fewer than 16 colours
     pal = np.array(raw[:48], dtype=float).reshape(16, 3)
     pal = pal[np.unique(np.asarray(q))]
-    return np.concatenate([pal, np.repeat(pal[-1:], 16 - len(pal), 0)]) if len(pal) < 16 else pal
+    pal = np.concatenate([pal, np.repeat(pal[-1:], 16 - len(pal), 0)]) if len(pal) < 16 else pal
+    # Lloyd refinement of the median cut: palettes shared by charts of different colours (skin
+    # and beige cloth) otherwise give one of them the other's tones
+    pts = pixels.reshape(-1, 3).astype(float)
+    if len(pts) > 20000:
+        pts = pts[np.random.default_rng(0).choice(len(pts), 20000, replace=False)]
+    for _ in range(8):
+        k = ((pts[:, None, :] - pal[None]) ** 2).sum(2).argmin(1)
+        for j in range(16):
+            if (k == j).any():
+                pal[j] = pts[k == j].mean(0)
+    return pal
 
 
 def _nearest(pixels, pal):

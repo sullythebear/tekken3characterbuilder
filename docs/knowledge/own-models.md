@@ -129,3 +129,14 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   180: wings); Paul arms down, Law and Julia T-pose, Jin A-pose, head 21 degrees forward of W.
 - direct_import poses the mesh (LBS with the file's weights) into this bind pose; the head no
   longer looks up, shoulders and hips follow like the donor's. Accessory rows (21+) are not used.
+
+## Budgets and bone lengths (2026-10-04, tested in game)
+
+- The binding limit for big imports is the GPU packet budget (~31000 bytes: gouraud triangle 40,
+  gouraud quad 52); a quad is drawn as (a, b, c) + (b, d, c), so two triangles sharing an edge
+  with the same texels cost 52 instead of 80 at no visual change.
+- The game takes joint offsets from the model (words 3..5, z negated), so an import may keep its
+  own bone lengths: verified with Medea (Nina) and TOMMY (King) in game.
+- Probe frames can mix two moments across the sampling window even when torso and pelvis agree:
+  check every joint against its parent's offset and second layers (2/4/20) against their rows.
+

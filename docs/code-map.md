@@ -56,7 +56,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `rig_from_skeleton` (collar fallback), `inspect` (rig check, CLI `--check`), `build` (bind pose,
   LBS posing, rows/50-50 seams, normals, winding, texture, size fallback). CLI `--model --out`.
 - `app/bind_pose.py` – the donor's bind pose from its own 50/50 seams: `seam_pairs`,
-  `cross_edges`, `solve(m, W)`, `residuals`.
+  `cross_edges`, `solve(m, W)`, `residuals`, `with_offsets` (a model's own bone lengths).
+- `app/reduce.py` – high-poly rigged model -> PS1 size: `reduce(src, target)` (`_shell` with
+  limb-gap removal, `_charts`, `_pack` FFT bitmap packing, `_raster`, bake).
 - `app/glb.py` – glTF binary reader (meshes, UVs, textures, skin bones/weights).
 - `app/kitbash.py` – `build(root, base, parts)`: a fighter from parts of the stock models (Namco geometry and texels); CLI.
 - `app/template.py` – `build`: the donor's own model as topology template moved onto the import (default, `model_import.TEMPLATE`).
@@ -66,7 +68,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   (8-bit face), `paint` (median), `band4`, `ps1_colour`.
 - `app/remesh.py` – `Caster` (first ray hit via grid), `Sampler` (nearest surface point),
   `surface_samples`, `snap`; older voxel `remesh` (not used by the importer now).
-- `app/decimate.py` – quadric edge collapse `decimate` (used for loose pieces).
+- `app/decimate.py` – quadric edge collapse `decimate` (`importance`, `uniform` edge-length term).
 - `app/fbx.py` – binary FBX reader: `read`, `scene`, `summary`, `character` (mesh, bones,
   weights, UVs, materials, embedded textures). CLI prints a summary.
 

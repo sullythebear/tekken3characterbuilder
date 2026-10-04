@@ -144,7 +144,7 @@ def main():
         Wd = X.world(md, None) if "--bind" in sys.argv else MI.donor_frames(game, md)
         if "--solved" in sys.argv:                # the pose the donor was modelled in
             import bind_pose as BP
-            Wd = BP.solve(md, Wd)
+            Wd = BP.with_offsets(m, BP.solve(md, Wd))
         if "--bind" in sys.argv:                  # stand it up: feet -> head along -Y
             v = Wd[19][1] - (Wd[7][1] + Wd[10][1]) / 2
             R0 = X.align(v / np.linalg.norm(v), np.array([0, -1.0, 0]))
@@ -161,7 +161,21 @@ def main():
     # misses its cache deposits, which looks like spikes that the game never draws)
     from fmt import row as _row
     drawn = [r for r in range(1, 21) if _row(m, r)[10] and _row(m, r)[1] > 2]
-    full = [f for f in fr if all(r in f for r in drawn)]
+    # a frame whose joints are not where their parents put them (offset (x, y, -z) of words
+    # 3..5) is mixed from two moments by the sampling window
+    def coherent(f):
+        if np.linalg.norm(f[1][1] - f[3][1]) > 50:
+            return False
+        for a, b in ((2, 1), (4, 3), (20, 19)):         # second layers draw in their row's frame
+            if a in f and b in f and np.linalg.norm(f[a][1] - f[b][1]) > 5:
+                return False
+        for r, p in A.ROW_PARENT.items():
+            if p and r in f and p in f:
+                off = np.array(row(m, r)[3:6], float) * [1, 1, -1]
+                if np.linalg.norm(np.linalg.solve(f[p][0], f[r][1] - f[p][1]) - off) > 30:
+                    return False
+        return True
+    full = [f for f in fr if all(r in f for r in drawn) and coherent(f)]
     if "--pick" in sys.argv:
         pick = [full[int(x)] for x in sys.argv[sys.argv.index("--pick") + 1].split(",")]
     else:

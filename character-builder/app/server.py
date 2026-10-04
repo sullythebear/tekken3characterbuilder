@@ -698,7 +698,7 @@ def donor_models() -> dict:
 MODEL_SOURCES = (".fbx", ".glb")
 
 
-def run_import_tool(root: Path, args: list[str], timeout: int = 600) -> tuple[str | None, str]:
+def run_import_tool(root: Path, args: list[str], timeout: int = 1800) -> tuple[str | None, str]:
     """Runs direct_import.py (own 3D models); returns (error or None, stdout)."""
     try:
         done = subprocess.run([venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)],
@@ -776,8 +776,10 @@ def import_model(cid: str, costume: int) -> dict:
     upload.replace(folder / f"source{upload.suffix}")
     (folder / "upload.json").unlink(missing_ok=True)
     data = json.loads((folder / "character.json").read_text(encoding="utf-8"))
+    made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
     data["own_model"] = {"file": info.get("file", upload.name), "costume": costume, "model": models[costume],
-                         "triangles": info.get("triangles"), "textured": info.get("textured"),
+                         "triangles": int(made[-1]) if made else info.get("triangles"),
+                         "source_triangles": info.get("triangles"), "textured": info.get("textured"),
                          "imported": datetime.now().isoformat(timespec="seconds")}
     (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     return get_character(folder.name)

@@ -171,3 +171,21 @@ def residuals(m, W):
         d = np.linalg.norm(W[ra][0] @ va + W[ra][1] - W[rb][0] @ vb - W[rb][1])
         out.setdefault((ra, rb), []).append(float(d))
     return out
+
+
+def with_offsets(m, B):
+    """B's turns with the joints placed by model m's own offsets (x, y, -z of words 3..5, as the
+    game does): how an import with its own bone lengths stands in the bind pose."""
+    import anim_model as A
+    from fmt import row
+    out = dict(B)
+    for r in (1, 3, 19, 11, 12, 13, 14, 15, 16, 17, 18, 5, 6, 7, 8, 9, 10):
+        p = A.ROW_PARENT[r]
+        if p == 0:
+            continue
+        R, _ = B[r]
+        out[r] = (R, out[p][1] + out[p][0] @ (np.array(row(m, r)[3:6], float) * [1, 1, -1]))
+    for a, b in ((2, 1), (4, 3), (20, 19)):
+        if a in out:
+            out[a] = out[b]
+    return out

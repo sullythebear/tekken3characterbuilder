@@ -86,3 +86,8 @@ textured), `stock.py` (a stock model with textures and wireframe).
   `--probe`, copy probe.bin and game-log.txt to a folder, put the file back.
 - Builder API from a script: GET `/` holds the token (`<meta name="t3cb-token">`), send it as
   `X-T3CB-Token` with POSTs (`/api/model/check`, `/api/model/import`, `/api/model/remove`).
+- `tools/render/mesh_render.py GAME MODEL out.png [--yaws] [--size] [--crop head]`: the source
+  file (.fbx/.glb) with its own textures, to compare an import with what it should look like.
+- probe_render drops incoherent probe frames (joints not at their parent's offset, second layers
+  off their row): those showed fake torn heads and arms.
+

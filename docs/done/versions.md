@@ -4,6 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
+| (this) | High-poly import: reduce.py (shell, collapse, bake), quads, own bone lengths, palette refinement, gutter ownership; Medea 992 tris | live in game: MEDEA (Nina), TOMMY (King), Rogue; app import clicked in the browser pane |
 | (this) | Builder 3D model page: upload .fbx/.glb, rig lock, import over a costume, remove, own-model preview; glb skins; bind solver: free turns by unstretched polygons; Mokujin fits (flat shading / no seams fallback) | live in game: TOMMY (Paul), DREAMER (Law), UPTEST (Nina); UI driven in the browser pane; user test 2026-10-04: TOMMY looks very good, no errors |
 | 46d6036 | Direct import poses into the donor's real bind pose (solved from its 50/50 seams; offsets z negated in game); Tommy v8 | live in game (probe renders, screenshots) |
 | e0af386 | Writer: Namco's 50/50 joint seams; Tommy v6 | probe renders |

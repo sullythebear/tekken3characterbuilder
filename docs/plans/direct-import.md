@@ -96,3 +96,26 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   tested Paul -> King -> Paul.
 - User test 2026-10-04 13:53: Rogue (TEST over Nina) "works better"; report clean (own model
   installed, 0 words differ, no errors).
+
+## High-poly models: Medea (test.fbx, 17754 triangles) reduced automatically (2026-10-04)
+
+- `reduce.py` (models over 1100 triangles): opaque triangles (texture alpha) -> one voxel shell
+  (closing 1), voxels that only the closing added between two limbs removed (the thighs stay
+  apart: no skirt), Taubin smoothing, quadric collapse (head x4, `uniform` edge-length term for
+  even triangles), relax + project back, weights from the nearest original point, charts by
+  normal (65 degrees, head and body apart), texel-exact FFT bitmap packing (84 % of the page),
+  bake by 4 short rays per texel from outside inwards (passing transparent texels), gutter bleed.
+- direct_import: target from the donor's budget (~28.7 bytes of GPU packets, ~25.5 bytes of
+  model per triangle), 7 % fewer per failed try; triangle pairs with the same texels sent as quads
+  (52 bytes instead of 80: the binding limit is the 31000-byte GPU packet budget).
+- Palettes: median cut + Lloyd refinement; island ownership grown 3 texels into the gutter
+  (edge texels read index 0 before: light streaks).
+- Unknown bones (Medea's Sleeve1/2 on Spine2): the chain takes the row of the nearest known joint.
+- **Own bone lengths** (all imports): joints in the donor's directions at the import's own
+  distances; the writer's offsets carry them (Namco gives every fighter its own). Medea's long
+  neck came from Nina's longer spine. Previews/renders place joints by the model's offsets
+  (`bind_pose.with_offsets`).
+- Result (Nina): 992 triangles, imported through the app in 87 s; checked in game (probe renders
+  of stance, punches, high kick, falls, front and back; screenshots). TOMMY (King) and Rogue
+  re-imported with own bone lengths and checked again.
+

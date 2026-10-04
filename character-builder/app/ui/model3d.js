@@ -34,6 +34,8 @@ const T3Model = (() => {
       : "🔒 Locked: this model is not rigged and cannot be imported";
     const problems = $("model-problems");
     problems.replaceChildren(...(info.problems || []).map(fact));
+    const notes = $("model-notes");
+    notes.replaceChildren(...(info.notes || []).map(fact));
     $("model-import").disabled = busy || !info.rigged;
   }
 
@@ -46,7 +48,8 @@ const T3Model = (() => {
     $("own-model").hidden = !(saved && c.has_model);
     if (own) {
       const m = c.own_model;
-      $("own-model-line").textContent = `Own model: ${m.file} · ${m.triangles || "?"} triangles · `
+      const reduced = m.source_triangles && m.source_triangles !== m.triangles ? ` (reduced from ${m.source_triangles})` : "";
+      $("own-model-line").textContent = `Own model: ${m.file} · ${m.triangles || "?"} triangles${reduced} · `
         + `replaces costume ${m.costume + 1} of the style`;
     } else if (saved && c.has_model) {
       $("own-model-line").textContent = "Own model: imported earlier (model.bin)";
@@ -107,7 +110,9 @@ const T3Model = (() => {
     $("model-import").disabled = true;
     const progress = $("model-progress");
     progress.hidden = false;
-    progress.textContent = "Importing: fitting the model to the style's skeleton, texture and joints (about a minute)…";
+    progress.textContent = info.reduce
+      ? "Importing: reducing the model to PS1 size, baking its texture and fitting it to the style's skeleton (1 to 3 minutes)…"
+      : "Importing: fitting the model to the style's skeleton, texture and joints (a few seconds)…";
     try {
       const saved = await api("/api/model/import", { id: state.current.id, costume: Number($("model-costume").value) });
       progress.hidden = true;

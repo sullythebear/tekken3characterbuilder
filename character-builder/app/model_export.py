@@ -348,7 +348,7 @@ def export_own(root: Path, path: Path) -> dict:
     rid = FIRST_MODEL_RECORD + 4 * donor_model
     md = records(root, [rid])[rid]
     W = MI.donor_frames(root, md)
-    B = BP.solve(md, W)
+    B = BP.with_offsets(m, BP.solve(md, W))
     # turned as the stock preview turns the donor (facing() on its standing frames: the root is
     # the same in both, the collarbones are not)
     d = W[15][1] - W[11][1]

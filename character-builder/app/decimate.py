@@ -49,7 +49,9 @@ def _boundary_quadrics(p, tris, Q, weight=1000.0):
         Q[v] += K
 
 
-def decimate(positions, triangles, target: int, keep=None, importance=None):
+def decimate(positions, triangles, target: int, keep=None, importance=None, uniform=0.0):
+    """uniform > 0 adds that much of the edge's squared length to its cost (relative to the
+    mean quadric error), so short edges go first and triangles stay even (no slivers)."""
     p = np.array(positions, dtype=float).copy()
     tris = np.array(triangles, dtype=np.int64)
     Q = _plane_quadrics(p, tris)
@@ -64,6 +66,10 @@ def decimate(positions, triangles, target: int, keep=None, importance=None):
             vfaces[v].add(f)
     parent = list(range(len(p)))
     version = [0] * len(p)
+    # the uniform term's unit: quadric error per squared length, typical for this mesh
+    tri_area = np.linalg.norm(np.cross(p[tris[:, 1]] - p[tris[:, 0]], p[tris[:, 2]] - p[tris[:, 0]]), axis=1)
+    # (plane quadrics are area weighted: an error is distance^2 x area)
+    scale = float(np.mean(tri_area)) / 2
 
     def costs(A_, B_):
         """Batched: best collapse position and its error for edges (A_[i], B_[i])."""
@@ -90,7 +96,10 @@ def decimate(positions, triangles, target: int, keep=None, importance=None):
         errs = np.stack(errs, 1)
         k = np.argmin(errs, 1)
         pos = np.stack(cands, 1)[np.arange(len(k)), k]
-        return errs[np.arange(len(k)), k], pos
+        e = errs[np.arange(len(k)), k]
+        if uniform:
+            e = e + uniform * scale * span ** 2
+        return e, pos
 
     heap = []
 

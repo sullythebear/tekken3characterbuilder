@@ -201,6 +201,54 @@ NEEDED = {"hips": ("pelvis", None), "head": ("head", None), "left upper arm": ("
           "left foot": ("foot", "L"), "right foot": ("foot", "R")}
 
 
+REDUCE_ABOVE = 1100          # more triangles: reduce.py makes a PS1-sized model first
+
+
+def _pair_quads(faces, uvs):
+    """Neighbouring triangles with the same texels on their shared edge and the same CLUT go out
+    as one quad (corners a, b, c, d: the GPU draws (a, b, c) and (b, d, c), the same two
+    triangles): 52 bytes of GPU packets instead of 80, as Namco's models do."""
+    edge = {}
+    for i, f in enumerate(faces):
+        v = f["v"]
+        for k in range(3):
+            edge.setdefault((v[k], v[(k + 1) % 3]), []).append((i, k))
+    used = [False] * len(faces)
+    out, out_uv = [], []
+    for i, f in enumerate(faces):
+        if used[i]:
+            continue
+        v = f["v"]
+        best = None
+        for k in range(3):
+            b_, c_ = v[(k + 1) % 3], v[(k + 2) % 3]            # shared edge b -> c, opposite a
+            for j, kk in edge.get((c_, b_), []):
+                if j == i or used[j] or faces[j].get("chart") != f.get("chart") or faces[j]["hard"] != f["hard"]:
+                    continue
+                w = faces[j]["v"]
+                # the same texels at b and c in both triangles
+                ub, uc = uvs[i][(k + 1) % 3], uvs[i][(k + 2) % 3]
+                if uvs[j][kk] != uc or uvs[j][(kk + 1) % 3] != ub:
+                    continue
+                best = (k, j, (kk + 2) % 3)
+                break
+            if best:
+                break
+        if not best:
+            out.append(f)
+            out_uv.append(uvs[i])
+            continue
+        k, j, kd = best
+        a, b, c = k, (k + 1) % 3, (k + 2) % 3
+        used[i] = used[j] = True
+        q = dict(f)
+        q["v"] = [v[a], v[b], v[c], faces[j]["v"][kd]]
+        q["suv"] = [f["suv"][a], f["suv"][b], f["suv"][c], faces[j]["suv"][kd]]
+        out.append(q)
+        out_uv.append([uvs[i][a], uvs[i][b], uvs[i][c], uvs[j][kd]])
+    return out, out_uv
+
+
 def inspect(path: Path) -> dict:
     """What the builder needs to know before an import: size, texture and whether the model is
     rigged (a skeleton with the bones Tekken needs and skin weights). `rigged` False locks the
@@ -225,15 +273,39 @@ def inspect(path: Path) -> dict:
     elif weighted < 0.95 * len(src["P"]):
         info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
     info["rigged"] = not info["problems"]
-    if info["triangles"] > 1400:
-        info["problems"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100. "
-                                "Reduce the model, or the import may not fit the donor's room.")
+    info["notes"] = []
+    if info["triangles"] > REDUCE_ABOVE:
+        info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the builder "
+                             "reduces it to PS1 size and bakes a new 256 x 256 texture (1 to 3 minutes).")
+        info["reduce"] = True
     if not info["textured"]:
         info["problems"].append("The model has no embedded texture: it will be drawn without one.")
     return info
 
 
 def build(root: Path, model: int, path: Path, log=print):
+    """Imports a model file over a donor model; a high-poly file is reduced first (reduce.py),
+    smaller and smaller until it fits the donor's slot."""
+    src = load(Path(path))
+    if len(src["T"]) <= REDUCE_ABOVE:
+        return _build(root, model, src, log)
+    import reduce as RD
+    # a first guess from what reduced models need (quads included): ~28.7 bytes of GPU packets
+    # and ~25.5 bytes of model per triangle; then 7 % fewer per failed try
+    rid = X.FIRST_MODEL_RECORD + 4 * model
+    slot = len(X.records(root, [rid])[rid])
+    target = int(min(MI.MAX_PACKET_BYTES / 28.7, slot / 25.5) * 0.97)
+    for k in range(6):
+        low = RD.reduce(src, target, log=log)
+        try:
+            return _build(root, model, low, log, degrade=k == 5)
+        except MI.Budget as error:
+            log(f"{target} triangles do not fit ({error}); trying fewer")
+            target = int(target * 0.93)
+    raise MI.Budget("The model does not fit this fighting style's slot.")
+
+
+def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     from fmt import row
     import texture_bake as TB
     from PIL import Image
@@ -242,7 +314,6 @@ def build(root: Path, model: int, path: Path, log=print):
     # the pose the donor was modelled in (its own seam vertices meet), not the builder's
     # standing frames: those mirror collarbones and hips and tilt the head (bind_pose.py)
     W = BP.solve(m, MI.donor_frames(root, m))
-    src = load(path)
     P, T, UV = src["P"], src["T"], src["UV"]
     if "bones" in src:
         J0, part = rig_from_skeleton(src["bones"], src["vbone"], P)
@@ -314,16 +385,25 @@ def build(root: Path, model: int, path: Path, log=print):
         CH = {1: 19, 5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
         Fd = {r: W[r][0] for r in F}
         Jd = {r: W[r][1] for r in F}
+        # the import keeps its own bone lengths (the game reads them from the model's offsets, as
+        # every Namco fighter has its own): each joint sits in the donor's direction from its
+        # parent, at the import's distance; no stretching (the donor's longer spine made long necks)
+        import anim_model as A
+        Jp = {}
+        for r in (1, 3, 19, 11, 12, 13, 14, 15, 16, 17, 18, 5, 6, 7, 8, 9, 10):
+            p = A.ROW_PARENT[r]
+            if p == 0 or p not in Jp:
+                Jp[r] = Jd[r]
+                continue
+            d = Jd[r] - Jd[p]
+            Jp[r] = Jp[p] + d / max(np.linalg.norm(d), 1e-9) * np.linalg.norm(J[r] - J[p])
+        for k, v in MI.FRAME.items():
+            Jp[k] = Jp[v]
 
         def pose_row(xg, r):
             fr = MI.FRAME.get(r, r)
             loc = (xg - J[fr]) @ F[fr]
-            c = CH.get(fr)
-            if c is not None and fr not in (1,):
-                li, ld = np.linalg.norm(J[c] - J[fr]), np.linalg.norm(Jd[c] - Jd[fr])
-                ax = F[fr].T @ (J[c] - J[fr]) / max(li, 1e-9)
-                loc = loc + np.outer(loc @ ax, ax) * (ld / max(li, 1e-9) - 1)
-            return loc @ Fd[fr].T + Jd[fr]
+            return loc @ Fd[fr].T + Jp[fr]
         bones = src["bones"]
         brow = {}
         for bi, b in enumerate(bones):
@@ -332,11 +412,24 @@ def build(root: Path, model: int, path: Path, log=print):
                 brow[bi] = {"spine": 1, "pelvis": 3, "head": 19}[prt]
             elif prt in PAIRS and side:
                 brow[bi] = rows_of(prt, side)
-            else:                                      # unknown bones follow their parent
-                j = bi
-                while j >= 0 and j not in brow:
-                    j = bones[j]["parent"]
-                brow[bi] = brow.get(j, 1)
+            else:
+                brow[bi] = None
+        # unknown bones (cloth, props): a chain takes the row of the known joint nearest to its
+        # first bone (a sleeve hung from the spine next to the shoulder goes with the arm), the
+        # rest of the chain follows it
+        at = lambda b: np.array([b["matrix"][k][3] for k in range(3)])
+        known = [bi for bi in brow if brow[bi] is not None]
+        for bi, b in enumerate(bones):
+            if brow[bi] is not None:
+                continue
+            p = b["parent"]
+            if p >= 0 and p in brow and brow[p] is not None and MI._part(bones[p]["name"])[0] is None:
+                brow[bi] = brow[p]
+            elif known:
+                near = min(known, key=lambda k: np.linalg.norm(at(bones[k]) - at(b)))
+                brow[bi] = brow[near]
+            else:
+                brow[bi] = 1
         acc = np.zeros_like(G)
         tot = np.zeros(len(G))
         rows_needed = {}
@@ -366,7 +459,7 @@ def build(root: Path, model: int, path: Path, log=print):
                 vrow[i] = b_
                 blend[i] = a_
         log(f"{len(blend)} seam vertices blended 50/50 between two bones")
-        F, J = Fd, Jd
+        F, J = Fd, Jp
         log("mesh posed into the donor's standing pose with the file's weights")
     # smooth normals over welded positions (the file splits vertices at UV seams)
     key = {tuple(np.round(p, 5)): i for i, p in enumerate(P)}
@@ -482,6 +575,15 @@ def build(root: Path, model: int, path: Path, log=print):
     def paint(i, xy, bc):
         owner[xy[:, 1], xy[:, 0]] = isl[i]
     TB.raster(texel, paint)
+    # texels just outside an island (polygon edges sample them) join the nearest island, or they
+    # would read index 0 of the polygon's palette: light streaks along the edges
+    for _ in range(3):
+        grow = owner.copy()
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            nb = np.roll(np.roll(owner, dy, 0), dx, 1)
+            take = (grow < 0) & (nb >= 0)
+            grow[take] = nb[take]
+        owner = grow
     cl = MI.donor_cluts(root, model)
     n_cluts = max(1, (cl["row1"] + 0) // 16 + (16 if cl["row0"] >= 256 else 0) // 1)
     n_cluts = min(n_cluts, 48)
@@ -503,6 +605,9 @@ def build(root: Path, model: int, path: Path, log=print):
     texture = {"uv": [[(int(u), int(v)) for u, v in tx] for tx in texel], "band": band, "runs": runs,
                "mats": {k: cid[k] for k in range(len(cid))}, "palette": palette, "charts": len(cid),
                "density": 0.0, "rgb": img}
+    if src.get("reduced"):
+        faces, texture["uv"] = _pair_quads(faces, texture["uv"])
+        log(f"{sum(1 for f in faces if len(f['v']) == 4)} triangle pairs sent as quads")
     blend_w = {}
     for v, a_ in blend.items():                      # on welded ids, as the faces
         blend_w[int(weld[v])] = a_
@@ -512,7 +617,7 @@ def build(root: Path, model: int, path: Path, log=print):
     data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)
     # too big for the donor's slot (Mokujin's is small): flat-shade the flattest polygons first
     # (one normal and a shorter record each) until it fits
-    if len(data) > len(m):
+    if len(data) > len(m) and degrade:
         spread = [max(float(np.degrees(np.arccos(np.clip(Nrm[a] @ Nrm[b], -1, 1))))
                       for a in f["v"] for b in f["v"]) for f in faces]
         # then the 50/50 seams go (each holds a second copy of its vertex), joints bend harder
