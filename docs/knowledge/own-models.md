@@ -139,4 +139,10 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   own bone lengths: verified with Medea (Nina) and TOMMY (King) in game.
 - Probe frames can mix two moments across the sampling window even when torso and pelvis agree:
   check every joint against its parent's offset and second layers (2/4/20) against their rows.
+- **The game reloads the donor's 8-bit face texture into the band during the fight** (tested
+  2026-10-04: VRAM snapshot of Medea over Nina at call 2000 had 16 x 64 halfwords at VRAM
+  (384, 64) replaced by Nina's face TIM, `x 0 y 64 w 16 h 64 mode 1` in her ARC; every donor
+  checked has that TIM). Own textures were re-uploaded once a second, so whatever an import kept
+  there flickered (Medea's crotch and hair). T3CB-PATCH-14 uploads the texels every frame;
+  snapshots at calls 1200, 2000 and 3500 then match the file texel for texel.
 

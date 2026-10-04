@@ -330,6 +330,26 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
         tri = To[hit[ok, 0].astype(int)]
         u, v = hit[ok, 1:2], hit[ok, 2:3]
         V[used[ok]] = Pw[tri[:, 0]] * (1 - u - v) + Pw[tri[:, 1]] * u + Pw[tri[:, 2]] * v
+    # flat triangles between surface points lie inside the surface: thin round parts (forearms,
+    # hands) shrink. Push each vertex out by the mean gap of its triangles' centres to the
+    # original, so the faces straddle the surface instead
+    for _ in range(2):
+        fc = V[F].mean(1)
+        fnm = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+        fnm /= np.linalg.norm(fnm, axis=1, keepdims=True) + 1e-12
+        hit = S.lookup(fc)
+        ok = hit[:, 0] >= 0
+        tri = To[np.maximum(hit[:, 0], 0).astype(int)]
+        u, v = hit[:, 1:2], hit[:, 2:3]
+        near = Pw[tri[:, 0]] * (1 - u - v) + Pw[tri[:, 1]] * u + Pw[tri[:, 2]] * v
+        gap = np.where(ok, ((near - fc) * fnm).sum(1), 0.0)
+        gap = np.clip(gap, 0, 0.02 * H)            # only outward, never more than a little
+        acc = np.zeros(len(V))
+        cnt = np.zeros(len(V))
+        for k in range(3):
+            np.add.at(acc, F[:, k], gap)
+            np.add.at(cnt, F[:, k], 1)
+        V += _vertex_normals(V, F) * (acc / np.maximum(cnt, 1))[:, None]
     # compact
     remap = -np.ones(len(V), int)
     remap[used] = np.arange(len(used))
@@ -353,6 +373,24 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
                 acc[b] = acc.get(b, 0) + w * bw
         tot = sum(acc.values()) or 1
         weights.append({b: w / tot for b, w in acc.items() if w / tot > 0.02})
+    # Namco draws forearms and hands sturdier than life, so they read at PS1 sizes: thicken them
+    # about the bone (forearm 1.25, hand 1.35)
+    bones = src.get("bones") or []
+    at = lambda b: np.array([b["matrix"][k][3] for k in range(3)])
+    for side in "LR":
+        fore, hand = MI.joint(bones, "fore", side), MI.joint(bones, "hand", side)
+        if fore is None or hand is None:
+            continue
+        tips = [at(b) for b in bones if MI._part(b["name"]) == ("hand", side)]
+        tip = max(tips, key=lambda q: np.linalg.norm(q - hand)) if tips else hand + (hand - fore) * 0.4
+        for a, b, k, part in ((fore, hand, 1.25, "fore"), (hand, tip, 1.35, "hand")):
+            ids = [i for i, w in enumerate(weights) if w and MI._part(bones[max(w, key=w.get)]["name"]) == (part, side)]
+            if not ids:
+                continue
+            ax = (b - a) / max(np.linalg.norm(b - a), 1e-9)
+            d = V[ids] - a
+            along = (d @ ax)[:, None] * ax
+            V[ids] = a + along + (d - along) * k
     # texture atlas
     # the face (front of the head below the hair line) gets its own charts at 5x the texel density,
     # the rest of the head 2x: Namco gives the face most of the page

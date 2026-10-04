@@ -15,6 +15,7 @@ import numpy as np
 
 import os
 ROWS = bool(os.environ.get("ROWS"))
+PAINTER = bool(os.environ.get("PAINTER"))   # draw by polygon depth order (the PS1 way)
 REC_WORDS = 8 + 32 + 32 + 256 + 256 + 256 + 1024
 
 
@@ -224,6 +225,12 @@ def main():
         img = np.zeros((S, W_, 3), np.uint8)
         img[:] = (20, 25, 50)
         zb = np.full((S, W_), np.inf)
+        if PAINTER:                              # as the PlayStation: no depth buffer, polygons
+            # into ordering-table slots by mean z (PAINTER = slot size in z units); a slot's list
+            # is drawn last-inserted first
+            b = float(os.environ.get("PAINTER", "1")) or 1.0
+            order = sorted(range(len(tris)), key=lambda i: (-int(np.mean([p[2] for p in tris[i][0]]) // b), -i))
+            tris = [tris[i] for i in order]
         for (cam, uvs, mt, rw) in tris:
             cam = np.array(cam)
             xy = np.stack([(cam[:, 0] / cam[:, 2] - lo[0]) * sc + 10, (cam[:, 1] / cam[:, 2] - lo[1]) * sc + 10], 1)
@@ -257,7 +264,7 @@ def main():
                 rc = np.array([(rw * 53) % 255, (rw * 97) % 255, (rw * 151) % 255], np.uint8)
                 col = np.repeat(rc[None], len(col), 0)
             yy, xx = pp[:, 1], pp[:, 0]
-            better = (z < zb[yy, xx]) & vis
+            better = ((z < zb[yy, xx]) | PAINTER) & vis
             zb[yy[better], xx[better]] = z[better]
             img[yy[better], xx[better]] = col[better]
         imgs.append(img)

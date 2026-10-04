@@ -19,14 +19,14 @@ Find things here before reading code; then search (`grep -n`) instead of reading
     `own_model_json` (preview), `run_import_tool` (direct_import.py).
   - HTTP routes in `Handler` (`/api/...`; `/api/model/check|import|remove`, `/api/ownmodel/<id>`).
 - `app/creator_patch.py` – applies/removes exact-text source patches. `PROFILES` (`recompiled`,
-  `expanded`, current revision string `T3CB-PATCH-13`), `status`, `install`, `uninstall`
+  `expanded`, current revision string `T3CB-PATCH-14`), `status`, `install`, `uninstall`
   (restores from `*.t3cb-backup`), `original_text`, `_plan` (checks every edit matches once).
 - `app/expanded_patch_data.py` – the Expanded edits: `ROSTER` (src/tekken3_ttt1_roster.c),
   `MOD` (tekken3_ttt1_mod.c), `COMBAT`, `NATIVE`; each entry `(old, new, count)`. Sections are
   marked in the C text by `T3CB-PATCH-n` comments: 2 descriptors, 3 move diagnostics, 4/7 move
   key, 5/6 Mokujin, 8 strip tiles (`custom_strips`), 9 palettes (`custom_palette_tick`),
   10 own models (`custom_model`, `tekken3_custom_model_install`), 11 own textures
-  (`custom_model_check` uploads texture + CLUT), 12 several CLUT runs per texture.
+  (`custom_model_check` uploads texture + CLUT), 12 several CLUT runs per texture, 13 renderer probe options, 14 texels re-uploaded every frame.
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
 - `app/expanded_custom.py` (venv) – writes portrait pack, name plate, customs.txt (`install`,

@@ -129,8 +129,10 @@ def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, ce
     live = game / "character-builder" / "live"
     # the renderer probe (patch 13): 64 calls (about two frames of both players) out of every
     # 1500, over the whole fight
-    env = {"TEKKEN3_NATIVE_PROBE": str(live / "probe.bin"), "TEKKEN3_NATIVE_PROBE_START": "300",
-           "TEKKEN3_NATIVE_PROBE_EVERY": "1500", "TEKKEN3_NATIVE_PROBE_CALLS": "60000"} if probe else {}
+    env = {"TEKKEN3_NATIVE_PROBE": str(live / "probe.bin"),
+           "TEKKEN3_NATIVE_PROBE_START": os.environ.get("T3LIVE_PROBE_START", "300"),
+           "TEKKEN3_NATIVE_PROBE_EVERY": "1500",
+           "TEKKEN3_NATIVE_PROBE_CALLS": os.environ.get("T3LIVE_PROBE_CALLS", "60000")} if probe else {}
     for old in live.glob("probe.bin*"):
         old.unlink()
     g = Game(game, visible, env)

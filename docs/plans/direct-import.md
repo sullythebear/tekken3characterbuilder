@@ -123,4 +123,9 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   at 5x density and its own 16-colour palettes (`face_tris` -> `quantise_groups(own=...)`);
   triangles hanging on bones with no Tekken part (cloth, props: 144 on Medea) stay out of the
   shell. Re-imported through the app (992 triangles, 54 s), checked in game.
+- User test 2026-10-04 16:31: textures coming and going at the crotch and in the hair, thin
+  hands and forearms. Causes and fixes: the donor's face texture reload (patch 14, above);
+  thin round parts shrank between surface points (vertices pushed out by their faces' mean gap)
+  and are thicker on Namco's fighters too (reduced models: forearms x1.25, hands x1.35 about the
+  bone). Re-imported through the app (43 s), checked in game with the rebuilt game.
 

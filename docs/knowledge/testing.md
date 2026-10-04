@@ -90,4 +90,12 @@ textured), `stock.py` (a stock model with textures and wireframe).
   file (.fbx/.glb) with its own textures, to compare an import with what it should look like.
 - probe_render drops incoherent probe frames (joints not at their parent's offset, second layers
   off their row): those showed fake torn heads and arms.
+- VRAM snapshot: `T3LIVE_PROBE_START=N T3LIVE_PROBE_CALLS=1000 python tools/t3live.py fight
+  --probe` writes `live/probe.bin.0.vram` (1024 x 512 halfwords) after N + 1000 renderer calls;
+  compare the player's band (x 384, y player * 256) and CLUT rows (504 + player * 4 + id >> 6)
+  with the model file.
+- `PAINTER=16 probe_render.py ...`: polygons drawn by ordering-table slot (mean z / 16, last
+  inserted first) without a depth buffer, as the PlayStation; diff against the normal render.
+- The debug build must be rebuilt after patch changes: `cmake --build build-opt-dbg --target
+  psx-runtime` with the toolchain on PATH.
 
