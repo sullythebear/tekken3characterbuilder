@@ -15,3 +15,5 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
 - **tested** Compare an import with its donor in the *same* in-game frames: run a fight with the
   donor model (move the fighter's model.bin aside), then render both models with that probe
   (`probe_render.py --live DIR`). Renders of the import alone hid the head tilt.
+- **tested** A mean colour error says little about palettes: 17/765 on average hid speckles of
+  the wrong hue. Render the quantised texture on the mesh and look, before blaming geometry.
