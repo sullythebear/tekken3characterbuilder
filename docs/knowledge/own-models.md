@@ -152,4 +152,15 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
 - A reduced model keeps the winding of its voxel surface per face (one global in/out decision):
   passing the winding along neighbours crossed edges where two sheets touch (a thin collar) and
   turned patches inside out (a hole on top of the hair).
+- **tested** (offline decode of model.bin, live fight renders; user report 2026-10-05) A chart has
+  one 16-colour palette (CLUT per polygon, palette per UV island). Charts split by normal only
+  spanned trousers, knee pad, boot and calf: the trousers got orange/red speckles and pink bands
+  that looked like holes (right thigh, knees), although the bake itself was clean. Found by
+  decoding the game texture per polygon (`cache/medea/uvdecode.py`: matches the bake in UV
+  space) and rendering it on the reduced mesh. Fix: faces get a material label (k-means of
+  their source colour in Lab, k=8, neighbour majority twice) and charts never mix labels (the
+  face keeps its charts whole); reduced models quantise in Lab (`quantise_groups(lab_=True)`).
+  UVs live per polygon corner, so more charts cost no vertex slots, only gutter space (~220
+  charts, fewer quads: 35.5 bytes of GPU packets per triangle). The packer's FFTs use sizes
+  rounded to 32 (odd sizes were 4x slower): packing 28 s -> 8 s.
 

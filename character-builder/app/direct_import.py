@@ -298,11 +298,11 @@ def build(root: Path, model: int, path: Path, log=print):
     if len(src["T"]) <= REDUCE_ABOVE:
         return _build(root, model, src, log)
     import reduce as RD
-    # a first guess from what reduced models need (flat quads included): ~34 bytes of GPU packets
+    # a first guess from what reduced models need (flat quads included): ~35.5 bytes of GPU packets
     # and ~25.5 bytes of model per triangle; then 7 % fewer per failed try
     rid = X.FIRST_MODEL_RECORD + 4 * model
     slot = len(X.records(root, [rid])[rid])
-    target = int(min(MI.MAX_PACKET_BYTES / 34.0, slot / 25.5) * 0.97)
+    target = int(min(MI.MAX_PACKET_BYTES / 35.5, slot / 25.5) * 0.97)
     for k in range(6):
         low = RD.reduce(src, target, log=log)
         try:
@@ -605,7 +605,8 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     # group islands into CLUTs by colour
     # a reduced model's face islands get palettes of their own (16 colours each), as Namco's faces
     face_isl = sorted({isl[i] for i in src.get("face_tris", []) if i < len(isl)})[:4]
-    idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1), own=face_isl)
+    idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1), own=face_isl,
+                                             lab_=bool(src.get("reduced")))
     band = TB.band4(np.where(owner >= 0, idx, 0))
     # CLUT ids: row 1 from 64 (the donor's 4-bit row) then row 2 from 128
     cid = [64 + k if k < 16 else 128 + (k - 16) for k in range(len(palette) // 16)]

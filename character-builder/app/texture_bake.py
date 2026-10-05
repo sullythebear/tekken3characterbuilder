@@ -375,7 +375,17 @@ def ps1_colour(r, g, b):
     return c or 0x0421                     # 0x0000 is transparent on the PS1
 
 
-def _palette16(pixels):
+def lab(rgb):
+    """sRGB (0..255) -> CIE Lab: colour distances as the eye sees them."""
+    c = np.asarray(rgb, float) / 255
+    c = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+    xyz = c @ np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]]).T
+    xyz = xyz / np.array([0.9505, 1.0, 1.089])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[:, 1] - 16, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], 1)
+
+
+def _palette16(pixels, lab_=False):
     from PIL import Image
     im = Image.fromarray(pixels.reshape(1, -1, 3).astype(np.uint8), "RGB")
     q = im.quantize(colors=16, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
@@ -389,22 +399,25 @@ def _palette16(pixels):
     pts = pixels.reshape(-1, 3).astype(float)
     if len(pts) > 20000:
         pts = pts[np.random.default_rng(0).choice(len(pts), 20000, replace=False)]
+    sp = lab(pts) if lab_ else pts
     for _ in range(8):
-        k = ((pts[:, None, :] - pal[None]) ** 2).sum(2).argmin(1)
+        k = ((sp[:, None, :] - (lab(pal) if lab_ else pal)[None]) ** 2).sum(2).argmin(1)
         for j in range(16):
             if (k == j).any():
                 pal[j] = pts[k == j].mean(0)
     return pal
 
 
-def _nearest(pixels, pal):
+def _nearest(pixels, pal, lab_=False):
+    if lab_:                                  # as the eye sees it: beige never turns salmon
+        pixels, pal = lab(pixels), lab(np.asarray(pal, float))
     d = ((pixels[:, None, :] - pal[None, :, :]) ** 2).sum(2)
     return d.argmin(1), d.min(1)
 
 
-def quantise_groups(rgb, owner, groups: int, own=()):
+def quantise_groups(rgb, owner, groups: int, own=(), lab_=False):
     """4-bit texels: charts grouped by colour, a 16-colour palette per group; the charts in `own`
-    (the face) get a palette of their own, as Namco's faces do.
+    (the face) get a palette of their own, as Namco's faces do. lab_: colour distances in Lab.
     -> (indices 0..15 per texel, PS1 palette of groups x 16 colours, group of every chart)."""
     nchart = int(owner.max()) + 1
     own = [c for c in own if c < nchart][:max(0, groups - 1)]
@@ -413,19 +426,21 @@ def quantise_groups(rgb, owner, groups: int, own=()):
         sub = np.full(owner.shape, -1)
         for i, c in enumerate(rest):
             sub[owner == c] = i
-        idx, palette, g_rest = quantise_groups(rgb, sub, groups - len(own)) if rest else (np.zeros(owner.shape, np.uint8), [], [])
+        idx, palette, g_rest = quantise_groups(rgb, sub, groups - len(own), lab_=lab_) if rest else (np.zeros(owner.shape, np.uint8), [], [])
         g = np.zeros(nchart, dtype=int)
         for i, c in enumerate(rest):
             g[c] = g_rest[i]
         for c in own:
             sel = owner == c
-            pal = _palette16(rgb[sel].astype(float)) if sel.any() else np.full((16, 3), 128.0)
+            pal = _palette16(rgb[sel].astype(float), lab_) if sel.any() else np.full((16, 3), 128.0)
             g[c] = len(palette) // 16
-            idx[sel] = _nearest(rgb[sel].astype(float), pal)[0]
+            idx[sel] = _nearest(rgb[sel].astype(float), pal, lab_)[0]
             palette = palette + [ps1_colour(*col) for col in pal]
         return idx, palette, g
     px = [rgb[owner == c].astype(float) for c in range(nchart)]
     mean = np.array([p.mean(0) if len(p) else np.zeros(3) for p in px])
+    if lab_:
+        mean = lab(mean)
     weight = np.array([len(p) for p in px], dtype=float)
     groups = max(1, min(groups, int((weight > 0).sum())))
     # k-means on the charts' mean colours, then refined on the real palettes
@@ -442,19 +457,19 @@ def quantise_groups(rgb, owner, groups: int, own=()):
         out = []
         for k in range(groups):
             members = [px[c] for c in range(nchart) if g[c] == k and len(px[c])]
-            out.append(_palette16(np.concatenate(members)) if members else np.full((16, 3), 128.0))
+            out.append(_palette16(np.concatenate(members), lab_) if members else np.full((16, 3), 128.0))
         return out
     for _ in range(3):
         pals = palettes()
         for c in range(nchart):
             if len(px[c]):
-                g[c] = int(np.argmin([_nearest(px[c], pal)[1].sum() for pal in pals]))
+                g[c] = int(np.argmin([_nearest(px[c], pal, lab_)[1].sum() for pal in pals]))
     pals = palettes()
     idx = np.zeros(owner.shape, dtype=np.uint8)
     for c in range(nchart):
         sel = owner == c
         if sel.any():
-            idx[sel] = _nearest(rgb[sel].astype(float), pals[g[c]])[0]
+            idx[sel] = _nearest(rgb[sel].astype(float), pals[g[c]], lab_)[0]
     palette = [ps1_colour(*col) for pal in pals for col in pal]
     return idx, palette, g
 

@@ -18,6 +18,7 @@ import numpy as np
 
 import remesh as RM
 import decimate as DC
+import texture_bake as TB
 
 ATLAS = 256
 GUTTER = 2
@@ -321,6 +322,43 @@ def _vertex_normals(V, F):
     return n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
 
 
+def _materials(V, F, colour, area, k=8):
+    """A material label per face: k-means of the faces' colours (Lab), then each face takes its
+    neighbours' majority label twice (no single-face islands). A chart holds one material, so its
+    16-colour palette is spent on one cloth (a leg chart over trousers, knee pad, boot and calf
+    had to share 16 colours: orange and red speckles on the trousers)."""
+    lab = TB.lab(colour)
+    rng = np.random.default_rng(0)
+    w = area / area.sum()
+    centre = [lab[rng.choice(len(lab), p=w)]]
+    for _ in range(1, k):                     # k-means++ seeds
+        d = np.min([((lab - c) ** 2).sum(1) for c in centre], 0) * w
+        centre.append(lab[rng.choice(len(lab), p=d / d.sum())] if d.sum() > 0 else lab[0])
+    centre = np.array(centre)
+    for _ in range(20):
+        lbl = ((lab[:, None] - centre[None]) ** 2).sum(2).argmin(1)
+        for j in range(k):
+            if (lbl == j).any():
+                centre[j] = np.average(lab[lbl == j], axis=0, weights=area[lbl == j] + 1e-12)
+    edge_faces = {}
+    for f, t in enumerate(F):
+        for i in range(3):
+            edge_faces.setdefault((min(t[i], t[(i + 1) % 3]), max(t[i], t[(i + 1) % 3])), []).append(f)
+    nb = [[] for _ in F]
+    for fs in edge_faces.values():
+        for a in fs:
+            nb[a] += [b for b in fs if b != a]
+    for _ in range(2):
+        new = lbl.copy()
+        for f in range(len(F)):
+            if nb[f]:
+                votes = np.bincount(lbl[nb[f]], minlength=k)
+                if votes.max() >= 2 and votes[lbl[f]] == 0:
+                    new[f] = votes.argmax()
+        lbl = new
+    return lbl
+
+
 def _charts(V, F, head, limit=65.0):  # head: per-face class, never mixed in a chart
     """Faces grouped by similar normals (region growing over shared edges), at most `limit`
     degrees from the chart's first face; head and body faces never share a chart."""
@@ -398,19 +436,24 @@ def _pack(V, F, chart, fn, density):
         for c in order:
             fs, uv = proj[c]
             best = None
+            cands = []
             for rot in (0, 1):
                 u = uv * s
                 if rot:
                     u = np.stack([u[..., 1], np.ptp(u[..., 0]) - u[..., 0]], -1)
                 u = u + GUTTER
                 h, w = int(np.ceil(u[..., 1].max())) + GUTTER + 1, int(np.ceil(u[..., 0].max())) + GUTTER + 1
-                if h > ATLAS or w > ATLAS:
-                    continue
+                if h <= ATLAS and w <= ATLAS:
+                    cands.append((rot, u, h, w))
+            # one FFT size for both turns, rounded up to a multiple of 32 (FFT sizes with large
+            # prime factors are several times slower)
+            size = tuple(-(-(ATLAS + max(cd[k] for cd in cands)) // 32) * 32 for k in (2, 3)) if cands else None
+            A = np.fft.rfft2(occ.astype(float), s=size) if cands else None
+            for rot, u, h, w in cands:
                 m = _mask(u, (h, w))
                 # overlap count of the mask at every offset: correlation by FFT
-                A = np.fft.rfft2(occ.astype(float), s=(ATLAS + h, ATLAS + w))
-                B = np.fft.rfft2(m[::-1, ::-1].astype(float), s=(ATLAS + h, ATLAS + w))
-                cor = np.fft.irfft2(A * B, s=(ATLAS + h, ATLAS + w))[h - 1:ATLAS, w - 1:ATLAS]
+                B = np.fft.rfft2(m[::-1, ::-1].astype(float), s=size)
+                cor = np.fft.irfft2(A * B, s=size)[h - 1:ATLAS, w - 1:ATLAS]
                 free = np.argwhere(cor < 0.5)
                 if not len(free):
                     continue
@@ -427,12 +470,17 @@ def _pack(V, F, chart, fn, density):
     area = sum(abs(np.cross(uv[:, 1] - uv[:, 0], uv[:, 2] - uv[:, 0])).sum() / 2 for _, uv in proj.values())
     s0 = np.sqrt(0.75 * ATLAS * ATLAS / max(area, 1e-12))
     lo, hi = s0 * 0.6, s0 * 1.5
-    while place(lo) is None:
+    spots = place(lo)
+    while spots is None:
         lo, hi = lo * 0.8, lo
+        spots = place(lo)
     for _ in range(6):
         mid = (lo + hi) / 2
-        lo, hi = (mid, hi) if place(mid) is not None else (lo, mid)
-    spots = place(lo)
+        got = place(mid)
+        if got is not None:
+            lo, spots = mid, got
+        else:
+            hi = mid
     UV = np.zeros((len(F), 3, 2))
     for c, (fs, _) in proj.items():
         x, y, u = spots[c]
@@ -608,7 +656,18 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     head = cen[:, 1] > neck_y
     face = head & (fn0[:, 2] > 0.3) & (cen[:, 1] < neck_y + 0.78 * (top - neck_y))
     kind = np.where(face, 2, np.where(head, 1, 0))
-    chart, fn = _charts(V, F, kind)
+    # each face's colour on the original (nearest surface point, 4 samples): charts split by
+    # material as well (the face keeps its own charts whole)
+    colour = np.zeros((len(F), 3))
+    for bc in ((1 / 3, 1 / 3, 1 / 3), (2 / 3, 1 / 6, 1 / 6), (1 / 6, 2 / 3, 1 / 6), (1 / 6, 1 / 6, 2 / 3)):
+        h = S.lookup(np.einsum("k,fkd->fd", np.asarray(bc), V[F]))
+        tri = np.where(opaque)[0][np.maximum(h[:, 0], 0).astype(int)]
+        u, v = h[:, 1:2], h[:, 2:3]
+        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
+        colour += _texel(textures, MAT[tri], uv)[:, :3] / 4
+    farea = np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1) / 2
+    material = np.where(kind == 2, 0, _materials(V, F, colour, farea))
+    chart, fn = _charts(V, F, kind * 16 + material)
     density = np.choose(kind, [1.0, 2.0, 5.0])
     UVl = _pack(V, F, chart, fn, density)
     lap("charts and packing")
