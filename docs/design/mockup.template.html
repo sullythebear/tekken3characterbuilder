@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dizzy Character Creator</title>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #07080d; --panel: #12141d; --panel-2: #1a1d29; --line: #2c3142; --text: #e9ebf2; --muted: #8a90a6;
+  --ok: #3fbf8f; --bad: #e5484d;
+  --gold: #ffcf3a; --fire-1: #fff27a; --fire-2: #ffb21f; --fire-3: #ff5a12; --fire-4: #c81d0a;
+  --hp-red: #d8261c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Chakra Petch", system-ui, sans-serif; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+.app { max-width: 1280px; margin: 0 auto; padding: 18px 20px 0; }
+
+/* header: chrome + fire title, PlayStation button colours */
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--line); padding-bottom: 12px; }
+.logo { font-family: "Russo One", sans-serif; font-style: italic; line-height: .9; transform: skewX(-6deg); }
+.logo .dizzy { font-size: 64px; letter-spacing: 2px;
+  background: linear-gradient(180deg, #ffffff 0%, #c9ced9 38%, #5d6273 52%, #e9ecf2 60%, #9aa0b0 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-text-stroke: 1.5px #0b0c12; filter: drop-shadow(3px 3px 0 #000); }
+.logo .sub { display: block; font-size: 22px; letter-spacing: 6px; margin-top: 4px;
+  background: linear-gradient(180deg, var(--fire-1), var(--fire-2) 45%, var(--fire-3) 75%, var(--fire-4));
+  -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(2px 2px 0 #000); }
+
+main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 340px; gap: 18px; padding: 18px 0; }
+h2 { font-family: "Russo One", sans-serif; font-style: italic; font-weight: 400; font-size: 18px; letter-spacing: 2px;
+  margin: 0 0 12px; color: var(--gold); text-shadow: 2px 2px 0 #000; text-transform: uppercase; }
+
+/* fighter select grid, as Tekken 3's select screen */
+.select { background: var(--panel); border: 2px solid var(--line); padding: 14px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.slot { aspect-ratio: 1; background: #181a24; border: 3px solid #333849; position: relative; overflow: hidden; cursor: pointer; }
+.slot img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; display: block; }
+.slot .nm { position: absolute; left: 0; right: 0; bottom: 0; font: 700 11px "Chakra Petch"; text-align: center; letter-spacing: 1px;
+  background: rgba(0,0,0,.75); padding: 1px 0; }
+.slot.on { border-color: var(--gold); outline: 3px solid var(--hp-red); outline-offset: -6px; }
+.slot.on::after { content: "1P"; position: absolute; top: 2px; left: 4px; font: 700 12px "Russo One"; color: #4aa3ff; text-shadow: 1px 1px 0 #000; }
+.slot.new { display: grid; place-items: center; color: var(--muted); font-size: 34px; border-style: dashed; }
+.slot.empty { opacity: .35; }
+.memo { margin-top: 14px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.memo b { color: var(--text); }
+
+/* stage */
+.stage { position: relative; min-height: 600px; border: 2px solid var(--line); overflow: hidden;
+  background: radial-gradient(ellipse at 50% 85%, #3a2a1a 0%, #1a130d 35%, transparent 60%), linear-gradient(180deg, #0d1424 0%, #1b2338 55%, #2a2016 56%, #120d08 100%); }
+.hud { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; gap: 12px; }
+.bar { flex: 1; height: 22px; border: 2px solid #f2f2f2; background: #2a0606; position: relative; transform: skewX(-12deg); box-shadow: 0 0 0 2px #000; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 78%; background: linear-gradient(180deg, #ffe46b, var(--fire-2) 60%, #d67a00); }
+.bar i.red { background: linear-gradient(180deg, #ff6b5f, var(--hp-red)); }
+.hud .round { font: 34px "Russo One"; font-style: italic; color: #fff; text-shadow: 2px 2px 0 #000; }
+.plate { position: absolute; top: 46px; left: 16px; background: var(--hp-red); color: #fff; font: italic 16px "Russo One"; letter-spacing: 2px;
+  padding: 1px 18px 1px 10px; clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%); }
+.plate.r { left: auto; right: 16px; background: #2b3a8f; clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%); padding: 1px 10px 1px 18px; }
+.fighter { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); height: 460px; image-rendering: pixelated; filter: drop-shadow(0 12px 6px rgba(0,0,0,.55)); }
+.shadow { position: absolute; left: 50%; bottom: 40px; width: 180px; height: 26px; transform: translateX(-50%); background: rgba(0,0,0,.55); border-radius: 50%; }
+.caption { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font: italic 30px "Russo One"; letter-spacing: 3px;
+  background: linear-gradient(180deg, var(--fire-1), var(--fire-2) 50%, var(--fire-3)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(2px 2px 0 #000); }
+.views { position: absolute; left: 0; right: 0; top: 82px; display: flex; justify-content: center; gap: 6px; }
+.views button { font: 600 12px "Chakra Petch"; color: var(--text); background: rgba(0,0,0,.6); border: 1px solid #555; padding: 4px 10px; cursor: pointer; }
+.views button.on { border-color: var(--gold); color: var(--gold); }
+
+/* right panel: memory-card style tabs */
+.panel { background: var(--panel); border: 2px solid var(--line); display: flex; flex-direction: column; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 2px solid var(--line); }
+.tabs button { font: 700 13px "Chakra Petch"; letter-spacing: 1px; color: var(--muted); background: transparent; border: 0; padding: 10px 0; cursor: pointer; text-transform: uppercase; }
+.tabs button.on { color: #10121a; background: linear-gradient(180deg, #f3f4f8, #b9bdc9); }
+.body { padding: 16px; display: grid; gap: 14px; }
+.card { background: var(--panel-2); border: 1px solid var(--line); padding: 12px; }
+.card .k { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+.card .v { font-weight: 700; font-size: 16px; }
+.stamp { display: inline-flex; align-items: center; gap: 8px; font: italic 15px "Russo One"; letter-spacing: 1px; padding: 6px 12px;
+  color: #0b2e20; background: var(--ok); transform: rotate(-2deg); box-shadow: 3px 3px 0 #000; }
+.stamp.lock { color: #fff; background: var(--bad); }
+.row { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 0; border-bottom: 1px dashed #2a2e3d; }
+.row:last-child { border: 0; }
+select { width: 100%; font: 600 14px "Chakra Petch"; color: var(--text); background: #0d0f16; border: 1px solid var(--line); padding: 7px; }
+.progress { position: relative; height: 18px; border: 2px solid #eee; background: #2a0606; transform: skewX(-12deg); box-shadow: 0 0 0 2px #000; }
+.progress i { position: absolute; inset: 0 auto 0 0; width: 64%; background: linear-gradient(180deg, #ffe46b, var(--fire-2) 60%, #d67a00); }
+.small { font-size: 12px; color: var(--muted); }
+.btn { font: italic 18px "Russo One"; letter-spacing: 2px; color: #fff; text-transform: uppercase; border: 0; padding: 10px; cursor: pointer;
+  background: linear-gradient(180deg, #ff7a3a, var(--fire-3) 55%, var(--fire-4)); box-shadow: 0 0 0 2px #000, 4px 4px 0 #000; transform: skewX(-8deg); }
+
+/* bottom: PlayStation button prompts */
+footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 2px solid var(--line); padding: 12px 0 18px; }
+.prompts { display: flex; gap: 12px; flex-wrap: wrap; }
+.pbtn { font: italic 15px "Russo One"; letter-spacing: 2px; text-transform: uppercase; color: #10121a; border: 0; padding: 7px 18px; cursor: pointer;
+  background: linear-gradient(180deg, #ffffff, #c9ced9 45%, #8d93a3 55%, #dfe2ea); box-shadow: 0 0 0 2px #000, 3px 3px 0 #000; transform: skewX(-8deg); }
+.pbtn.play { color: #fff; background: linear-gradient(180deg, #ff7a3a, var(--fire-3) 55%, var(--fire-4)); }
+.status { font-size: 13px; color: var(--muted); }
+.status em { color: var(--ok); font-style: normal; font-weight: 700; }
+
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } .stage { min-height: 520px; } .fighter { height: 400px; } }
+@media (max-width: 520px) { .logo .dizzy { font-size: 40px; } .logo .sub { font-size: 14px; letter-spacing: 3px; } </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo"><span class="dizzy">DIZZY</span><span class="sub">CHARACTER CREATOR</span></div>
+  </header>
+
+  <main>
+    <section class="select">
+      <h2>Select fighter</h2>
+      <div class="grid">
+        <div class="slot on"><img alt="" src="data:image/png;base64,{{medea}}"><span class="nm">MEDEA</span></div>
+        <div class="slot"><img alt="" src="data:image/png;base64,{{tommy}}"><span class="nm">TOMMY</span></div>
+        <div class="slot"><img alt="" src="data:image/png;base64,{{test}}"><span class="nm">TEST</span></div>
+        <div class="slot new" title="New fighter">+</div>
+        <div class="slot empty"></div><div class="slot empty"></div>
+      </div>
+      <div class="memo">
+        <div class="row"><span>Style</span><b>Nina</b></div>
+        <div class="row"><span>Custom page</span><b>slot 3 of 21</b></div>
+        <div class="row"><span>Saved</span><b>05-10 13:05</b></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="hud"><div class="bar"><i></i></div><div class="round">19</div><div class="bar" style="transform: skewX(12deg) scaleX(-1)"><i class="red" style="width:100%"></i></div></div>
+      <div class="plate">MEDEA</div><div class="plate r">NINA STYLE</div>
+      <div class="shadow"></div>
+      <img class="fighter" alt="Medea, PS1 render" src="data:image/png;base64,{{medea_body}}">
+      <div class="views"><button class="on">PS1 view</button><button>Turn</button><button>Fight pose</button></div>
+      <div class="caption">READY</div>
+    </section>
+
+    <section class="panel">
+      <div class="tabs"><button>Fighter</button><button>Colours</button><button class="on">3D model</button></div>
+      <div class="body">
+        <div><span class="stamp">✓ RIGGED · READY</span></div>
+        <div class="card">
+          <div class="k">Model file</div><div class="v">test.fbx</div>
+          <div class="row"><span>Triangles</span><b>17 754 → 872</b></div>
+          <div class="row"><span>Skeleton</span><b>69 bones</b></div>
+          <div class="row"><span>Texture</span><b>embedded</b></div>
+        </div>
+        <div>
+          <div class="k small" style="margin-bottom:6px">REPLACES</div>
+          <select><option>Costume 1</option><option>Costume 2</option></select>
+        </div>
+        <div>
+          <div class="small" style="margin-bottom:8px">Baking texture… 48 s</div>
+          <div class="progress"><i></i></div>
+        </div>
+        <button class="btn">Import model</button>
+        <div class="small">Locked models show <span class="stamp lock" style="font-size:11px;padding:2px 6px">🔒 NOT RIGGED</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="prompts">
+      <button class="pbtn">Save</button>
+      <button class="pbtn">Build</button>
+      <button class="pbtn">Test</button>
+      <button class="pbtn play">Play</button>
+    </div>
+    <div class="status">Tekken 3 Expanded · patch <em>T3CB-PATCH-14</em> · up to date</div>
+  </footer>
+</div>
+</body>
+</html>

@@ -148,3 +148,7 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    winding problem of the non-reduced path) and a long hair strand sticking out backwards.
 3. Release builder 0.3.8, renamed **Dizzy Character Creator**, restyled after the PS1 and
    Tekken 3 look (the user's wish), with model requirements explained in the app.
+   Mockup approved 2026-10-15: `docs/design/mockup.template.html` (renders go in through
+   `{{medea}}` etc.; the filled page is not committed). Chrome/fire titles, select grid,
+   fight-HUD stage, stamps and health-bar progress; **no PlayStation button symbols**
+   (the user: they confuse), plain chrome buttons instead; no real logos or fonts.
