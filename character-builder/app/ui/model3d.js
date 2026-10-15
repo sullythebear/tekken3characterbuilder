@@ -86,7 +86,7 @@ const T3Model = (() => {
     angle.className = "angle";
     const auto = document.createElement("button");
     auto.type = "button"; auto.className = "btn btn-ghost"; auto.textContent = "Auto";
-    auto.title = "Let the builder pick the steepest angle that clears the body";
+    auto.title = "Let the creator pick the steepest angle that clears the body";
     const sync = () => {
       const fold = c.mode === "fold";
       range.hidden = angle.hidden = !fold;
@@ -150,7 +150,7 @@ const T3Model = (() => {
     for (let i = 0; i < Math.max(n, 1); i++) {
       const o = document.createElement("option");
       o.value = String(i);
-      o.textContent = `Costume ${i + 1}` + ([" (square)", " (cross)", " (Start)"][i] || "");
+      o.textContent = `Costume ${i + 1}`;
       select.append(o);
     }
     select.value = keep && Number(keep) < n ? keep : String(own ? c.own_model.costume : 0);

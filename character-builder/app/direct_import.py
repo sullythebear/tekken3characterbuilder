@@ -568,7 +568,7 @@ def inspect(path: Path) -> dict:
         info["notes"].append(f"The bone names are not standard: {len(src['renamed'])} bones were recognised "
                              "from the skeleton's shape (hips, legs, arms, head).")
     if info["triangles"] > REDUCE_ABOVE:
-        info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the builder "
+        info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the creator "
                              "reduces it to PS1 size and bakes a new 256 x 256 texture (1 to 3 minutes).")
         info["reduce"] = True
     if not info["textured"]:

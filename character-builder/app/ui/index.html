@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="t3cb-token" content="{{TOKEN}}">
-<title>Character Builder – Tekken 3 Recompiled</title>
+<title>Dizzy Character Creator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=Saira+Condensed:ital,wght@1,600;1,800;1,900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Russo+One&display=swap">
 <link rel="stylesheet" href="/ui/style.css">
 <script src="/ui/costumes.js" defer></script>
 <script src="/ui/app.js" defer></script>
@@ -15,18 +15,18 @@
 <body>
 <header class="hud">
   <button class="gauge gauge-p1" id="project-button" type="button" aria-haspopup="dialog">
-    <span class="gauge-label"><span class="sym" id="project-sym" aria-hidden="true">□</span><span id="project-label">Project</span></span>
+    <span class="gauge-label"><span class="sym" id="project-sym" aria-hidden="true"></span><span id="project-label">Project</span></span>
     <span class="bar"><span class="fill" id="project-fill"></span></span>
     <span class="gauge-sub" id="project-text">Looking for your game folder…</span>
   </button>
 
   <div class="title-box">
+    <h1 class="title"><span class="logo-main">Dizzy</span><span class="logo-sub">Character Creator</span></h1>
     <span class="title-game" id="title-game">Tekken 3</span>
-    <h1 class="title">Character Builder</h1>
   </div>
 
   <div class="gauge gauge-p2" id="build-gauge">
-    <span class="gauge-label"><span id="build-label">Build</span><span class="sym" id="build-sym" aria-hidden="true">□</span></span>
+    <span class="gauge-label"><span id="build-label">Build</span><span class="sym" id="build-sym" aria-hidden="true"></span></span>
     <span class="bar"><span class="fill" id="build-fill"></span></span>
     <span class="gauge-sub" id="build-gauge-text">Waiting</span>
   </div>
@@ -34,7 +34,7 @@
 
 <main class="layout">
   <nav class="menu" aria-label="Your fighters">
-    <h2 class="menu-title">Your fighters</h2>
+    <h2 class="menu-title">Select fighter</h2>
     <ul class="roster" id="roster"></ul>
     <p class="empty" id="roster-empty">No fighters yet. Create one and save it to add it here.</p>
     <section class="unlinked" id="unlinked" aria-labelledby="unlinked-title" hidden>
@@ -123,7 +123,24 @@
           <legend>Own 3D model</legend>
           <p class="hint">Give your fighter its own PS1-style 3D model. It must be <strong>rigged</strong>: a skeleton
             with skin weights (for example from Mixamo: upload, auto-rig, then download as FBX Binary in T-pose).
-            The builder fits it to the fighting style's skeleton and replaces the style's model on the costume you choose.</p>
+            The creator fits it to the fighting style's skeleton and replaces the style's model on the costume you choose.</p>
+          <details class="model-help">
+            <summary>What makes a model work well?</summary>
+            <ul>
+              <li><strong>Rigged human shape:</strong> a skeleton with a head, two arms and two legs, and every vertex
+                weighted to a bone. Mixamo, Character Creator and most game rigs work as they are; unusual bone names
+                are recognised from the skeleton's shape.</li>
+              <li><strong>Standing in T-pose or A-pose</strong>, arms away from the body.</li>
+              <li><strong>File:</strong> .fbx (FBX Binary) or .glb, up to 16 MB, with the texture embedded. Models with
+                only material colours work too.</li>
+              <li><strong>Any size:</strong> Tekken 3 fighters have 650-1100 triangles. A bigger model is reduced to that
+                size and gets a new texture made for it (1 to 3 minutes).</li>
+              <li><strong>Hair, tails and horns</strong> can't move on their own in Tekken 3: parts that stick out are
+                folded down for you, and you can change that per part.</li>
+              <li><strong>Clothes</strong> become part of the body shape. Long coats, capes and wide skirts move with
+                the legs, so they look best when they are short or tight.</li>
+            </ul>
+          </details>
           <div class="own-model" id="own-model" hidden>
             <p class="own-model-line" id="own-model-line"></p>
             <button class="btn btn-danger" type="button" id="model-remove">Remove model</button>
@@ -157,7 +174,7 @@
 
       <p class="form-error" id="form-error" role="alert"></p>
       <div class="form-actions">
-        <button class="btn btn-primary" type="submit" id="save"><span class="ps" aria-hidden="true">✕</span>Save fighter</button>
+        <button class="btn btn-primary" type="submit" id="save">Save fighter</button>
         <button class="btn btn-ghost" type="button" id="export" hidden>Export</button>
         <button class="btn btn-danger" type="button" id="delete" hidden>Delete</button>
       </div>
@@ -168,19 +185,19 @@
 <section class="dock" aria-label="Put your fighter in the game">
   <ol class="steps">
     <li class="step" id="step-support">
-      <div class="step-head"><span class="step-name">Creator support</span><span class="sym" aria-hidden="true">□</span></div>
+      <div class="step-head"><span class="step-name">Creator support</span><span class="sym" aria-hidden="true"></span></div>
       <span class="bar"><span class="fill"></span></span>
       <div class="step-foot"><span class="step-text">Checking…</span><button class="btn btn-ghost" type="button" id="support-button" disabled>Install</button></div>
     </li>
     <li class="step" id="step-build">
-      <div class="step-head"><span class="step-name">Build game</span><span class="sym" aria-hidden="true">□</span></div>
+      <div class="step-head"><span class="step-name">Build game</span><span class="sym" aria-hidden="true"></span></div>
       <span class="bar"><span class="fill"></span></span>
       <div class="step-foot"><span class="step-text">Waiting for step 1</span><button class="btn btn-ghost" type="button" id="build-button" disabled>Build</button></div>
     </li>
     <li class="step" id="step-play">
-      <div class="step-head"><span class="step-name">Play</span><span class="sym" aria-hidden="true">□</span></div>
+      <div class="step-head"><span class="step-name">Play</span><span class="sym" aria-hidden="true"></span></div>
       <span class="bar"><span class="fill"></span></span>
-      <div class="step-foot"><span class="step-text">Choose or save a fighter</span><span class="step-buttons"><button class="btn btn-ghost" type="button" id="test-button" disabled title="Build if needed, play, then write a test report">Test</button><button class="btn btn-primary" type="button" id="play-button" disabled><span class="ps" aria-hidden="true">✕</span>Play</button></span></div>
+      <div class="step-foot"><span class="step-text">Choose or save a fighter</span><span class="step-buttons"><button class="btn btn-ghost" type="button" id="test-button" disabled title="Build if needed, play, then write a test report">Test</button><button class="btn btn-primary" type="button" id="play-button" disabled>Play</button></span></div>
     </li>
   </ol>
   <details class="console" id="report-panel" hidden>
@@ -205,13 +222,13 @@
     <div class="form-actions">
       <button class="btn btn-primary" type="button" id="root-save">Use folder</button>
       <button class="btn btn-ghost" type="button" id="sync-customs" hidden>Refresh Custom page files</button>
-      <button class="btn btn-ghost" type="button" id="support-remove">Remove the builder's changes</button>
+      <button class="btn btn-ghost" type="button" id="support-remove">Remove the creator's changes</button>
       <button class="btn btn-ghost" value="close">Close</button>
     </div>
   </form>
 </dialog>
 <div class="flash" id="flash" aria-hidden="true"><span id="flash-text">READY</span></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer class="foot">Character Builder {{VERSION}}. Unofficial fan project, works with your own Tekken 3 disc.</footer>
+<footer class="foot">Dizzy Character Creator {{VERSION}}. Unofficial fan project, works with your own Tekken 3 disc.</footer>
 </body>
 </html>

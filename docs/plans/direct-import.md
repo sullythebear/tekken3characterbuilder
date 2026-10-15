@@ -164,3 +164,10 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    `{{medea}}` etc.; the filled page is not committed). Chrome/fire titles, select grid,
    fight-HUD stage, stamps and health-bar progress; **no PlayStation button symbols**
    (the user: they confuse), plain chrome buttons instead; no real logos or fonts.
+   Done 2026-10-16 (overnight): builder 0.3.8 renamed Dizzy Character Creator (UI, title,
+   server messages, README, `Start Dizzy Character Creator.cmd`; the folder stays
+   `character-builder/`), restyled (charcoal panels, chrome DIZZY / fire CHARACTER CREATOR logo,
+   Russo One, roster as a select grid with 1P cursor, silver tabs, chrome and fire buttons,
+   status lamps instead of PS symbols, costume names without button names), "What makes a model
+   work well?" help on the 3D model tab; narrow screens without sideways scroll. Checked in the
+   browser pane (desktop and 375 px, no console errors). Not released yet: the user decides.

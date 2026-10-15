@@ -1,4 +1,4 @@
-"""Tekken 3 Recompiled Character Builder - local server.
+"""Dizzy Character Creator (Tekken 3 Recompiled / Expanded) - local server.
 
 Runs on the Python bundled with the Easy Setup, standard library only.
 Listens on 127.0.0.1 only and accepts state-changing requests only with the
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.7"
+APP_VERSION = "0.3.8"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
@@ -563,7 +563,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
     library = {game_key(c["id"]): c for c in fighters}
     existing, unreadable = custom_page.read_entries(root)
     for line in unreadable:
-        warnings.append(f"customs.txt has a line the builder cannot read, kept out of the list: {line}")
+        warnings.append(f"customs.txt has a line the creator cannot read, kept out of the list: {line}")
     order = [key for key, _ in existing if key != drop]
     order += [key for key in library if key not in order and key != drop]
     donors = dict(existing)
@@ -1262,9 +1262,9 @@ def main() -> None:
     DATA.mkdir(exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print("Tekken 3 Recompiled Character Builder", APP_VERSION)
+    print("Dizzy Character Creator", APP_VERSION)
     print("Running at", url)
-    print("Close this window to stop the builder.")
+    print("Close this window to stop Dizzy Character Creator.")
     if "--no-window" not in sys.argv:
         open_window(url)
     try:

@@ -294,7 +294,7 @@ const T3Costumes = (() => {
       const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       gl.viewport(0, 0, W, H);
-      gl.clearColor(0.027, 0.05, 0.17, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.clearColor(0.04, 0.043, 0.063, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.useProgram(prog);
       for (const [name, b, size] of v.bufs) { const loc = gl.getAttribLocation(prog, name);
         gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
@@ -575,7 +575,7 @@ const T3Costumes = (() => {
     async init(options) {
       host = options;
       try { donorModels = await (await fetch("/api/models")).json(); }
-      catch { donorModels = { available: false, reason: "The builder is not responding." }; }
+      catch { donorModels = { available: false, reason: "Dizzy Character Creator is not responding." }; }
       renderPanel();
     },
     // a fighter was opened, saved or its style changed

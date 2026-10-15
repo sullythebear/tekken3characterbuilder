@@ -1,7 +1,7 @@
-# Tekken 3 Character Builder
+# Dizzy Character Creator
 
 Create your own fighters for Tekken 3 on PC: a name, a portrait, a fighting style
-taken from an existing fighter, and (later) colors, accessories, moves and models.
+taken from an existing fighter, colour variants and your own rigged 3D model.
 
 Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.3.8 | Renamed Dizzy Character Creator, restyled after the PS1 and Tekken 3. Own 3D models: upload a rigged .fbx/.glb (locked when not rigged), big models reduced to PS1 size with a baked texture, parts that stick out folded down (adjustable), bones recognised by shape, material colours. Tested in game with TOMMY, MEDEA and Rogue, plus Mixamo/glTF sample models. |
 | 0.3.7 | Costumes in 3D in the builder (standing pose, read from your own disc) and colour variants on a Colours tab: recolour every piece of clothing or accessory, the whole costume, or a scheme. A variant goes into the game as a replaced costume or as costume 3 (Start). |
 | 0.3.6 | Style layer: pick a fighting style (Striking, Grappling, Traditional, Special), each based on a Tekken 3 fighter. Copycat (Mokujin) draws another style each round (tested), holding the sword only with Yoshimitsu's style (patch T3CB-PATCH-6). |
 | 0.3.5 | Test button: build if needed, play, then a compact test report (`logs/test-report.md`) shown in the builder. |
@@ -23,7 +24,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 ## Use
 
 Copy `character-builder/` into the main folder of your game (the one with `game.toml`),
-preferably a copy of it, and run `Start Character Builder.cmd`. See
+preferably a copy of it, and run `Start Dizzy Character Creator.cmd`. See
 `character-builder/README.txt`.
 
 ## Repository

@@ -51,7 +51,7 @@ async function api(path, body) {
   };
   let response;
   try { response = await fetch(path, options); }
-  catch { throw new Error("The builder is not responding. Is the server window still open?"); }
+  catch { throw new Error("Dizzy Character Creator is not responding. Is its window still open?"); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Error ${response.status}`);
   return data;
@@ -437,7 +437,7 @@ function setStep(id, kind, text, fill) {
   const step = $(id);
   step.classList.remove("ok", "bad", "busy");
   if (kind) step.classList.add(kind);
-  step.querySelector(".sym").textContent = { ok: "△", bad: "○", busy: "□" }[kind] || "□";
+  step.querySelector(".sym").className = "sym" + (kind ? ` ${kind}` : "");
   step.querySelector(".step-text").textContent = text;
   const bar = step.querySelector(".bar");
   bar.classList.toggle("indeterminate", fill === "busy");
@@ -447,7 +447,6 @@ function setStep(id, kind, text, fill) {
 function setGauge(prefix, kind, label, text, fill) {
   const sym = $(`${prefix}-sym`);
   sym.className = "sym" + (kind ? ` ${kind}` : "");
-  sym.textContent = { ok: "△", bad: "○", busy: "□" }[kind] || "□";
   $(`${prefix}-label`).textContent = label;
   const bar = $(`${prefix}-fill`).parentElement;
   bar.classList.toggle("indeterminate", fill === "busy");
@@ -476,7 +475,7 @@ function renderSteps() {
   if (!s.jun) setStep("step-support", "bad", "Requires Jun: run the Easy Setup with Include Jun Kazama checked.");
   else if (p.installed) setStep("step-support", "ok", "Installed");
   else if (p.outdated && p.compatible) {
-    setStep("step-support", null, "Update ready for the builder's changes. Install, then build again.");
+    setStep("step-support", null, "Update ready for the creator's changes. Install, then build again.");
     supportBtn.textContent = "Update";
     supportBtn.disabled = building;
   }
@@ -533,7 +532,7 @@ function renderProject() {
     `${s.build_phase === "Configure" ? "Configuring" : "Building"}…`, s.build_progress != null ? s.build_progress : "busy");
   else if (state.lastBuild === "failed" && !s.built) setGauge("build", "bad", "Build", "Failed", 0);
   else if (s.built) setGauge("build", "ok", "Build", isExpanded() ? "Custom page ready" : "Creator support ready", 1);
-  else setGauge("build", null, "Build", s.patch.installed ? "Rebuild needed" : "Not built with the builder's support", 0);
+  else setGauge("build", null, "Build", s.patch.installed ? "Rebuild needed" : "Not built with the creator's support", 0);
   $("project-details").textContent = s && s.found
     ? `Found: ${s.root}\n${s.kind === "expanded" ? "Tekken 3 Expanded" : s.kind ? "Tekken3Recompiled" : "Unsupported project"} ${s.version || ""}. `
       + `${s.kind === "recompiled" ? `Jun ${s.jun ? "installed" : "not installed"}. ` : ""}Compiler ${s.toolchain ? "found" : "not found"}.`

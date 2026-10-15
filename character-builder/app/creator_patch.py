@@ -164,7 +164,7 @@ def _plan(root: Path, kind: str = "recompiled") -> dict:
             if found != count:
                 raise PatchError(f"This Tekken 3 Recompiled version differs in {name} "
                                  f"(expected a known piece of code {count}x, found it {found}x). "
-                                 f"The builder supports version {PROFILES[kind]['version']} of this project.")
+                                 f"Dizzy Character Creator supports version {PROFILES[kind]['version']} of this project.")
             text = text.replace(old, repl)
         new[name] = text
     return new
