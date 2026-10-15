@@ -26,8 +26,120 @@ PAIRS = MI.PAIRS
 def load(path: Path) -> dict:
     out = _load(path)
     if out.get("bones"):
+        _name_by_shape(out)
         _upright(out)
     return out
+
+
+def _name_by_shape(src: dict) -> None:
+    """Skeletons whose bone names say nothing (joint0..joint17, leg_joint_L_1): the bones Tekken
+    needs are found from the skeleton's shape and renamed as Mixamo's (Hips, LeftUpLeg, ...):
+    the two lowest chain ends are the feet, the highest the head, the two that reach furthest
+    sideways the hands; toes point forwards, which tells left from right. Nothing changes when
+    the names already cover every needed bone; src["renamed"] lists what was renamed."""
+    bones = src["bones"]
+    have = {MI._part(b["name"]) for b in bones}
+    if all(v in have for v in NEEDED.values()):
+        return
+    n = len(bones)
+    J = np.array([[b["matrix"][k][3] for k in range(3)] for b in bones], float)
+    kids = [[] for _ in range(n)]
+    for i, b in enumerate(bones):
+        if b["parent"] >= 0:
+            kids[b["parent"]].append(i)
+    def path_up(i):
+        out = [i]
+        while bones[out[-1]]["parent"] >= 0:
+            out.append(bones[out[-1]]["parent"])
+        return out
+    leaves = [i for i in range(n) if not kids[i]]
+    if len(leaves) < 5:
+        return
+    P = np.asarray(src["P"], float)
+    ext = np.ptp(P, 0)
+    best = None
+    for ax in range(3):                               # up: the long axis, the sign with two feet
+        for sgn in (1, -1):
+            h = sgn * J[:, ax]
+            H = ext[ax] or 1.0
+            low = sorted(leaves, key=lambda i: h[i])[:2]
+            top = max(leaves, key=lambda i: h[i])
+            score = ext[ax] - 5 * abs(h[low[0]] - h[low[1]]) + (h[top] - h[low[1]])
+            if best is None or score > best[0]:
+                best = (score, ax, sgn, low, top)
+    _, ax, sgn, feet, top = best
+    up = np.zeros(3)
+    up[ax] = sgn
+    h = J @ up
+    H = float(np.ptp(P @ up)) or 1.0
+    # the hips: where the two feet's chains meet; the head: the top end's chain above it
+    pf = [path_up(f) for f in feet]
+    common = [i for i in pf[0] if i in pf[1]]
+    if not common:
+        return
+    hips = common[0]
+    leg_chains = [list(reversed(p[:p.index(hips)])) for p in pf]   # hip side first
+    spine_chain = list(reversed(path_up(top)))
+    if hips not in spine_chain:
+        return
+    spine_chain = spine_chain[spine_chain.index(hips):]
+    # hands: chain ends (not feet, not head) furthest from the up axis through the hips
+    axis_d = lambda i: np.linalg.norm((J[i] - J[hips]) - ((J[i] - J[hips]) @ up) * up)
+    others = [i for i in leaves if i not in feet and i != top and h[i] > h[hips]]
+    if len(others) < 2:
+        return
+    hands = sorted(others, key=axis_d)[-2:]
+    arm_chains = []
+    for hd in hands:
+        p = list(reversed(path_up(hd)))
+        on_spine = [k for k, i in enumerate(p) if i in spine_chain]
+        if not on_spine:
+            return
+        arm_chains.append(p[on_spine[-1] + 1:])                   # shoulder side first
+    # front: toes point forwards from the ankles (feet chains' last joints), else the mesh's bulk
+    fwd = sum(J[c[-1]] - J[c[-2]] for c in leg_chains if len(c) >= 3) if all(len(c) >= 3 for c in leg_chains) else None
+    if fwd is None or np.linalg.norm(fwd - (fwd @ up) * up) < 1e-6:
+        fwd = P.mean(0) - J[hips]
+    fwd = fwd - (fwd @ up) * up
+    if np.linalg.norm(fwd) < 1e-9:
+        return
+    fwd /= np.linalg.norm(fwd)
+    left = np.cross(up, fwd)                          # Y up, facing +Z: the left is +X
+    side = lambda c: "Left" if (J[c[-1]] - J[hips]) @ left > 0 else "Right"
+    names = {hips: "Hips"}
+    for c in leg_chains:
+        sd = side(c)
+        if len(c) < 3:
+            return
+        # thigh at the hip, shin at the knee (the joint nearest half way down), foot at the ankle
+        knee = min(c[1:-1], key=lambda i: abs(h[i] - (h[c[0]] + h[c[-1]]) / 2))
+        ankle = c[c.index(knee) + 1]
+        names.update({c[0]: f"{sd}UpLeg", knee: f"{sd}Leg", ankle: f"{sd}Foot"})
+    for c in arm_chains:
+        sd = side(c)
+        if len(c) < 3:
+            return
+        # the last three joints before the fingers: upper arm, forearm, hand (a collar before them)
+        reach = [axis_d(i) for i in c]
+        hand = c[-1] if len(c) == 3 else max(c[2:], key=lambda i: -abs(axis_d(i) - 0.9 * max(reach)))
+        k = c.index(hand)
+        if k < 2:
+            return
+        names.update({c[k - 2]: f"{sd}Arm", c[k - 1]: f"{sd}ForeArm", hand: f"{sd}Hand"})
+        if k >= 3:
+            names[c[k - 3]] = f"{sd}Shoulder"
+    # head: the spine joint nearest 87 % of the height; spine joints between hips and it
+    rel = (h - (P @ up).min()) / H
+    above = spine_chain[1:]
+    if not above:
+        return
+    head = min(above, key=lambda i: abs(rel[i] - 0.87))
+    names[head] = "Head"
+    for k, i in enumerate(spine_chain[1:spine_chain.index(head)]):
+        names[i] = "Spine" if k == 0 else f"Spine{k}"
+    src["renamed"] = {bones[i]["name"]: nm for i, nm in names.items()}
+    for i, nm in names.items():
+        bones[i]["name"] = nm
 
 
 def _colour_swatches(src: dict, colours: dict) -> None:
@@ -452,6 +564,9 @@ def inspect(path: Path) -> dict:
         info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
     info["rigged"] = not info["problems"]
     info["notes"] = []
+    if src.get("renamed"):
+        info["notes"].append(f"The bone names are not standard: {len(src['renamed'])} bones were recognised "
+                             "from the skeleton's shape (hips, legs, arms, head).")
     if info["triangles"] > REDUCE_ABOVE:
         info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the builder "
                              "reduces it to PS1 size and bakes a new 256 x 256 texture (1 to 3 minutes).")

@@ -8,7 +8,7 @@ results only. Stdlib only (the import command runs Expanded's venv itself).
   python tools/t3cb.py report   [--game G]            summarise logs/test-report.md in a few lines
   python tools/t3cb.py import   FBX|GLB --character ID --model N [--game G]  rigged model -> model.bin (deployed)
   python tools/t3cb.py setmodel FILE --character ID [--game G]            put a T3CM model file on a character
-  python tools/t3cb.py regress  [--only id,id] [--approve] [--game G]     re-import every own model, check holes,
+  python tools/t3cb.py regress  [--only id,id] [--approve] [--all] [--game G]  re-import every own model, check holes,
                                 speckles and fit against the approved state (tools/render/regress.py)
 
 The default game folder is the user's Expanded test copy (never the working install)."""
@@ -136,13 +136,14 @@ def import_fbx(game: Path, fbx: Path, character: str, model: int) -> None:
         setmodel(game, out, character)
 
 
-def regress(game: Path, only: str | None, approve: bool) -> None:
+def regress(game: Path, only: str | None, approve: bool, everything: bool = False) -> None:
     py = game / ".setup" / "venv" / "Scripts" / "python.exe"
     if not py.is_file():
         py = game / ".setup" / "venv" / "bin" / "python"
     cmd = [str(py), str(REPO / "tools" / "render" / "regress.py"), "--game", str(game)]
     cmd += ["--only", only] if only else []
     cmd += ["--approve"] if approve else []
+    cmd += ["--all"] if everything else []
     sys.exit(subprocess.run(cmd).returncode)
 
 
@@ -155,6 +156,7 @@ def main() -> None:
     ap.add_argument("--model", type=int)
     ap.add_argument("--only")
     ap.add_argument("--approve", action="store_true")
+    ap.add_argument("--all", action="store_true", help="regress: also the files in character-builder/testmodels")
     a = ap.parse_args()
     if a.command == "deploy":
         deploy(a.game)
@@ -169,7 +171,7 @@ def main() -> None:
     elif a.command == "import":
         import_fbx(a.game, a.file, a.character, a.model)
     elif a.command == "regress":
-        regress(a.game, a.only, a.approve)
+        regress(a.game, a.only, a.approve, a.all)
 
 
 if __name__ == "__main__":

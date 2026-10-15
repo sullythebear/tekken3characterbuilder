@@ -198,3 +198,9 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   Non-reduced models with several textures/materials: `merge_textures` packs them into one page
   (grid cells, corners split per material, UVs outside 0..1 wrapped); self-tested on Rogue with
   a second material. Reduced models bake per material and need no merge.
+- **tested** (CesiumMan.glb) Bones with names that say nothing are recognised by the skeleton's
+  shape (`direct_import._name_by_shape`, before `_upright`; only when the names miss a needed
+  bone): up = the long axis with the sign that puts two chain ends (feet) lowest, head = the top
+  end, hips = where the feet's chains meet, hands = the two other ends furthest from the up axis,
+  knee = the leg joint nearest half way down, front = toes past the ankles, left = up x front.
+  Renamed as Mixamo's (Hips, LeftUpLeg, ...); `inspect` notes it. BrainStem (robot) stays locked.

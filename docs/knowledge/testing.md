@@ -91,7 +91,9 @@ textured), `stock.py` (a stock model with textures and wireframe).
   palettes with normal-only charts gave `WORSE: speckle` (0.97 % vs 0.17 %).
 - Approved 2026-10-15: medea 95 holes (single edge pixels) / 0.17 %; test (Rogue) 709 / 1.93 %:
   real holes at the side of the head, plus a long hair strand sticking out backwards (open,
-  `plans/direct-import.md`); tommy 0 / 0.24 %.
+  `plans/direct-import.md`); tommy 0 / 0.24 %. 2026-10-16: test 0 holes (fixed), medea 19 / 0.08 %.
+- `--all` also imports `<game>/character-builder/testmodels/*.glb|fbx` over Nina (ids `tm-<name>`;
+  locked files skipped): tm-CesiumMan, tm-Michelle (~140 s), tm-Soldier (~120 s), tm-Xbot.
 
 ## Probe renders (`tools/render/probe_render.py`, Expanded's venv)
 

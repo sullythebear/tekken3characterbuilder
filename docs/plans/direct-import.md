@@ -151,6 +151,13 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    (Auto = steepest that clears the body) and a live side/back preview (the user: "as easy as
    possible, but adjustable"). Tested in the browser pane: remove, 60 degrees, auto, import;
    Rogue re-approved in `regress` (ponytail hangs at 25 degrees).
+   Done 2026-10-16 (overnight, no user input): Rogue's head holes (loose hair sheets drawn from
+   both sides, see-through texels); 5 downloaded test models (three.js Michelle/Soldier/Xbot,
+   Khronos CesiumMan/BrainStem; in `<game>/character-builder/testmodels/`, never committed):
+   leg webs fixed, head-row retry, material colours, several textures merged, bones recognised
+   by the skeleton's shape (CesiumMan). All four importable ones pass a live fight (model check
+   0 words differ, no errors) and are in `regress --all`. BrainStem (a robot, 18 joints
+   joint0..17, no human limbs) stays locked: right.
 3. Release builder 0.3.8, renamed **Dizzy Character Creator**, restyled after the PS1 and
    Tekken 3 look (the user's wish), with model requirements explained in the app.
    Mockup approved 2026-10-15: `docs/design/mockup.template.html` (renders go in through

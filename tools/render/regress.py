@@ -1,7 +1,11 @@
 """Regression check of the model import (Expanded's venv): every character in the test folder
 that has its own model and a source file is imported again, then checked the PlayStation way.
 
-  regress.py [--game G] [--only id,id] [--approve]
+  regress.py [--game G] [--only id,id] [--approve] [--all]
+
+--all also imports the rigged files in <game>/character-builder/testmodels/ (over Nina's model
+10; ids tm-<name>; locked files are listed and skipped): Michelle/Soldier/Xbot (Mixamo glb),
+CesiumMan (shape-named bones), ...
 
 Per character:
   fits     the import fitted without the flat-shading fallback (degrade)
@@ -121,25 +125,37 @@ def main():
     only = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else None
     approve = "--approve" in sys.argv
     worse = False
-    print(f"{'character':10} {'bytes':>6} {'fits':>5} {'holes':>6} {'speckle':>8} {'same':>5}  time")
+    print(f"{'character':14} {'bytes':>6} {'fits':>5} {'holes':>6} {'speckle':>8} {'same':>5}  time")
+    items = []
     for d in sorted((root / "characters").iterdir()):
         cfg = d / "character.json"
-        if not cfg.is_file() or (only and d.name not in only):
+        if not cfg.is_file():
             continue
         info = json.loads(cfg.read_text(encoding="utf-8")).get("own_model")
         src = next((p for p in d.glob("source.*")), None)
-        if not info or not src:
+        if info and src:
+            items.append((d.name, info, src, d / "model.bin"))
+    if "--all" in sys.argv:
+        for f in sorted((root / "testmodels").glob("*")):
+            if f.suffix.lower() not in (".glb", ".fbx"):
+                continue
+            if not DI.inspect(f)["rigged"]:
+                print(f"tm-{f.stem:11} locked (not rigged as Tekken needs), skipped")
+                continue
+            items.append((f"tm-{f.stem}", {"model": 10}, f, None))
+    for name, info, src, current in items:
+        if only and name not in only:
             continue
-        out = root / "cache" / "regress" / d.name
+        out = root / "cache" / "regress" / name
         out.mkdir(parents=True, exist_ok=True)
         t = time.time()
-        data, rgb, owner, degraded = build(d.name, info, src)
+        data, rgb, owner, degraded = build(name, info, src)
         (out / "new.bin").write_bytes(data)
         res = {"fits": not degraded,
                "holes": holes(out / "new.bin", info["model"], out / "new.png"),
                "speckle": round(speckle(out / "new.bin", rgb, owner), 4)}
-        ref = out / "approved.bin" if (out / "approved.bin").is_file() else d / "model.bin"
-        res["same"] = ref.is_file() and ref.read_bytes() == data
+        ref = out / "approved.bin" if (out / "approved.bin").is_file() else current
+        res["same"] = bool(ref) and ref.is_file() and ref.read_bytes() == data
         old = json.loads((out / "approved.json").read_text()) if (out / "approved.json").is_file() else None
         bad = []
         if old and not res["same"]:
@@ -155,7 +171,7 @@ def main():
             sheet = Image.new("RGB", (a.width, a.height + n.height))
             sheet.paste(n, (0, 0)); sheet.paste(a, (0, n.height))
             sheet.save(out / "sheet.png")
-        print(f"{d.name:10} {len(data):>6} {str(res['fits']):>5} {res['holes']:>6} {res['speckle']:>8.2%} "
+        print(f"{name:14} {len(data):>6} {str(res['fits']):>5} {res['holes']:>6} {res['speckle']:>8.2%} "
               f"{str(res['same']):>5}  {time.time() - t:.0f} s" + (f"  WORSE: {', '.join(bad)}" if bad else "")
               + ("" if old else "  (no approved state yet)"))
         if approve:
