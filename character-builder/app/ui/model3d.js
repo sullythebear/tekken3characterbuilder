@@ -5,6 +5,9 @@
 
 const T3Model = (() => {
   let busy = false;
+  let choices = {};            // parts that stick out: {id: {mode, angle}} (angle null = automatic)
+  let partsFor = null;         // the upload the choices belong to
+  let previewTimer = null, previewRun = 0, autoAngles = {};
 
   const fact = (text) => { const li = document.createElement("li"); li.textContent = text; return li; };
 
@@ -36,7 +39,92 @@ const T3Model = (() => {
     problems.replaceChildren(...(info.problems || []).map(fact));
     const notes = $("model-notes");
     notes.replaceChildren(...(info.notes || []).map(fact));
+    showParts(info);
     $("model-import").disabled = busy || !info.rigged;
+  }
+
+  // parts that stick out: folded down by default, the user can keep or remove them or set the angle
+  function showParts(info) {
+    const parts = (info.ok && info.rigged && info.parts) || [];
+    $("model-parts").hidden = !parts.length;
+    if (!parts.length) return;
+    const key = `${info.file}|${info.triangles}|${parts.length}`;
+    if (partsFor !== key) {
+      partsFor = key;
+      choices = {};
+      autoAngles = {};
+      for (const p of parts) choices[p.id] = { mode: p.mode || "fold", angle: p.angle ?? null };
+      schedulePreview(0);
+    }
+    const list = $("model-part-list");
+    list.replaceChildren(...parts.map(partRow));
+  }
+
+  function partRow(p) {
+    const c = choices[p.id];
+    const li = document.createElement("li");
+    li.className = "model-part";
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = p.colour;
+    const label = document.createElement("span");
+    label.textContent = p.label;
+    const controls = document.createElement("div");
+    controls.className = "controls";
+    const mode = document.createElement("select");
+    mode.setAttribute("aria-label", `What to do with part ${p.id}`);
+    for (const [v, t] of [["fold", "Fold down"], ["keep", "Keep as modelled"], ["remove", "Remove"]]) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = t;
+      mode.append(o);
+    }
+    mode.value = c.mode;
+    const range = document.createElement("input");
+    range.type = "range"; range.min = "0"; range.max = "90"; range.step = "5";
+    range.setAttribute("aria-label", `Hang angle of part ${p.id}, degrees from straight down`);
+    const angle = document.createElement("span");
+    angle.className = "angle";
+    const auto = document.createElement("button");
+    auto.type = "button"; auto.className = "btn btn-ghost"; auto.textContent = "Auto";
+    auto.title = "Let the builder pick the steepest angle that clears the body";
+    const sync = () => {
+      const fold = c.mode === "fold";
+      range.hidden = angle.hidden = !fold;
+      auto.hidden = !fold || c.angle === null;
+      const shown = c.angle ?? autoAngles[p.id];
+      range.value = String(shown ?? 30);
+      angle.textContent = shown == null ? "angle: auto" : `${Math.round(shown)}° from down${c.angle === null ? " (auto)" : ""}`;
+    };
+    mode.addEventListener("change", () => { c.mode = mode.value; sync(); schedulePreview(); });
+    range.addEventListener("input", () => { c.angle = Number(range.value); sync(); schedulePreview(); });
+    auto.addEventListener("click", () => { c.angle = null; sync(); schedulePreview(); });
+    li.sync = sync;
+    sync();
+    controls.append(mode, range, angle, auto);
+    li.append(sw, label, controls);
+    return li;
+  }
+
+  function schedulePreview(delay = 450) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(updatePreview, delay);
+  }
+
+  async function updatePreview() {
+    const run = ++previewRun;
+    const img = $("model-parts-preview");
+    img.classList.add("busy");
+    try {
+      const res = await api("/api/model/preview", { id: state.current.id, parts: choices });
+      if (run !== previewRun) return;
+      img.src = `data:image/png;base64,${res.png}`;
+      autoAngles = res.angles || {};
+      for (const li of $("model-part-list").children) if (li.sync) li.sync();
+    } catch (e) {
+      if (run === previewRun) toast(e.message);
+    } finally {
+      if (run === previewRun) img.classList.remove("busy");
+    }
   }
 
   async function refresh() {
@@ -114,7 +202,8 @@ const T3Model = (() => {
       ? "Importing: reducing the model to PS1 size, baking its texture and fitting it to the style's skeleton (1 to 3 minutes)…"
       : "Importing: fitting the model to the style's skeleton, texture and joints (a few seconds)…";
     try {
-      const saved = await api("/api/model/import", { id: state.current.id, costume: Number($("model-costume").value) });
+      const saved = await api("/api/model/import", { id: state.current.id, costume: Number($("model-costume").value),
+        parts: choices });
       progress.hidden = true;
       await after(saved, `${saved.name} has its own model now`);
     } catch (e) {

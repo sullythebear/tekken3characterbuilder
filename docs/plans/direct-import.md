@@ -145,7 +145,12 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    Medea v19 ("ziet er nu perfect uit").
 2. More model kinds: Mixamo, VRoid (.glb), Blender rigs, loose clothing, long hair. Known open
    on Rogue.fbx (not reduced, 641 triangles): holes at the side of the head (culling, so a
-   winding problem of the non-reduced path) and a long hair strand sticking out backwards.
+   winding problem of the non-reduced path). Done 2026-10-15: the ponytail (modelled straight
+   back, rigid on the head bone) is found and folded down by default (`protrusions.py`); the
+   3D model page lists such parts with Fold down / Keep as modelled / Remove, an angle slider
+   (Auto = steepest that clears the body) and a live side/back preview (the user: "as easy as
+   possible, but adjustable"). Tested in the browser pane: remove, 60 degrees, auto, import;
+   Rogue re-approved in `regress` (ponytail hangs at 25 degrees).
 3. Release builder 0.3.8, renamed **Dizzy Character Creator**, restyled after the PS1 and
    Tekken 3 look (the user's wish), with model requirements explained in the app.
    Mockup approved 2026-10-15: `docs/design/mockup.template.html` (renders go in through

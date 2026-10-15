@@ -748,8 +748,38 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     return info
 
 
-def import_model(cid: str, costume: int) -> dict:
+def clean_parts(parts) -> dict:
+    """The user's choices for parts that stick out: {id: {mode: fold|keep|remove, angle: 0-90 or None}}."""
+    out = {}
+    for k, v in (parts or {}).items() if isinstance(parts, dict) else ():
+        if not str(k).isdigit() or not isinstance(v, dict) or v.get("mode") not in ("fold", "keep", "remove"):
+            continue
+        angle = v.get("angle")
+        angle = None if angle is None else max(0.0, min(90.0, float(angle)))
+        out[str(int(k))] = {"mode": v["mode"], "angle": angle}
+    return out
+
+
+def model_preview(cid: str, parts) -> dict:
+    """PNG (base64) of the uploaded model with the parts' choices applied, side and back."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    out = folder / "preview.png"
+    problem, text = run_import_tool(root, [str(upload), "--preview", str(out), "--parts", json.dumps(clean_parts(parts))], timeout=300)
+    if problem or not out.is_file():
+        raise ValueError(problem or "The preview could not be made.")
+    png = base64.b64encode(out.read_bytes()).decode()
+    out.unlink(missing_ok=True)
+    angles = json.loads(text.strip().splitlines()[-1]).get("angles", {}) if text.strip() else {}
+    return {"png": png, "angles": angles}
+
+
+def import_model(cid: str, costume: int, parts=None) -> dict:
     """The checked upload -> characters/<id>/model.bin over the donor's costume model."""
+    parts = clean_parts(parts)
     root = project_root()
     folder = DATA / safe_id(cid)
     character = get_character(folder.name)
@@ -766,7 +796,8 @@ def import_model(cid: str, costume: int) -> dict:
     if not 0 <= costume < len(models):
         raise ValueError("This donor has no such costume.")
     out = folder / "model-new.bin"
-    problem, text = run_import_tool(root, [str(upload), "--model", str(models[costume]), "--out", str(out)])
+    problem, text = run_import_tool(root, [str(upload), "--model", str(models[costume]), "--out", str(out),
+                                           "--parts", json.dumps(parts)])
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         raise ValueError(problem or "The model import failed.")
@@ -780,7 +811,7 @@ def import_model(cid: str, costume: int) -> dict:
     data["own_model"] = {"file": info.get("file", upload.name), "costume": costume, "model": models[costume],
                          "triangles": int(made[-1]) if made else info.get("triangles"),
                          "source_triangles": info.get("triangles"), "textured": info.get("textured"),
-                         "imported": datetime.now().isoformat(timespec="seconds")}
+                         "parts": parts, "imported": datetime.now().isoformat(timespec="seconds")}
     (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     return get_character(folder.name)
 
@@ -825,7 +856,8 @@ def refit_model(cid: str) -> list[str]:
                 "it again: upload it again on the 3D model page."]
     out = folder / "model-new.bin"
     with model_lock:
-        problem, _ = run_import_tool(project_root(), [str(source), "--model", str(models[costume]), "--out", str(out)])
+        problem, _ = run_import_tool(project_root(), [str(source), "--model", str(models[costume]), "--out", str(out),
+                                                      "--parts", json.dumps(clean_parts(own.get("parts")))])
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         return [f"The own model could not be fitted to the new fighting style: {problem}"]
@@ -1190,8 +1222,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":
                 with model_lock:
-                    saved = import_model(str(data.get("id", "")), int(data.get("costume", 0)))
+                    saved = import_model(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/model/preview":
+                return self._json(model_preview(str(data.get("id", "")), data.get("parts")))
             if path == "/api/model/remove":
                 saved = remove_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})

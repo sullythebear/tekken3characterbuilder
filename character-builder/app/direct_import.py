@@ -18,6 +18,7 @@ import numpy as np
 import model_export as X
 import model_import as MI
 import bind_pose as BP
+import protrusions as PR
 
 PAIRS = MI.PAIRS
 
@@ -288,13 +289,16 @@ def inspect(path: Path) -> dict:
         info["reduce"] = True
     if not info["textured"]:
         info["problems"].append("The model has no embedded texture: it will be drawn without one.")
+    info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     return info
 
 
-def build(root: Path, model: int, path: Path, log=print):
+def build(root: Path, model: int, path: Path, log=print, parts=None):
     """Imports a model file over a donor model; a high-poly file is reduced first (reduce.py),
-    smaller and smaller until it fits the donor's slot."""
+    smaller and smaller until it fits the donor's slot. parts: choices for the parts that stick
+    out (protrusions.py; default: folded down)."""
     src = load(Path(path))
+    PR.apply(src, parts, log=log)
     if len(src["T"]) <= REDUCE_ABOVE:
         return _build(root, model, src, log)
     import reduce as RD
@@ -676,17 +680,27 @@ def main():
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--check", action="store_true", help="print what inspect() finds as JSON")
+    ap.add_argument("--parts", default="{}", help="JSON {part id: {mode: fold|keep|remove, angle}}")
+    ap.add_argument("--preview", type=Path, help="write a PNG of the model with the parts applied")
     a = ap.parse_args()
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))
+        return
+    parts = json.loads(a.parts)
+    if a.preview:
+        src = load(a.model_file)
+        found = PR.find(src)
+        used = PR.apply(src, parts, log=lambda *_: None)
+        a.preview.write_bytes(PR.preview(src, found))
+        print(json.dumps({"angles": used}))
         return
     if a.model is None or a.out is None:
         ap.error("--model and --out are needed for an import")
     info = inspect(a.model_file)
     if not info["rigged"]:
         raise SystemExit("ERROR " + " ".join(info["problems"]))
-    stock, new, tx, report = build(a.root, a.model, a.model_file)
+    stock, new, tx, report = build(a.root, a.model, a.model_file, parts=parts)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_bytes(X.own_model_file(a.model, stock, new, tx))
     print(json.dumps({k: v for k, v in report.items() if k not in ("rows", "texture")}, default=str))

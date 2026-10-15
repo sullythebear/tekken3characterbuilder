@@ -392,6 +392,17 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .model-lock { margin: .5rem 0 .2rem; font-weight: 700; font-size: .92rem; }
 .model-lock.ready { color: var(--tri); }
 .model-lock.locked { color: var(--circle); }
+.model-parts { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .6rem; }
+.model-parts-title { margin: 0 0 .2rem; font-weight: 700; }
+.model-parts-preview { display: block; max-width: 100%; margin: .5rem 0; border: 1px solid var(--line); image-rendering: pixelated; min-height: 4rem; }
+.model-parts-preview.busy { opacity: .5; }
+.model-part-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.model-part { display: grid; grid-template-columns: 1rem 1fr; gap: .3rem .5rem; align-items: center; font-size: .85rem; }
+.model-part .swatch { width: 1rem; height: 1rem; border: 1px solid #000; }
+.model-part .controls { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.model-part select { background: var(--panel); color: var(--paper); border: 1px solid var(--line); padding: .25rem .4rem; }
+.model-part input[type=range] { width: 8rem; }
+.model-part .angle { color: var(--steel); min-width: 6.5rem; }
 .model-import-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .8rem; }
 .model-import-row select { background: var(--panel); color: var(--paper); border: 1px solid var(--line); padding: .35rem .5rem; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }

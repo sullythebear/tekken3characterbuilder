@@ -57,6 +57,14 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   LBS posing, rows/50-50 seams, normals, winding, texture, size fallback). CLI `--model --out`.
 - `app/bind_pose.py` – the donor's bind pose from its own 50/50 seams: `seam_pairs`,
   `cross_edges`, `solve(m, W)`, `residuals`, `with_offsets` (a model's own bone lengths).
+- `app/protrusions.py` – parts sticking out of head/chest/hips (a ponytail modelled straight
+  back, horns, tails): `find` (far vertices of the part, grown back to the root along the piece;
+  parts already hanging down are skipped), `apply(src, choices)` (fold = turned about the attach
+  point to hang N degrees from down, keeping its heading, eased over the first fifth; angle None
+  = steepest that clears the body; keep; remove), `preview` (side + back PNG, parts tinted).
+  Used by `direct_import.inspect` (`parts`), `build(parts=)`, CLI `--parts JSON`, `--preview PNG`;
+  server `/api/model/preview`, choices stored in `own_model.parts` (refit uses them); UI in
+  `ui/model3d.js` (`showParts`, `partRow`, debounced preview).
 - `app/reduce.py` – high-poly rigged model -> PS1 size: `reduce(src, target)` (`_shell` with
   limb-gap removal, `_charts`, `_pack` FFT bitmap packing, `_raster`, bake).
 - `app/glb.py` – glTF binary reader (meshes, UVs, textures, skin bones/weights).
