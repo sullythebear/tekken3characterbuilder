@@ -8,6 +8,8 @@ results only. Stdlib only (the import command runs Expanded's venv itself).
   python tools/t3cb.py report   [--game G]            summarise logs/test-report.md in a few lines
   python tools/t3cb.py import   FBX|GLB --character ID --model N [--game G]  rigged model -> model.bin (deployed)
   python tools/t3cb.py setmodel FILE --character ID [--game G]            put a T3CM model file on a character
+  python tools/t3cb.py regress  [--only id,id] [--approve] [--game G]     re-import every own model, check holes,
+                                speckles and fit against the approved state (tools/render/regress.py)
 
 The default game folder is the user's Expanded test copy (never the working install)."""
 from __future__ import annotations
@@ -134,13 +136,25 @@ def import_fbx(game: Path, fbx: Path, character: str, model: int) -> None:
         setmodel(game, out, character)
 
 
+def regress(game: Path, only: str | None, approve: bool) -> None:
+    py = game / ".setup" / "venv" / "Scripts" / "python.exe"
+    if not py.is_file():
+        py = game / ".setup" / "venv" / "bin" / "python"
+    cmd = [str(py), str(REPO / "tools" / "render" / "regress.py"), "--game", str(game)]
+    cmd += ["--only", only] if only else []
+    cmd += ["--approve"] if approve else []
+    sys.exit(subprocess.run(cmd).returncode)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("deploy", "patch", "build", "report", "import", "setmodel"))
+    ap.add_argument("command", choices=("deploy", "patch", "build", "report", "import", "setmodel", "regress"))
     ap.add_argument("file", nargs="?", type=Path)
     ap.add_argument("--game", type=Path, default=DEFAULT_GAME)
     ap.add_argument("--character")
     ap.add_argument("--model", type=int)
+    ap.add_argument("--only")
+    ap.add_argument("--approve", action="store_true")
     a = ap.parse_args()
     if a.command == "deploy":
         deploy(a.game)
@@ -154,6 +168,8 @@ def main() -> None:
         setmodel(a.game, a.file, a.character)
     elif a.command == "import":
         import_fbx(a.game, a.file, a.character, a.model)
+    elif a.command == "regress":
+        regress(a.game, a.only, a.approve)
 
 
 if __name__ == "__main__":

@@ -74,6 +74,25 @@ textured), `stock.py` (a stock model with textures and wireframe).
 - Verified: TOMMY picked, own model installed and drawn (0 words differ), 11 screenshots.
 - Also: Shift+F1..F12 saves a state in the window, F1..F12 loads (`--memcard-dir` folder).
 
+## Regression check of the model import (`python tools/t3cb.py regress`, 2026-10-15, works)
+
+- Re-imports every character in the test folder with an own model and a `source.*` file, the
+  app's way (`tools/render/regress.py`, Expanded's venv; Medea ~55 s, the others ~4 s). Run it
+  after every change to `direct_import.py`, `reduce.py`, `texture_bake.py`, `model_import.py`.
+- Checks: **fits** (no flat-shading fallback); **holes** = pixels that are background in PS1
+  renders (QUADCULL, PAINTER) of the bind pose from 4 sides but body without culling
+  (`NOCULL=1`), so gaps between arm and body do not count; **speckle** = share of texels whose
+  colour decoded with the polygon's own CLUT is > 20 Lab from the quantiser's input;
+  **same** = byte-equal to the approved model.
+- Approved state: `<game>/character-builder/cache/regress/<id>/approved.{bin,json,png}`
+  (`--approve` stores the current results); exit 1 and `WORSE: ...` when a check got worse
+  (slack: 20 hole pixels, 0.2 % speckle). `sheet.png` = new above approved.
+- **tested**: re-enabling bent quads (max_bend 180) gave `WORSE: holes` (2484 vs 95), RGB
+  palettes with normal-only charts gave `WORSE: speckle` (0.97 % vs 0.17 %).
+- Approved 2026-10-15: medea 95 holes (single edge pixels) / 0.17 %; test (Rogue) 709 / 1.93 %:
+  real holes at the side of the head, plus a long hair strand sticking out backwards (open,
+  `plans/direct-import.md`); tommy 0 / 0.24 %.
+
 ## Probe renders (`tools/render/probe_render.py`, Expanded's venv)
 
 - `probe_render.py GAME MODEL out.png [--frames n] [--pick i,j] [--size px] [--yaw deg] [--live DIR]`:

@@ -17,6 +17,7 @@ import os
 ROWS = bool(os.environ.get("ROWS"))
 PAINTER = bool(os.environ.get("PAINTER"))   # draw by polygon depth order (the PS1 way)
 QUADCULL = bool(os.environ.get("QUADCULL"))  # cull quads by their first triangle (the PS1 way)
+NOCULL = bool(os.environ.get("NOCULL"))      # draw back faces too (regress.py: what culling hides)
 REC_WORDS = 8 + 32 + 32 + 256 + 256 + 256 + 1024
 
 
@@ -235,7 +236,7 @@ def main():
             tris = [tris[i] for i in order]
         for (cam, uvs, mt, rw, first) in tris:
             cam = np.array(cam)
-            if QUADCULL:                         # cull a quad by its first triangle only
+            if QUADCULL and not NOCULL:          # cull a quad by its first triangle only
                 fc = np.array(first)
                 fxy = np.stack([(fc[:, 0] / fc[:, 2] - lo[0]) * sc, (fc[:, 1] / fc[:, 2] - lo[1]) * sc], 1)
                 if (fxy[1, 0] - fxy[0, 0]) * (fxy[2, 1] - fxy[0, 1]) - (fxy[1, 1] - fxy[0, 1]) * (fxy[2, 0] - fxy[0, 0]) <= 0:
@@ -243,7 +244,7 @@ def main():
             xy = np.stack([(cam[:, 0] / cam[:, 2] - lo[0]) * sc + 10, (cam[:, 1] / cam[:, 2] - lo[1]) * sc + 10], 1)
             a, b, cc = xy
             cross = (b[0] - a[0]) * (cc[1] - a[1]) - (b[1] - a[1]) * (cc[0] - a[0])
-            if cross <= 0 and not QUADCULL:      # the game culls these (back faces)
+            if cross <= 0 and not QUADCULL and not NOCULL:   # the game culls these (back faces)
                 continue
             x0, y0 = np.floor(xy.min(0)).astype(int)
             x1, y1 = np.ceil(xy.max(0)).astype(int)

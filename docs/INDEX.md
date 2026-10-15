@@ -23,7 +23,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
   joints, textures, face) and how the importer applies it.
 - `portraits.md` – portrait and name plate `.jui`.
 - `moves.md` – move format.
-- `testing.md` – Test button, report, helper scripts in `tools/`.
+- `testing.md` – Test button, report, helper scripts in `tools/`, regression check of the model import (`t3cb.py regress`).
 - `lessons.md` – mistakes not to repeat.
 
 ## plans/ (what is next)

@@ -138,3 +138,13 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
   912 triangles, 56 s through the app). Checked offline with PS1 culling/ordering emulation from
   every side and in game (stance, kicks, back views).
 
+
+## Next (agreed with the user 2026-10-15)
+
+1. Done: regression check `python tools/t3cb.py regress` (knowledge/testing.md); user approved
+   Medea v19 ("ziet er nu perfect uit").
+2. More model kinds: Mixamo, VRoid (.glb), Blender rigs, loose clothing, long hair. Known open
+   on Rogue.fbx (not reduced, 641 triangles): holes at the side of the head (culling, so a
+   winding problem of the non-reduced path) and a long hair strand sticking out backwards.
+3. Release builder 0.3.8, renamed **Dizzy Character Creator**, restyled after the PS1 and
+   Tekken 3 look (the user's wish), with model requirements explained in the app.
