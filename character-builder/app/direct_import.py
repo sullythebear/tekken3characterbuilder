@@ -404,11 +404,18 @@ def build(root: Path, model: int, path: Path, log=print, parts=None):
     rid = X.FIRST_MODEL_RECORD + 4 * model
     slot = len(X.records(root, [rid])[rid])
     target = int(min(MI.MAX_PACKET_BYTES / 35.5, slot / 25.5) * 0.97)
-    for k in range(6):
-        low = RD.reduce(src, target, log=log)
+    head = 4.0
+    for k in range(8):
+        low = RD.reduce(src, target, log=log, head_detail=head)
         try:
-            return _build(root, model, low, log, degrade=k == 5)
+            return _build(root, model, low, log, degrade=k == 7)
         except MI.Budget as error:
+            if "texture coordinates" in str(error) and head > 1.0 and ("row 19" in str(error) or "row 20" in str(error)):
+                # the head row (big hair) has more corners than its 255 texture coordinates:
+                # less extra detail on the head first (the face keeps its texture density)
+                head = head / 2
+                log(f"{target} triangles do not fit ({error}); trying {head:g}x detail on the head")
+                continue
             log(f"{target} triangles do not fit ({error}); trying fewer")
             target = int(target * 0.93)
     raise MI.Budget("The model does not fit this fighting style's slot.")

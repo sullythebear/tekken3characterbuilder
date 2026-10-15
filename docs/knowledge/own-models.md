@@ -182,3 +182,14 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   looks through them.
 - Debugging holes: `IDS=out.npy` in probe_render saves row*10000+primitive per pixel; match the
   primitives' texel UVs to the source's `int(UV*256)` to find the source triangles.
+- **tested** (2026-10-16, test models from three.js / Khronos in `<game>/character-builder/testmodels/`,
+  never committed) Webs between the legs of reduced models (Michelle's wide trousers, Soldier's
+  knee pads, Xbot): 1. the voxel shell separates the legs: voxels with both legs' solids among
+  their 26 neighbours go, right before `_manifold_voxels` (a 6-neighbour gap left corner contacts
+  that the manifold step filled in again); 2. a shell point whose neighbours are mostly on the
+  other leg takes their weights (the nearest original point of an inner thigh can lie on the
+  other thigh); 3. hip-weighted points below the crotch follow the nearest leg (flaps). Soldier
+  33 -> 11 leg-to-leg triangles, all at the crotch midline (normal). Medea: holes 95 -> 19.
+- **tested** Head row over 255 texture coordinates (Michelle's big hair): retry with half the head
+  detail (4x -> 2x -> 1x importance, hair as one material) before fewer triangles: Michelle 5
+  tries/215 s/666 tris -> 2 tries/92 s/856 tris.

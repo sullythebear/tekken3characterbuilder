@@ -173,6 +173,17 @@ def _shell(P, T, groups, cells=180, close=1):
             inside |= hand
     # one voxel thicker: thin sheets (a collar) would fold flat in the collapse (the vertices go
     # back onto the original surface afterwards)
+    # the two legs never share a surface: where thighs (or wide trousers, knee pads) touch, one
+    # surface over both legs is torn into a web from crotch to knees once the legs part in the
+    # fighting stance. Voxels next to both legs (all 26 neighbours: a corner contact would be
+    # filled in again below) go
+    legs = [RM.solid(samples[groups[tri] == g], origin, h, shape, close) for g in (3, 4)]
+    if all(l.any() for l in legs):
+        def box(m):
+            for ax in range(3):
+                m = m | np.roll(m, 1, ax) | np.roll(m, -1, ax)
+            return m
+        inside &= ~(box(legs[0]) & box(legs[1]))
     inside = _manifold_voxels(inside)
     v, f = RM.surface_nets(inside, origin, h)
     v = RM.smooth(v, f, rounds=3)
@@ -511,7 +522,7 @@ def _raster(UV, fn_point, offset=(0.5, 0.5)):
             fn_point(f, np.floor(px[ins]).astype(int), Lc / Lc.sum(1, keepdims=True))
 
 
-def reduce(src: dict, target: int = 900, log=print) -> dict:
+def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) -> dict:
     import time
     t0 = time.time()
     lap = lambda what: log(f"  {what}: {time.time() - t0:.0f} s")
@@ -545,7 +556,7 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
     V, F = _SHELL["V"].copy(), _SHELL["F"]
     neck = MI.joint(src["bones"], "head") if src.get("bones") else None
     neck_y = neck[1] if neck is not None else Pw[:, 1].max() - 0.13 * H
-    imp = np.where(V[:, 1] > neck_y, 4.0, 1.0)
+    imp = np.where(V[:, 1] > neck_y, head_detail, 1.0)     # head: extra detail (less when its row is full)
     # hands are small: without extra weight the collapse turns them into points
     for side in "LR":
         hj = MI.joint(src["bones"], "hand", side) if src.get("bones") else None
@@ -628,9 +639,83 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
                 acc[b] = acc.get(b, 0) + w * bw
         tot = sum(acc.values()) or 1
         weights.append({b: w / tot for b, w in acc.items() if w / tot > 0.02})
+    # the nearest original point of a point on the inside of a thigh can lie on the other thigh:
+    # such a point (its neighbours on one leg, itself on the other) takes its neighbours' weights,
+    # or the triangles between them become a web between the legs
+    bones = src.get("bones") or []
+    side_of = []
+    for b_ in bones:
+        p_ = MI._part(b_["name"])
+        side_of.append(p_[1] if p_[0] in ("thigh", "shin", "foot") else None)
+    def leg_side(w):
+        return side_of[max(w, key=w.get)] if w else None
+    ring = [set() for _ in range(len(V))]
+    for t in F:
+        for a_ in t:
+            ring[a_].update(int(x) for x in t if x != a_)
+    fixed = 0
+    for _ in range(3):
+        sides = [leg_side(w) for w in weights]
+        changed = False
+        for i in range(len(V)):
+            if sides[i] is None or not ring[i]:
+                continue
+            nb = [sides[j] for j in ring[i]]
+            other = "R" if sides[i] == "L" else "L"
+            if nb.count(other) > len(nb) / 2:
+                acc = {}
+                donors = [j for j in ring[i] if sides[j] == other]
+                for j in donors:
+                    for b_, x in weights[j].items():
+                        acc[b_] = acc.get(b_, 0) + x / len(donors)
+                weights[i] = acc
+                fixed += 1
+                changed = True
+        if not changed:
+            break
+    if fixed:
+        log(f"{fixed} shell points on the inside of a thigh took the weights of their own leg")
+    # below the crotch a point of the shell follows the leg it is nearest to, also where the
+    # nearest original point hangs from the hips (armour plates, flaps, a coat): the shell is one
+    # surface over flap and thigh, which the fighting stance would tear into a web (Soldier)
+    bones = src.get("bones") or []
+    def bone_of(part, side):
+        for i, b in enumerate(bones):
+            if MI._part(b["name"]) == (part, side):
+                return i
+        return None
+    leg = []
+    for side in "LR":
+        th, kn = MI.joint(bones, "thigh", side), MI.joint(bones, "shin", side)
+        bi = bone_of("thigh", side)
+        if th is not None and kn is not None and bi is not None:
+            leg.append((th, kn, bi))
+    if len(leg) == 2:
+        hip_y = min(l[0][1] for l in leg)
+        def seg(p, a, b):
+            ab = b - a
+            t = np.clip(((p - a) @ ab) / (ab @ ab), 0, 1)
+            return np.linalg.norm(p - (a + np.outer(t, ab)), axis=1)
+        dl = np.stack([seg(V, l[0], l[1]) for l in leg], 1)
+        moved = 0
+        for i, w in enumerate(weights):
+            if not w:
+                continue
+            part = MI._part(bones[max(w, key=w.get)]["name"])[0]
+            if part not in ("pelvis", "spine"):
+                continue
+            f = np.clip((hip_y - 0.04 * H - V[i, 1]) / (0.1 * H), 0, 1)
+            if f <= 0:
+                continue
+            k = int(np.argmin(dl[i]))
+            nw = {b: x * (1 - f) for b, x in w.items()}
+            nw[leg[k][2]] = nw.get(leg[k][2], 0) + f
+            weights[i] = nw
+            moved += 1
+        if moved:
+            log(f"{moved} shell points below the crotch follow their leg instead of the hips")
     # Namco draws forearms sturdier than life (x1.2 about the bone) and hands as solid mittens:
     # a flat hand with fingers becomes a thin paddle at this size, so it is replaced (_mittens)
-    bones = src.get("bones") or []
     for side in "LR":
         fore, hand = MI.joint(bones, "fore", side), MI.joint(bones, "hand", side)
         if fore is None or hand is None:
@@ -667,6 +752,8 @@ def reduce(src: dict, target: int = 900, log=print) -> dict:
         colour += _texel(textures, MAT[tri], uv)[:, :3] / 4
     farea = np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1) / 2
     material = np.where(kind == 2, 0, _materials(V, F, colour, farea))
+    if head_detail < 4.0:                 # the head row ran out of texture coordinates: one
+        material[kind == 1] = 0           # material for the hair (fewer chart borders)
     chart, fn = _charts(V, F, kind * 16 + material)
     density = np.choose(kind, [1.0, 2.0, 5.0])
     UVl = _pack(V, F, chart, fn, density)
