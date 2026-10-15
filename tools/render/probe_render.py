@@ -194,7 +194,7 @@ def main():
     bind = X.bind(m)
     i4 = np.stack([(band >> (4 * k)) & 15 for k in range(4)], 2).reshape(band.shape[0], -1)
     i8 = np.stack([band & 255, band >> 8], 2).reshape(band.shape[0], -1)
-    imgs = []
+    imgs, ids = [], []
     for f in pick:
         tris = []
         cams = assemble(m, f, X)
@@ -217,7 +217,7 @@ def main():
                         if any(x is None for x in cam):
                             continue
                         first = [cams[r][c[j]] for j in (0, 1, 2)]   # the quad's culling triangle
-                        tris.append((cam, [uv[j] for j in (a, b, cc)], mat, pts[0][0], first))
+                        tris.append((cam, [uv[j] for j in (a, b, cc)], mat, pts[0][0], first, r * 10000 + i - 1))
         P = np.array([t[0] for t in tris])
         sx = P[:, :, 0] / P[:, :, 2]
         sy = P[:, :, 1] / P[:, :, 2]
@@ -234,7 +234,8 @@ def main():
             b = float(os.environ.get("PAINTER", "1")) or 1.0
             order = sorted(range(len(tris)), key=lambda i: (-int(np.mean([p[2] for p in tris[i][0]]) // b), -i))
             tris = [tris[i] for i in order]
-        for (cam, uvs, mt, rw, first) in tris:
+        idimg = np.full((S, W_), -1)
+        for (cam, uvs, mt, rw, first, pid) in tris:
             cam = np.array(cam)
             if QUADCULL and not NOCULL:          # cull a quad by its first triangle only
                 fc = np.array(first)
@@ -275,13 +276,17 @@ def main():
             better = ((z < zb[yy, xx]) | PAINTER) & vis
             zb[yy[better], xx[better]] = z[better]
             img[yy[better], xx[better]] = col[better]
+            idimg[yy[better], xx[better]] = pid
         imgs.append(img)
+        ids.append(idimg)
     out = Image.new("RGB", (sum(i.shape[1] for i in imgs), S))
     x = 0
     for i in imgs:
         out.paste(Image.fromarray(i), (x, 0))
         x += i.shape[1]
     out.save(out_png)
+    if os.environ.get("IDS"):                # row * 10000 + primitive per pixel (debugging)
+        np.save(os.environ["IDS"], np.concatenate(ids, 1))
     print(f"{len(full)} full frames, {len(pick)} drawn")
 
 

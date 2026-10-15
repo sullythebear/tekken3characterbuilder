@@ -258,6 +258,103 @@ def _pair_quads(faces, uvs, G=None, max_bend=12.0):
     return out, out_uv
 
 
+def _seen_sides(P, T, size=256, views=64):
+    """Per triangle: pixels where it is the nearest surface seen from its front and from its back,
+    over `views` directions evenly around the model (orthographic, nothing culled; not only the
+    axes, where a sheet of hair can be seen exactly edge-on). A triangle seen from
+    behind is one the PlayStation culls where other programs show it (Rogue's temple locks)."""
+    front = np.zeros(len(T))
+    back = np.zeros(len(T))
+    k = np.arange(views) + 0.5                        # Fibonacci sphere
+    phi = np.arccos(1 - 2 * k / views)
+    theta = np.pi * (1 + 5 ** 0.5) * k
+    dirs = list(np.stack([np.cos(theta) * np.sin(phi), np.cos(phi), np.sin(theta) * np.sin(phi)], 1))
+    c = P.mean(0)
+    R = float(np.linalg.norm(P - c, axis=1).max()) or 1.0
+    fn = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
+    for d in dirs:
+        d /= np.linalg.norm(d)
+        a = np.cross(d, [0, 1, 0] if abs(d[1]) < 0.9 else [1, 0, 0])
+        a /= np.linalg.norm(a)
+        b = np.cross(d, a)
+        Q = P - c
+        X = (Q @ a / R + 1) * size / 2
+        Y = (Q @ b / R + 1) * size / 2
+        Z = Q @ d                                    # larger = nearer the viewer at +d
+        zb = np.full((size, size), -np.inf)
+        idb = np.full((size, size), -1)
+        for k, t in enumerate(T):
+            xy = np.stack([X[t], Y[t]], 1)
+            cr = (xy[1, 0] - xy[0, 0]) * (xy[2, 1] - xy[0, 1]) - (xy[1, 1] - xy[0, 1]) * (xy[2, 0] - xy[0, 0])
+            if abs(cr) < 1e-9:
+                continue
+            x0, y0 = np.maximum(np.floor(xy.min(0)).astype(int), 0)
+            x1, y1 = np.minimum(np.ceil(xy.max(0)).astype(int), size - 1)
+            if x1 < x0 or y1 < y0:
+                continue
+            xs, ys = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1))
+            px = np.stack([xs.ravel() + .5, ys.ravel() + .5], 1)
+            l1 = ((xy[1, 0] - px[:, 0]) * (xy[2, 1] - px[:, 1]) - (xy[1, 1] - px[:, 1]) * (xy[2, 0] - px[:, 0])) / cr
+            l2 = ((xy[2, 0] - px[:, 0]) * (xy[0, 1] - px[:, 1]) - (xy[2, 1] - px[:, 1]) * (xy[0, 0] - px[:, 0])) / cr
+            ins = (l1 >= 0) & (l2 >= 0) & (1 - l1 - l2 >= 0)
+            if not ins.any():
+                continue
+            z = np.stack([l1, l2, 1 - l1 - l2], 1)[ins] @ Z[t]
+            pp = px[ins].astype(int)
+            yy, xx = pp[:, 1], pp[:, 0]
+            near = z > zb[yy, xx]
+            zb[yy[near], xx[near]] = z[near]
+            idb[yy[near], xx[near]] = k
+        ids, n = np.unique(idb[idb >= 0], return_counts=True)
+        facing = fn[ids] @ d > 0
+        front[ids[facing]] += n[facing]
+        back[ids[~facing]] += n[~facing]
+    return front, back
+
+
+def _sheets(P, T, rays=3):
+    """Per triangle (as wound in T): True when it is a loose sheet (a lock of hair, a strap): a
+    ray backwards from it reaches open air or the front of another surface, where a triangle of
+    a closed shape meets the inside (back) of its own shape. When most triangles look like
+    sheets, T is wound the other way round and the answer is for the other side."""
+    A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+    e1, e2 = B - A, C - A
+    n = np.cross(e1, e2)
+    n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
+    cen = (A + B + C) / 3
+    eps = 1e-4 * (float(np.ptp(P[:, 1])) or 1.0)
+    rng = np.random.default_rng(0)
+    def votes(sign):
+        out = np.zeros(len(T), int)
+        for _ in range(rays):
+            jit = rng.normal(size=3) * 0.1
+            for i in range(len(T)):
+                d = -sign * n[i] + jit
+                d /= np.linalg.norm(d)
+                o = cen[i] + d * eps
+                p = np.cross(d, e2)
+                det = (e1 * p).sum(1)
+                ok = np.abs(det) > 1e-12
+                inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
+                tv = o - A
+                u = (tv * p).sum(1) * inv
+                q = np.cross(tv, e1)
+                v = (q @ d) * inv
+                t = (e2 * q).sum(1) * inv
+                hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > eps)
+                hit[i] = False
+                if not hit.any():
+                    out[i] += 1                       # open air behind it
+                    continue
+                j = np.where(hit)[0][np.argmin(t[hit])]
+                out[i] += int(sign * n[j] @ d < 0)    # the front of another surface
+        return out >= (rays + 1) // 2
+    sheet = votes(1)
+    if sheet.mean() > 0.5:
+        sheet = votes(-1)
+    return sheet
+
+
 def inspect(path: Path) -> dict:
     """What the builder needs to know before an import: size, texture and whether the model is
     rigged (a skeleton with the bones Tekken needs and skin weights). `rigged` False locks the
@@ -536,19 +633,72 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
         good = (sgn[pc] != flip[pc]).mean() > 0.5
         outward[pc] = (~flip[pc]) if good else flip[pc]
     log(f"winding: {int(flip.sum())} triangles turned to match their neighbours, {len(pieces)} pieces")
+    both = np.zeros(len(T), bool)
+    if not src.get("reduced"):
+        # triangles seen from behind from outside (other programs draw both sides, the
+        # PlayStation culls them): seen only from behind -> turned, from both sides -> drawn twice
+        # looked at in the pose the game draws (G), with the winding as it will be written; the
+        # side most pixels see is the drawn side (the game's Y is a mirror)
+        Tout = np.where(outward[:, None], T, T[:, [0, 2, 1]])
+        front, back = _seen_sides(G, Tout)
+        if back.sum() > front.sum():
+            front, back = back, front
+        seen = front + back
+        wrong, right = back, front                       # pixels of the side the game would cull
+        turn = (wrong >= 3) & (wrong > 4 * right)
+        both = (wrong >= 2) & ~turn & (wrong > 0.05 * seen)
+        # thin sheets (strands of hair): triangles on an open or non-manifold edge show their back
+        # in some pose sooner or later
+        count = {}
+        for t in Tw:
+            for k in range(3):
+                e = (min(t[k], t[(k + 1) % 3]), max(t[k], t[(k + 1) % 3]))
+                count[e] = count.get(e, 0) + 1
+        loose = np.array([any(count[(min(t[k], t[(k + 1) % 3]), max(t[k], t[(k + 1) % 3]))] != 2 for k in range(3))
+                          for t in Tw])
+        sheet = _sheets(G, Tout)
+        # a loose sheet is seen from both sides in some pose: drawn twice, never just turned
+        both |= loose | sheet
+        turn &= ~both
+        outward = np.where(turn, ~outward, outward)
+        log(f"seen from outside: {int(turn.sum())} triangles turned, {int(both.sum())} drawn from both sides")
     faces = []
     for i, t in enumerate(T):
         v = list(t) if outward[i] else [t[0], t[2], t[1]]
         # geometry on welded vertices (UVs are kept per polygon corner)
         faces.append({"v": [int(weld[x]) for x in v], "hard": False, "suv": [tuple(UV[j]) for j in v]})
+        if both[i]:
+            v = v[::-1]
+            faces.append({"v": [int(weld[x]) for x in v], "hard": False, "suv": [tuple(UV[j]) for j in v]})
     # texture: the file's own layout, 4-bit with a CLUT per UV island (group)
     if src.get("textures"):
-        img = np.asarray(Image.open(io.BytesIO(next(iter(src["textures"].values())))).convert("RGB"))
+        rgba = Image.open(io.BytesIO(next(iter(src["textures"].values())))).convert("RGBA")
+        img = np.asarray(rgba.convert("RGB"))
+        clear = np.asarray(rgba.getchannel("A").resize((256, 256), Image.NEAREST)) < 128
     else:                                            # no texture in the file: plain grey
         img = np.full((256, 256, 3), 150, np.uint8)
+        clear = np.zeros((256, 256), bool)
     th, tw = img.shape[:2]
     if (tw, th) != (256, 256):
         img = np.asarray(Image.fromarray(img).resize((256, 256), Image.LANCZOS))
+    if src.get("reduced"):                           # the bake already looked through them
+        clear[:] = False
+    if clear.any():
+        # see-through texels (hair strands): their colour is filled from opaque neighbours so it
+        # does not take palette entries; after quantising they get PS1 colour 0 (not drawn)
+        img = img.copy()
+        known = ~clear
+        for _ in range(64):
+            if known.all():
+                break
+            acc = np.zeros(img.shape, float)
+            n = np.zeros(known.shape)
+            for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+                acc += np.roll(np.roll(img * known[..., None], dy, 0), dx, 1)
+                n += np.roll(np.roll(known, dy, 0), dx, 1)
+            new = ~known & (n > 0)
+            img[new] = (acc[new] / n[new][:, None]).astype(np.uint8)
+            known |= new
     # islands: faces joined by shared (welded) UV corners
     parent = list(range(len(faces)))
 
@@ -594,6 +744,12 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     def paint(i, xy, bc):
         owner[xy[:, 1], xy[:, 0]] = isl[i]
     TB.raster(texel, paint)
+    # see-through texels count only well inside the polygons: a soft alpha rim along the UV edges
+    # of a painted texture is no cut-out (holes along Tommy's wrists)
+    core = owner >= 0
+    for _ in range(2):
+        core = core & np.roll(core, 1, 0) & np.roll(core, -1, 0) & np.roll(core, 1, 1) & np.roll(core, -1, 1)
+    clear &= core
     # texels just outside an island (polygon edges sample them) join the nearest island, or they
     # would read index 0 of the polygon's palette: light streaks along the edges
     for _ in range(3):
@@ -611,6 +767,30 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     face_isl = sorted({isl[i] for i in src.get("face_tris", []) if i < len(isl)})[:4]
     idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1), own=face_isl,
                                              lab_=bool(src.get("reduced")))
+    clear &= owner >= 0
+    if clear.sum() > 0.25 * (owner >= 0).sum():      # alpha that is not a cut-out (an export quirk)
+        log(f"texture alpha ignored: {int(clear.sum())} of {int((owner >= 0).sum())} used texels would vanish")
+        clear[:] = False
+    if clear.any():
+        # per palette with see-through texels: its least used colour gives way to colour 0
+        idx = idx.copy()
+        gt = np.where(owner >= 0, np.asarray(group)[np.maximum(owner, 0)], -1)
+        pal = [list(palette[16 * k:16 * k + 16]) for k in range(len(palette) // 16)]
+        rgb5 = lambda c: np.array([(c & 31) * 8, ((c >> 5) & 31) * 8, ((c >> 10) & 31) * 8], float)
+        for k in np.unique(gt[clear]):
+            solid = (gt == k) & ~clear
+            use = np.bincount(idx[solid], minlength=16)
+            slot = int(np.argmin(use))
+            others = [j for j in range(16) if j != slot]
+            cols = np.array([rgb5(pal[k][j]) for j in others])
+            move = solid & (idx == slot)
+            if move.any():
+                d = ((img[move].astype(float)[:, None, :] - cols[None]) ** 2).sum(2)
+                idx[move] = np.array(others)[d.argmin(1)]
+            pal[k][slot] = 0x0000
+            idx[(gt == k) & clear] = slot
+        palette = [c for p_ in pal for c in p_]
+        log(f"{int(clear.sum())} see-through texels drawn as PS1 colour 0 (not drawn)")
     band = TB.band4(np.where(owner >= 0, idx, 0))
     # CLUT ids: row 1 from 64 (the donor's 4-bit row) then row 2 from 128
     cid = [64 + k if k < 16 else 128 + (k - 16) for k in range(len(palette) // 16)]

@@ -164,3 +164,21 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   charts, fewer quads: 35.5 bytes of GPU packets per triangle). The packer's FFTs use sizes
   rounded to 32 (odd sizes were 4x slower): packing 28 s -> 8 s.
 
+- **tested** (regress + live fight, 2026-10-16) Non-reduced models: files hold triangles that
+  other programs show from behind (they draw both sides) and hair drawn as loose sheets. Rogue's
+  fringe (source triangles 600-618, open edges) vanished from some sides on the PS1. A ray-parity
+  "is the normal inside" test failed (hair overlapping the head; it turned the fringe's dark
+  undersides outwards over the forehead). What works (`direct_import._build`, non-reduced only):
+  1. `_seen_sides(G, T)`: the posed mesh from 64 Fibonacci directions (not only the axes: a sheet
+  is edge-on there), nearest-surface pixels per triangle from its front and back; seen almost
+  only from behind -> turned. 2. Loose sheets drawn twice (reversed copy): triangles on an open or
+  non-manifold edge, and `_sheets` (a ray backwards reaches air or another surface's front, where
+  a closed shape meets its own inside); a sheet is never just turned. Rogue 713 -> 0 hole pixels,
+  +21 triangles; Tommy unchanged (0).
+- **tested** See-through texels (texture alpha < 128 inside the polygons, not the soft rim along
+  UV edges) become PS1 colour 0 (not drawn): per palette the least used colour gives way. Alpha
+  covering > 25 % of the used texels is ignored (an export quirk). Rogue 350 texels; Tommy's
+  wrist rims (55 hole pixels) were the reason for the rim rule. Reduced models: the bake already
+  looks through them.
+- Debugging holes: `IDS=out.npy` in probe_render saves row*10000+primitive per pixel; match the
+  primitives' texel UVs to the source's `int(UV*256)` to find the source triangles.

@@ -95,7 +95,7 @@ def speckle(path, rgb, owner):
                 cid = mat & 0x7eff
                 raw = vram[cid >> 6, (cid & 63) * 16 + i4[qq[:, 1], qq[:, 0]]]
                 out[qq[:, 1], qq[:, 0]] = np.stack([(raw & 31) * 8, ((raw >> 5) & 31) * 8, ((raw >> 10) & 31) * 8], 1)
-                hit[qq[:, 1], qq[:, 0]] = True
+                hit[qq[:, 1], qq[:, 0]] = raw != 0            # colour 0: see-through on purpose
     d = np.linalg.norm(TB.lab(out[hit]) - TB.lab(rgb[hit].astype(float)), axis=1)
     return float((d > SPECKLE_DE).mean()) if len(d) else 0.0
 
