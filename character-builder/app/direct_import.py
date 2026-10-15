@@ -30,6 +30,77 @@ def load(path: Path) -> dict:
     return out
 
 
+def _colour_swatches(src: dict, colours: dict) -> None:
+    """Materials with only a colour (no texture, as Xbot's body and joints): a small texture of
+    that colour, and their triangles' UVs on it."""
+    from PIL import Image
+    used = set(np.asarray(src["MAT"]).tolist())
+    for mi in sorted(used):
+        if mi in src["textures"] or mi not in colours:
+            continue
+        lin = np.clip(np.array(colours[mi][:3]), 0, 1)
+        srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055)
+        buf = io.BytesIO()
+        Image.new("RGBA", (8, 8), tuple(int(round(c * 255)) for c in srgb) + (255,)).save(buf, "PNG")
+        src["textures"][mi] = buf.getvalue()
+        src["UV"] = np.asarray(src["UV"], float).copy()
+        src["UV"][np.unique(src["T"][np.asarray(src["MAT"]) == mi])] = 0.5
+
+
+def merge_textures(src: dict) -> None:
+    """Several textures (or colour swatches) in one: a grid of cells, every triangle's UVs moved
+    into its material's cell (the PS1 model has one 256 x 256 page)."""
+    from PIL import Image
+    used = sorted(set(np.asarray(src["MAT"]).tolist()))
+    if len(set(used) | set(src["textures"])) < 2 or len(src["textures"]) < 2 and set(used) <= set(src["textures"]):
+        return
+    for mi in used:                                   # no texture and no colour: plain grey
+        if mi not in src["textures"]:
+            buf = io.BytesIO()
+            Image.new("RGBA", (8, 8), (150, 150, 150, 255)).save(buf, "PNG")
+            src["textures"][mi] = buf.getvalue()
+    mats = used
+    if len(mats) < 2:
+        return
+    cols = int(np.ceil(np.sqrt(len(mats))))
+    rows = int(np.ceil(len(mats) / cols))
+    cell = 1024 // cols
+    page = Image.new("RGBA", (cell * cols, cell * rows))
+    T, MAT = src["T"], np.asarray(src["MAT"])
+    P, UV = src["P"], np.asarray(src["UV"], float)
+    # corners are split per material first, so a vertex shared by two materials gets two UVs
+    newP, newUV, newT, newW, newB = [], [], [], [], []
+    W = src.get("weights")
+    VB = src.get("vbone")
+    n = 0
+    for i, mi in enumerate(mats):
+        r, c = divmod(i, cols)
+        im = Image.open(io.BytesIO(src["textures"][mi])).convert("RGBA").resize((cell, cell), Image.LANCZOS)
+        page.paste(im, (c * cell, r * cell))
+        sel = np.where(MAT == mi)[0]
+        verts = np.unique(T[sel])
+        remap = {int(v): n + k for k, v in enumerate(verts)}
+        uv = UV[verts]
+        uv = np.where((uv >= 0) & (uv <= 1), uv, uv % 1.0)
+        newUV.append(np.stack([(c + uv[:, 0]) / cols, (r + uv[:, 1]) / rows], 1))
+        newP.append(P[verts])
+        if W is not None:
+            newW += [W[v] for v in verts]
+        if VB is not None:
+            newB.append(np.asarray(VB)[verts])
+        newT.append(np.vectorize(remap.get)(T[sel]))
+        n += len(verts)
+    buf = io.BytesIO()
+    page.save(buf, "PNG")
+    order = np.concatenate([np.where(MAT == mi)[0] for mi in mats])
+    src.update(P=np.concatenate(newP), UV=np.concatenate(newUV), T=np.concatenate(newT),
+               MAT=np.zeros(len(order), int), textures={0: buf.getvalue()})
+    if W is not None:
+        src["weights"] = newW
+    if VB is not None:
+        src["vbone"] = np.concatenate(newB)
+
+
 def _upright(src: dict) -> None:
     """Turns a rigged model into the importer's axes (Y up, facing +Z, the character's left at
     +X) from its skeleton: up = hips -> head, left = right upper arm -> left upper arm. Character
@@ -70,6 +141,7 @@ def _load(path: Path) -> dict:
             w = g["weights"]
             out["bones"], out["weights"] = g["bones"], w
             out["vbone"] = np.array([max(x, key=x.get) if x else -1 for x in w])
+        _colour_swatches(out, g.get("colours", {}))
         return out
     import fbx
     c = fbx.character(path)
@@ -397,6 +469,7 @@ def build(root: Path, model: int, path: Path, log=print, parts=None):
     src = load(Path(path))
     PR.apply(src, parts, log=log)
     if len(src["T"]) <= REDUCE_ABOVE:
+        merge_textures(src)                           # one texture page (reduce bakes its own)
         return _build(root, model, src, log)
     import reduce as RD
     # a first guess from what reduced models need (flat quads included): ~35.5 bytes of GPU packets

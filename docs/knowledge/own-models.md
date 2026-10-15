@@ -193,3 +193,8 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
 - **tested** Head row over 255 texture coordinates (Michelle's big hair): retry with half the head
   detail (4x -> 2x -> 1x importance, hair as one material) before fewer triangles: Michelle 5
   tries/215 s/666 tris -> 2 tries/92 s/856 tris.
+- **tested** (Xbot.glb) glTF materials with only a `baseColorFactor` (linear RGB) get an 8x8
+  swatch texture (sRGB) and their triangles' UVs on it (`direct_import._colour_swatches`).
+  Non-reduced models with several textures/materials: `merge_textures` packs them into one page
+  (grid cells, corners split per material, UVs outside 0..1 wrapped); self-tested on Rogue with
+  a second material. Reduced models bake per material and need no merge.

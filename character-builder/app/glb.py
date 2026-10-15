@@ -105,15 +105,18 @@ def read(path: Path) -> dict:
     P = np.concatenate(P)
     UV = np.concatenate(UV)
     T = np.concatenate(T)
-    textures = {}
+    textures, colours = {}, {}
     for mi, m in enumerate(j.get("materials", [])):
-        tex = m.get("pbrMetallicRoughness", {}).get("baseColorTexture")
+        pbr = m.get("pbrMetallicRoughness", {})
+        colours[mi] = [float(x) for x in pbr.get("baseColorFactor", [1, 1, 1, 1])]   # linear RGBA
+        tex = pbr.get("baseColorTexture")
         if tex is None:
             continue
         img = j["images"][j["textures"][tex["index"]]["source"]]
         if "bufferView" in img:
             textures[mi] = view(img["bufferView"])[0]
     out = {"positions": P, "triangles": T, "uv": UV, "materials": np.array(MAT), "textures": textures,
+           "colours": colours,
            "skinned": any("skin" in n for n in j["nodes"])}
     if bones and any(WTS):
         out["bones"], out["weights"] = bones, WTS
