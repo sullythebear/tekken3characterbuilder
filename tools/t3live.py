@@ -165,6 +165,7 @@ def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, ce
                 g.shot(shots / "stuck.png")
                 raise SystemExit("the fight did not start (see shots/stuck.png)")
             time.sleep(0.3)
+        print(f"stage {g.word(0x800ADC84, 2):#04x} music {g.word(0x800ADD08, 2):#04x}")   # this fight's
         moves = ["none", "square", "none", "triangle", "none", "cross", "none", "circle", "right", "left"]
         start = g.frame()
         k = 0

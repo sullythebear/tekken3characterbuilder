@@ -16,7 +16,8 @@ ROSTER = [
 ("    unsigned char *ui;\n",
  "    unsigned char *ui;\n"
  "    int custom;                   /* Character Builder fighter: native model and moves */\n"
- "    unsigned donor_id;            /* its Tekken 3 donor (0..20) */\n", 1),
+ "    unsigned donor_id;            /* its Tekken 3 donor (0..20) */\n"
+ "    unsigned music_owner;         /* T3CB-PATCH-17: the Tekken 3 fighter whose music it takes */\n", 1),
 ("static unsigned roster_count;\n",
  "static unsigned roster_count;\n"
  "/* roster[0..tag_count) are the TTT1 guests (Tag page), the rest custom fighters. */\n"
@@ -40,6 +41,7 @@ ROSTER = [
 ("    g->catalog_index=roster_count++;\n}\n",
  "    g->catalog_index=roster_count++;\n}\n"
  "/* Custom fighters: <asset root>/customs.txt, one \"<key> <donor ID>\" per line,\n"
+ " * optionally followed by the fighters whose stage and music it takes (T3CB-PATCH-17),\n"
  " * with <Key>-T3-ui.jui, <Key>-T3-name.4bpp and <Key>-T3-label.txt beside it. */\n"
  "static unsigned custom_slot_model(unsigned k,unsigned c);   /* T3CB-PATCH-9 */\n"
  "static void add_customs(void) {\n"
@@ -48,8 +50,8 @@ ROSTER = [
  "    FILE *f=fopen(path,\"rb\");if(!f)return;\n"
  "    char line[96];\n"
  "    while(fgets(line,sizeof line,f)) {\n"
- "        char key[32];unsigned donor;\n"
- "        if(sscanf(line,\"%31s %u\",key,&donor)!=2 || donor>20 || roster_index(key)>=0)continue;\n"
+ "        char key[32];unsigned donor,stage=99,music=99;\n"
+ "        if(sscanf(line,\"%31s %u %u %u\",key,&donor,&stage,&music)<2 || donor>20 || roster_index(key)>=0)continue;\n"
  "        if(roster_count-tag_count>=CUSTOM_MAX){fprintf(stderr,\"Custom fighters: %s left out, the Custom page holds %u\\n\",key,(unsigned)CUSTOM_MAX);continue;}\n"
  "        Tekken3Guest *g=&roster[roster_count];\n"
  "        memset(g,0,sizeof *g);\n"
@@ -57,7 +59,8 @@ ROSTER = [
  "            fprintf(stderr,\"Custom fighters: %s left out, its interface files failed validation\\n\",key);\n"
  "            free(g->ui);memset(g,0,sizeof *g);continue;\n"
  "        }\n"
- "        g->custom=1;g->donor_id=donor;g->arena_owner=donor;g->moveset=NO_MOVESET;\n"
+ "        g->custom=1;g->donor_id=donor;g->moveset=NO_MOVESET;\n"
+ "        g->arena_owner=stage<=20?stage:donor;g->music_owner=music<=20?music:donor;\n"
  "        g->third_costume=0;g->donor_count=0;\n"
  "        g->catalog_index=roster_count++;\n"
  "        /* T3CB-PATCH-9: Start picks costume 3 when it has a model (the donor's or a variant's). */\n"
@@ -107,6 +110,16 @@ ROSTER = [
  "        if(roster[k].custom)fprintf(stderr,\"Custom fighters: %s descriptor from character %u: %02x %02x %02x %02x %02x %02x %02x %02x\\n\",\n"
  "            roster[k].name,roster[k].donor_id,psx_mod_read_byte(from+4),psx_mod_read_byte(from+5),psx_mod_read_byte(from+6),\n"
  "            psx_mod_read_byte(from+7),psx_mod_read_byte(from+8),psx_mod_read_byte(from+9),psx_mod_read_byte(from+10),psx_mod_read_byte(from+11));\n", 1),
+# T3CB-PATCH-17: a custom fighter's music can come from another fighter than its stage.
+("            psx_mod_write_byte(d+11,psx_mod_read_byte(owner+11));\n",
+ "            /* T3CB-PATCH-17: a custom fighter's own choice of music */\n"
+ "            uint32_t tune=roster[k].custom?psx_mod_read_word(0x80097d40+roster[k].music_owner*16):owner;\n"
+ "            psx_mod_write_byte(d+11,psx_mod_read_byte(tune+11));\n", 1),
+("            arena_value=psx_mod_read_byte(record+10);music_value=psx_mod_read_byte(record+11);\n",
+ "            arena_value=psx_mod_read_byte(record+10);music_value=psx_mod_read_byte(record+11);\n"
+ "            /* T3CB-PATCH-17: a custom fighter's own choice of music */\n"
+ "            if(roster[k].custom && roster[k].music_owner<STOCK_FIGHTERS)\n"
+ "                music_value=psx_mod_read_byte(psx_mod_read_word(0x80097d40+roster[k].music_owner*16)+11);\n", 1),
 # The strong-hit effect: a custom fighter has its donor's pack, so its donor's header.
 ("        if(tekken3_guest_character((ptr-EFFECT_HEADERS)/EFFECT_HEADER)>=0)psx_mod_write_word(at,jin);",
  "        unsigned id=(ptr-EFFECT_HEADERS)/EFFECT_HEADER;int donor=tekken3_guest_native(id);\n"
@@ -471,6 +484,11 @@ ROSTER = [
  "        for(unsigned k=0;one && k<roster_count;k++)if(!strcmp(roster[k].key,one) && GUEST_ID+k!=player) {\n"
  "            list[0]=(unsigned char)(GUEST_ID+k);                   /* stage 1 is loading: the CPU's choice too */\n"
  "            psx_mod_write_half(0x800add5c+(human^1)*2,(uint16_t)(GUEST_ID+k));\n"
+ "            if(roster[k].custom){                                      /* and its stage and music (T3CB-PATCH-17) */\n"
+ "                arena_pending=1;\n"
+ "                arena_value=psx_mod_read_byte(psx_mod_read_word(0x80097d40+roster[k].arena_owner*16)+10);\n"
+ "                music_value=psx_mod_read_byte(psx_mod_read_word(0x80097d40+roster[k].music_owner*16)+11);\n"
+ "            }\n"
  "            fprintf(stderr,\"TTT1 characters: %s is the CPU's stage 1 opponent (test)\\n\",roster[k].name);\n"
  "        }\n"
  "    }\n"

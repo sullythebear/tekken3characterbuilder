@@ -27,6 +27,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   key, 5/6 Mokujin, 8 strip tiles (`custom_strips`), 9 palettes (`custom_palette_tick`),
   10 own models (`custom_model`, `tekken3_custom_model_install`), 11 own textures
   (`custom_model_check` uploads texture + CLUT), 12 several CLUT runs per texture, 13 renderer probe options, 14 texels re-uploaded every frame.
+- `app/name_call.py` (stdlib) – the announcer's name call: `speak` (Windows System.Speech),
+  `announcer` (lower, echo), `own`, `read_wav`, `pack` (`<Key>-TTT1-sfx.jus`, sound 1025),
+  `fighter_sound` (cached automatic call), `write`. Server: `decode_wav`, `name_call_preview`
+  (`/api/namecall/preview`), `write_name_call` (in `sync_customs`), `custom_entry` (customs.txt line).
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
 - `app/expanded_custom.py` (venv) – writes portrait pack, name plate, customs.txt (`install`,
@@ -86,6 +90,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app.js` – pages, character form, donors (`renderDonors`), portrait (`drawPortrait`,
   `quantizePS1`), roster, steps/gauges, project panel.
 - `model3d.js` – the 3D model page (upload, check/lock, import, remove).
+- `arena.js` – stage, music and name call (`T3Arena`: lists, preview, record via MediaRecorder,
+  `toWav` decodes any sound to 44100 Hz mono WAV in the browser).
 - `costumes.js` – WebGL preview (shows the own model on its costume) (`createViewer`), `parseModel`, clothing pieces (`texelUse`,
   `groupParts`, `setPieceColour`), palettes (`computeCluts`, `paletteFor`), variants.
 

@@ -107,7 +107,7 @@ function renderDonors() {
       based.textContent = `based on ${donor.name}`;
       button.append(style, based);
       button.title = donorLabel(donor.id);
-      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Costumes.refresh(); });
+      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Costumes.refresh(); });
       cards.append(button);
     }
     section.append(title, cards);
@@ -286,6 +286,7 @@ function fillForm() {
   $("form-error").textContent = "";
   renderDonors();
   renderStage();
+  T3Arena.fill();
   if (window.T3Model) T3Model.refresh();
   showPortraitFromModel();
 }
@@ -406,7 +407,7 @@ async function save(event) {
   if (state.current.donor === null) { error.textContent = "Choose a fighting style."; return; }
   error.textContent = "";
   const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
-    costumes: T3Costumes.serialize() };
+    costumes: T3Costumes.serialize(), ...T3Arena.body() };
   if (state.portraitChanged && state.source) {
     body.portrait_ps1 = $("portrait-canvas").toDataURL("image/png");
     body.portrait_source = sourcePNG();
@@ -417,6 +418,7 @@ async function save(event) {
     const saved = await api("/api/characters", body);
     state.dirty = false;
     state.portraitChanged = false;
+    T3Arena.saved();
     state.current = copyFighter(saved);
     await loadCharacters();
     fillForm();
@@ -607,6 +609,7 @@ async function pollBuild() {
 
 function wire() {
   $("character-form").addEventListener("submit", save);
+  T3Arena.init();
   $("name").addEventListener("input", (e) => {
     const cleaned = e.target.value.toUpperCase().replace(NAME_BLOCKED, "");
     if (cleaned !== e.target.value) e.target.value = cleaned;

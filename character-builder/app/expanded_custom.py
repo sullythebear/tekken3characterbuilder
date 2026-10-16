@@ -89,16 +89,18 @@ def remove(root: Path, key: str) -> None:
     for folder in targets(root):
         for suffix in ("-ui.jui", "-name.4bpp", "-label.txt", "-pal.bin", "-model.bin"):
             (folder / f"{prefix(key)}{suffix}").unlink(missing_ok=True)
+        (folder / f"{key[0].upper()}{key[1:].lower()}-TTT1-sfx.jus").unlink(missing_ok=True)   # name call
     print(f"OK removed {key}")
 
 
 def write_list(root: Path, entries: list[str], drop: list[str]) -> None:
     lines, keys = [], set()
     for entry in entries:
-        key, donor = entry.split()
-        if not re.fullmatch(r"cb[a-z0-9]{1,24}", key) or not 0 <= int(donor) <= 20:
+        key, *numbers = entry.split()          # donor, then optionally stage and music fighters
+        if (not re.fullmatch(r"cb[a-z0-9]{1,24}", key) or not 1 <= len(numbers) <= 3
+                or not all(n.isdigit() and int(n) <= 20 for n in numbers)):
             fail(f"Invalid entry: {entry}")
-        lines.append(f"{key} {int(donor)}")
+        lines.append(" ".join([key, *(str(int(n)) for n in numbers)]))
         keys.add(key)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import custom_page

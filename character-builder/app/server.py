@@ -16,6 +16,7 @@ from urllib.parse import urlparse, unquote
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
+import name_call  # noqa: E402
 
 APP_VERSION = "0.4.0"
 APP = Path(__file__).resolve().parent
@@ -408,6 +409,50 @@ def safe_id(value: str) -> str:
     return value
 
 
+def decode_wav(data_url: str | None, process: bool = False) -> bytes | None:
+    """A name call sound (a WAV data URL) as 44100 Hz mono WAV of at most 3 s. process: a new
+    recording or file, trimmed and brought to the game's level (done once, when it is chosen;
+    saving and packages keep it as it is)."""
+    if not data_url:
+        return None
+    try:
+        raw = base64.b64decode(str(data_url).split(",", 1)[-1], validate=True)
+    except ValueError:
+        raise ValueError("The name call sound is damaged.") from None
+    if len(raw) > MAX_UPLOAD:
+        raise ValueError("The name call sound is too long.")
+    samples = name_call.read_wav(raw)
+    samples = name_call.own(samples) if process else samples[:int(name_call.MAX_SECONDS * name_call.RATE)]
+    return name_call.wav_bytes(samples)
+
+
+def name_call_preview(data: dict) -> dict:
+    """The name call a choice gives, as a WAV data URL for the page to play."""
+    mode = data.get("mode", "auto")
+    if mode == "auto":
+        name = str(data.get("name", "")).upper().strip()
+        if not NAME_RE.fullmatch(name):
+            raise ValueError("Enter the fighter's name first.")
+        wav = name_call.wav_bytes(name_call.announcer(name_call.speak(name)))
+    elif data.get("wav"):
+        wav = decode_wav(data.get("wav"), process=True)
+    else:
+        path = DATA / safe_id(str(data.get("id", ""))) / "namecall.wav"
+        if not path.is_file():
+            raise ValueError("Record or choose a sound first.")
+        wav = path.read_bytes()
+    return {"wav": "data:audio/wav;base64," + base64.b64encode(wav).decode()}
+
+
+def write_name_call(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-TTT1-sfx.jus: the announcer's call of the fighter's name (or none)."""
+    try:
+        name_call.write(root, custom_page.FOLDERS, key, name_call.fighter_sound(DATA / fighter["id"], fighter))
+    except (OSError, ValueError) as error:
+        return f"Name call: {error}"
+    return None
+
+
 def decode_png(data_url: str | None) -> bytes | None:
     if not data_url:
         return None
@@ -431,7 +476,22 @@ def validate_character(data: dict) -> dict:
     if not DONOR_MIN <= donor <= DONOR_MAX:
         raise ValueError("That donor does not exist.")
     author = re.sub(r"[^\w .\-]", "", str(data.get("author", ""))).strip()[:32]
-    return {"name": name, "donor": donor, "author": author}
+    clean = {"name": name, "donor": donor, "author": author}
+    for key in ("stage", "music"):          # the Tekken 3 fighter whose stage / music it takes
+        value = data.get(key)
+        if value not in (None, "", -1, "-1"):
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"That {key} does not exist.") from None
+            if not DONOR_MIN <= value <= DONOR_MAX:
+                raise ValueError(f"That {key} does not exist.")
+            clean[key] = value
+    mode = data.get("name_call", "auto")    # the announcer's call: automatic voice, own sound, none
+    if mode not in name_call.MODES:
+        raise ValueError("Choose how the announcer calls the name.")
+    clean["name_call"] = mode
+    return clean
 
 
 COSTUME_MAX = 8
@@ -517,6 +577,7 @@ def character_list() -> list[dict]:
         data["model_undo"] = (folder / "model-prev.json").is_file()
         if not data["has_model"]:
             data.pop("own_model", None)
+        data["name_recording"] = (folder / "namecall.wav").is_file()
         try:                                       # a checked upload waiting for its import
             data["model_upload"] = (json.loads((folder / "upload.json").read_text(encoding="utf-8"))
                                     if (folder / "upload.json").is_file() else None)
@@ -562,7 +623,8 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
             warnings.append(problem)
     fighters = sorted(character_list(), key=lambda c: c.get("created", ""))
     library = {game_key(c["id"]): c for c in fighters}
-    existing, unreadable = custom_page.read_entries(root)
+    raw_lines = {}
+    existing, unreadable = custom_page.read_entries(root, raw_lines)
     for line in unreadable:
         warnings.append(f"customs.txt has a line the creator cannot read, kept out of the list: {line}")
     order = [key for key, _ in existing if key != drop]
@@ -572,7 +634,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
     for key in order:
         c = library.get(key)
         if not c:  # not in this library: keep it as the game has it
-            listed.append(f"{key} {donors[key]}")
+            listed.append(raw_lines.get(key) or f"{key} {donors[key]}")
             continue
         if len(listed) >= CUSTOM_PAGE_MAX:
             left_out += 1
@@ -589,8 +651,11 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
                 warnings.append(f"{c['name']}: {problem}")
                 if not present and key not in donors:
                     continue
-        listed.append(f"{key} {c['donor']}")
+        listed.append(custom_entry(key, c))
         problem = write_palettes(root, key, c) or write_own_model(root, key, c)
+        if problem:
+            warnings.append(f"{c['name']}: {problem}")
+        problem = write_name_call(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
     if left_out:
@@ -602,6 +667,15 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
     if problem:
         warnings.append(problem)
     return warnings
+
+
+def custom_entry(key: str, c: dict) -> str:
+    """A customs.txt line: key and donor, then the fighters whose stage and music it takes when
+    they are not the donor's (patch 17)."""
+    stage, music = c.get("stage"), c.get("music")
+    if stage is None and music is None:
+        return f"{key} {c['donor']}"
+    return f"{key} {c['donor']} {c['donor'] if stage is None else stage} {c['donor'] if music is None else music}"
 
 
 def donor_costume_count(donor: int) -> int:
@@ -1082,6 +1156,11 @@ def save_character(data: dict) -> dict:
               "costumes": validate_costumes(data["costumes"]) if "costumes" in data else old.get("costumes", [])}
     if old.get("own_model") and (folder / "model.bin").is_file():
         record["own_model"] = old["own_model"]          # set only by import_model / remove_model
+    recording = decode_wav(data.get("name_call_wav"))
+    if recording:
+        (folder / "namecall.wav").write_bytes(recording)
+    if record["name_call"] == "own" and not (folder / "namecall.wav").is_file():
+        record["name_call"] = "auto"                    # nothing recorded yet
     for key, filename in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                           ("portrait_full", "portrait-full.png")):
         png = decode_png(data.get(key))
@@ -1103,7 +1182,7 @@ def export_character(cid: str) -> tuple[str, bytes]:
         raise ValueError("Character not found.")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
-        for name in ("character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png"):
+        for name in ("character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav"):
             if (folder / name).is_file():
                 z.write(folder / name, name)
         # an own 3D model travels as its source file (the user's own work) with the choices in
@@ -1147,7 +1226,8 @@ def import_character(payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
-    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "source.fbx", "source.glb", "source.vrm"}
+    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
+               "source.fbx", "source.glb", "source.vrm"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -1179,6 +1259,8 @@ def import_character(payload: str) -> dict:
     if "source.vrm" in files and not files["source.vrm"].startswith(b"glTF"):
         raise ValueError("source.vrm is not a VRM (glTF binary) file.")
     record = {**validate_character(data), "costumes": validate_costumes(data.get("costumes"))}
+    if "namecall.wav" in files:
+        record["name_call_wav"] = "data:audio/wav;base64," + base64.b64encode(files["namecall.wav"]).decode()
     for key, name in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                       ("portrait_full", "portrait-full.png")):
         if name in files:
@@ -1373,6 +1455,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/undo":
                 saved = undo_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/namecall/preview":
+                return self._json(name_call_preview(data))
             if path == "/api/model/portrait":
                 return self._json(own_portrait(str(data.get("id", ""))))
             if path == "/api/model/preview":

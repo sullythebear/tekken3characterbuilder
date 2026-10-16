@@ -27,8 +27,10 @@ def file_prefix(key: str) -> str:
     return key[0].upper() + key[1:].lower() + "-T3"
 
 
-def read_entries(root: Path) -> tuple[list[tuple[str, int]], list[str]]:
-    """The listed (key, donor) pairs in order, and the lines that could not be read."""
+def read_entries(root: Path, lines_out: dict | None = None) -> tuple[list[tuple[str, int]], list[str]]:
+    """The listed (key, donor) pairs in order, and the lines that could not be read. A line may
+    add the fighters whose stage and music it takes (patch 17): "<key> <donor> [stage] [music]";
+    lines_out, when given, gets each key's whole line."""
     entries, seen, unreadable = [], set(), []
     for folder in FOLDERS:
         path = root / folder / LIST_NAME
@@ -40,10 +42,13 @@ def read_entries(root: Path) -> tuple[list[tuple[str, int]], list[str]]:
             parts = line.split()
             if not parts:
                 continue
-            if len(parts) == 2 and KEY_RE.fullmatch(parts[0]) and parts[1].isdigit() and int(parts[1]) <= 20:
+            if (2 <= len(parts) <= 4 and KEY_RE.fullmatch(parts[0])
+                    and all(p.isdigit() and int(p) <= 20 for p in parts[1:])):
                 if parts[0] not in seen:
                     seen.add(parts[0])
                     entries.append((parts[0], int(parts[1])))
+                    if lines_out is not None:
+                        lines_out[parts[0]] = " ".join(parts)
             elif line.strip() not in unreadable:
                 unreadable.append(line.strip())
     return entries, unreadable

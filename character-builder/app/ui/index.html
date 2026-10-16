@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Russo+One&display=swap">
 <link rel="stylesheet" href="/ui/style.css">
 <script src="/ui/costumes.js" defer></script>
+<script src="/ui/arena.js" defer></script>
 <script src="/ui/app.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
 </head>
@@ -91,6 +92,30 @@
           <div class="donor-grid" id="donor-grid" role="radiogroup" aria-label="Fighting style"></div>
         </div>
         <p class="donor-info" id="donor-info"></p>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Stage, music and name call</legend>
+        <div class="arena-lists">
+          <label>Stage <select id="stage"></select></label>
+          <label>Music <select id="music"></select></label>
+          <label>Name call
+            <select id="name-call">
+              <option value="auto">Computer voice (automatic)</option>
+              <option value="own">My own sound</option>
+              <option value="off">Silent</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">Your fighter's home stage and theme (where it is met in Arcade), and how the announcer says its name.</p>
+        <div class="portrait-buttons">
+          <button class="btn btn-ghost" type="button" id="name-play">Play</button>
+          <span class="portrait-buttons" id="name-own" hidden>
+            <button class="btn btn-ghost" type="button" id="name-record">Record</button>
+            <label class="btn btn-ghost file-btn">Choose sound<input type="file" id="name-file" accept="audio/*" hidden></label>
+          </span>
+        </div>
+        <p class="hint" id="name-hint"></p>
       </fieldset>
 
       <fieldset class="field">

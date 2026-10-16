@@ -63,13 +63,13 @@ def patch(game: Path) -> None:
           + ("" if st["problem"] is None else f", problem: {st['problem']}"))
 
 
-def build(game: Path) -> None:
+def build(game: Path, folder: str = "build-release") -> None:
     tools = sorted((game / ".setup" / "tools").glob("toolchain-*"))
     env = dict(os.environ)
     if tools:
         env["PATH"] = str(tools[0] / "bin") + os.pathsep + env["PATH"]
     cmake = shutil.which("cmake", path=env["PATH"]) or "cmake"
-    r = subprocess.run([cmake, "--build", "build-release", "--target", "psx-runtime"], cwd=game, env=env,
+    r = subprocess.run([cmake, "--build", folder, "--target", "psx-runtime"], cwd=game, env=env,
                        capture_output=True, text=True)
     out = (r.stdout + r.stderr).splitlines()
     if r.returncode == 0:
@@ -156,6 +156,7 @@ def main() -> None:
     ap.add_argument("--model", type=int)
     ap.add_argument("--only")
     ap.add_argument("--approve", action="store_true")
+    ap.add_argument("--debug", action="store_true", help="build: the debug build t3live uses (build-opt-dbg)")
     ap.add_argument("--all", action="store_true", help="regress: also the files in character-builder/testmodels")
     a = ap.parse_args()
     if a.command == "deploy":
@@ -163,7 +164,7 @@ def main() -> None:
     elif a.command == "patch":
         patch(a.game)
     elif a.command == "build":
-        build(a.game)
+        build(a.game, "build-opt-dbg" if a.debug else "build-release")
     elif a.command == "report":
         report(a.game)
     elif a.command == "setmodel":
