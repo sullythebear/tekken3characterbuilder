@@ -204,3 +204,11 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   end, hips = where the feet's chains meet, hands = the two other ends furthest from the up axis,
   knee = the leg joint nearest half way down, front = toes past the ankles, left = up x front.
   Renamed as Mixamo's (Hips, LeftUpLeg, ...); `inspect` notes it. BrainStem (robot) stays locked.
+- **tested** (browser pane, 2026-10-16) Portrait from the own model: `model_export.own_portrait`
+  (CLI `ownportrait --file --out`, server `/api/model/portrait`, button "Make from 3D model" on
+  the Fighter tab, shown when `has_model`): the bind-pose mesh of `export_own`, x mirrored as the
+  preview, turned 0.3 rad, the top 36 % of the figure (not the head row: Rogue's holds the
+  folded ponytail), centred on the top 12 %, decoded PS1 texture (colour 0 see-through), vertex
+  normal light from the front left, a charcoal backdrop with a warm glow; 504 x 756 PNG, then
+  the usual crop and 4-band conversion in the browser. Tried on Medea, Rogue, Tommy, Michelle,
+  Soldier, CesiumMan.

@@ -816,6 +816,23 @@ def import_model(cid: str, costume: int, parts=None) -> dict:
     return get_character(folder.name)
 
 
+def own_portrait(cid: str) -> dict:
+    """A select-screen portrait made from the fighter's own 3D model (PNG, base64)."""
+    root = project_root()
+    source = DATA / safe_id(cid) / "model.bin"
+    if not root or not source.is_file():
+        raise ValueError("This fighter has no own 3D model yet.")
+    out = CACHE / f"portrait-{safe_id(cid)}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with model_lock:
+        problem, _ = run_model_tool(root, ["ownportrait", "--file", str(source), "--out", str(out)])
+    if problem or not out.is_file():
+        raise ValueError(problem or "The portrait could not be made.")
+    png = base64.b64encode(out.read_bytes()).decode()
+    out.unlink(missing_ok=True)
+    return {"png": png}
+
+
 def own_model_json(cid: str) -> bytes:
     """Mesh JSON of characters/<id>/model.bin for the 3D preview (cached per file version)."""
     root = project_root()
@@ -1224,6 +1241,8 @@ class Handler(BaseHTTPRequestHandler):
                 with model_lock:
                     saved = import_model(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/model/portrait":
+                return self._json(own_portrait(str(data.get("id", ""))))
             if path == "/api/model/preview":
                 return self._json(model_preview(str(data.get("id", "")), data.get("parts")))
             if path == "/api/model/remove":

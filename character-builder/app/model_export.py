@@ -497,9 +497,100 @@ def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = 
     return out
 
 
+def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756)) -> bytes:
+    """PNG for the select-screen portrait from an own model: head and shoulders, turned a little
+    as Tekken 3's portraits, the model's own PS1 texture, soft light from the front left, on a
+    dark backdrop with a warm glow (the builder then crops and converts it as any image)."""
+    import io
+    import numpy as np
+    from PIL import Image
+    j = export_own(root, path)
+    P = np.array(j["positions"], float).reshape(-1, 3)
+    P[:, 0] = -P[:, 0]                                   # as the 3D preview: the game's X is mirrored
+    UV = np.array(j["uv"], float).reshape(-1, 2)
+    T = np.array(j["triangles"], int).reshape(-1, 3)
+    mat = np.array(j["material"], int)[T[:, 0]]
+    row = np.array(j["bones"], int)
+    words = j["band_words"]
+    band = np.frombuffer(base64.b64decode(j["band"]), "<u2").reshape(256, words)
+    idx4 = np.stack([(band >> (4 * k)) & 15 for k in range(4)], 2).reshape(256, -1)
+    idx8 = np.stack([band & 255, band >> 8], 2).reshape(256, -1)
+    cluts = {int(k): np.array(v, int) for k, v in j["cluts"].items()}
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    Q = np.stack([cy * P[:, 0] + sy * P[:, 2], P[:, 1], -sy * P[:, 0] + cy * P[:, 2]], 1)   # +z: nearer
+    # the frame: the top third of the figure (head, shoulders, chest), as Tekken 3's portraits;
+    # centred on the head (the head row can also hold a ponytail down the back)
+    top = Q[:, 1].max()
+    Hm = max(float(np.ptp(Q[:, 1])), 1e-6)
+    W, H = size
+    y0 = top + 0.03 * Hm
+    sc = H / (0.36 * Hm)
+    xc = Q[Q[:, 1] > top - 0.12 * Hm, 0].mean()
+    X = (Q[:, 0] - xc) * sc + W / 2
+    Y = (y0 - Q[:, 1]) * sc
+    # smooth light: vertex normals over welded positions
+    fn = np.cross(Q[T[:, 1]] - Q[T[:, 0]], Q[T[:, 2]] - Q[T[:, 0]])
+    key = {}
+    weld = np.array([key.setdefault(tuple(np.round(p, 1)), len(key)) for p in Q])
+    vn = np.zeros((len(key), 3))
+    for k in range(3):
+        np.add.at(vn, weld[T[:, k]], fn)
+    vn /= np.linalg.norm(vn, axis=1, keepdims=True) + 1e-12
+    if np.mean(vn[weld][:, 2]) < 0:                      # the winding's sign: normals face the viewer
+        vn = -vn
+    light = np.array([-0.45, 0.5, 0.75])
+    light /= np.linalg.norm(light)
+    shade = 0.62 + 0.48 * np.clip(vn[weld] @ light, 0, 1)
+    # backdrop: charcoal with a warm glow behind the shoulders
+    yy, xx = np.mgrid[0:H, 0:W]
+    d = np.hypot((xx - W / 2) / W, (yy - 0.75 * H) / H)
+    img = np.stack([48 + 110 * np.clip(0.7 - d, 0, 1), 50 + 52 * np.clip(0.7 - d, 0, 1), 64 + 18 * np.clip(0.7 - d, 0, 1)], 2)
+    zb = np.full((H, W), -np.inf)
+    for i, t in enumerate(T):
+        xy = np.stack([X[t], Y[t]], 1)
+        cr = (xy[1, 0] - xy[0, 0]) * (xy[2, 1] - xy[0, 1]) - (xy[1, 1] - xy[0, 1]) * (xy[2, 0] - xy[0, 0])
+        if abs(cr) < 1e-9:
+            continue
+        x0, y0_ = np.maximum(np.floor(xy.min(0)).astype(int), 0)
+        x1, y1 = np.minimum(np.ceil(xy.max(0)).astype(int), [W - 1, H - 1])
+        if x1 < x0 or y1 < y0_:
+            continue
+        gx, gy = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0_, y1 + 1))
+        px = np.stack([gx.ravel() + .5, gy.ravel() + .5], 1)
+        l1 = ((xy[1, 0] - px[:, 0]) * (xy[2, 1] - px[:, 1]) - (xy[1, 1] - px[:, 1]) * (xy[2, 0] - px[:, 0])) / cr
+        l2 = ((xy[2, 0] - px[:, 0]) * (xy[0, 1] - px[:, 1]) - (xy[2, 1] - px[:, 1]) * (xy[0, 0] - px[:, 0])) / cr
+        ins = (l1 >= 0) & (l2 >= 0) & (1 - l1 - l2 >= 0)
+        if not ins.any():
+            continue
+        L = np.stack([l1, l2, 1 - l1 - l2], 1)[ins]
+        pp = px[ins].astype(int)
+        z = L @ Q[t, 2]
+        uv = L @ UV[t]
+        cid = mat[i] & 0x7EFF
+        pal = cluts.get(cid)
+        if pal is None:
+            continue
+        v = np.clip(uv[:, 1].astype(int), 0, 255)
+        if mat[i] & 0x8000:
+            ix = idx8[v, np.clip(uv[:, 0].astype(int), 0, idx8.shape[1] - 1)]
+        else:
+            ix = idx4[v, np.clip(uv[:, 0].astype(int), 0, idx4.shape[1] - 1)]
+        raw = pal[np.clip(ix, 0, len(pal) - 1)]
+        ok = raw != 0                                     # colour 0: see-through
+        rgb = np.stack([(raw & 31), (raw >> 5) & 31, (raw >> 10) & 31], 1) * (255 / 31)
+        rgb = rgb * (L @ shade[t])[:, None]
+        yi, xi = pp[:, 1], pp[:, 0]
+        near = (z > zb[yi, xi]) & ok
+        zb[yi[near], xi[near]] = z[near]
+        img[yi[near], xi[near]] = rgb[near]
+    buf = io.BytesIO()
+    Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(buf, "PNG")
+    return buf.getvalue()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait"))
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
@@ -515,6 +606,12 @@ def main() -> None:
         if args.file is None or args.out is None:
             fail("ownjson needs --file and --out.")
         args.out.write_text(json.dumps(export_own(args.root, args.file)), encoding="utf-8")
+        print(f"OK {args.out}")
+        return
+    if args.command == "ownportrait":
+        if args.file is None or args.out is None:
+            fail("ownportrait needs --file and --out.")
+        args.out.write_bytes(own_portrait(args.root, args.file))
         print(f"OK {args.out}")
         return
     if args.command == "ownmodel":

@@ -169,6 +169,7 @@ const T3Model = (() => {
     state.current = copyFighter(result);
     await loadCharacters();
     refresh();
+    if (window.showPortraitFromModel) showPortraitFromModel();
     if (!showWarnings(result)) toast(message);
   }
 

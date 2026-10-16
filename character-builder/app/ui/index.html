@@ -95,7 +95,10 @@
 
       <fieldset class="field">
         <legend>Portrait</legend>
-        <label class="btn btn-ghost file-btn">Choose image<input type="file" id="portrait-file" accept="image/*" hidden></label>
+        <div class="portrait-buttons">
+          <label class="btn btn-ghost file-btn">Choose image<input type="file" id="portrait-file" accept="image/*" hidden></label>
+          <button class="btn btn-ghost" type="button" id="portrait-from-model" hidden title="Head and shoulders of the fighter's own 3D model, turned a little">Make from 3D model</button>
+        </div>
         <div class="sliders" id="portrait-controls" hidden>
           <label>Zoom <input type="range" id="zoom" min="100" max="300" value="100"></label>
           <label>Horizontal <input type="range" id="pan-x" min="-100" max="100" value="0"></label>

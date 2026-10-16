@@ -229,6 +229,22 @@ async function useFile(file) {
   } catch (error) { toast(error.message); }
 }
 
+// a portrait rendered from the fighter's own 3D model, used as if it were a chosen image
+async function portraitFromModel() {
+  const button = $("portrait-from-model");
+  if (!state.current.id) return;
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = "Rendering…";
+  try {
+    const res = await api("/api/model/portrait", { id: state.current.id });
+    const bytes = Uint8Array.from(atob(res.png), (c) => c.charCodeAt(0));
+    await useFile(new File([bytes], "portrait.png", { type: "image/png" }));
+    toast("Portrait made from the 3D model: adjust it, then save");
+  } catch (e) { toast(e.message); }
+  finally { button.disabled = false; button.textContent = label; }
+}
+
 function syncSliders() {
   $("zoom").value = state.crop.zoom; $("pan-x").value = state.crop.x; $("pan-y").value = state.crop.y;
 }
@@ -271,6 +287,11 @@ function fillForm() {
   renderDonors();
   renderStage();
   if (window.T3Model) T3Model.refresh();
+  showPortraitFromModel();
+}
+
+function showPortraitFromModel() {
+  $("portrait-from-model").hidden = !(state.current.id && state.current.has_model);
 }
 
 async function selectCharacter(character) {
@@ -594,6 +615,7 @@ function wire() {
   $("export").addEventListener("click", () => { if (state.current.id) location.href = `/api/export/${state.current.id}`; });
   $("import-file").addEventListener("change", (e) => importPackage(e.target.files[0]));
   $("portrait-file").addEventListener("change", (e) => { useFile(e.target.files[0]); e.target.value = ""; });
+  $("portrait-from-model").addEventListener("click", portraitFromModel);
   for (const [id, key] of [["zoom", "zoom"], ["pan-x", "x"], ["pan-y", "y"]]) {
     $(id).addEventListener("input", (e) => {
       state.crop[key] = Number(e.target.value); state.portraitChanged = true; drawPortrait(); markDirty();
