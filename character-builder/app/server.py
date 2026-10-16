@@ -966,6 +966,25 @@ def model_preview(cid: str, parts) -> dict:
     return {"png": png, "angles": angles}
 
 
+def source_preview(cid: str) -> dict:
+    """PNG (base64) of an imported model's source file with its parts' choices: the "before" of
+    the Model Importer (the 3D view shows the PS1 result). Cached in the cache folder."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
+    if not root or not source:
+        raise ValueError("This fighter's model has no source file (a Character Builder body has none).")
+    out = CACHE / f"source-preview-{folder.name}.png"
+    if not out.is_file() or out.stat().st_mtime < source.stat().st_mtime:
+        CACHE.mkdir(exist_ok=True)
+        own = json.loads((folder / "character.json").read_text(encoding="utf-8")).get("own_model") or {}
+        problem, _ = run_import_tool(root, [str(source), "--preview", str(out), "--parts",
+                                            json.dumps(clean_parts(own.get("parts")))], timeout=300)
+        if problem or not out.is_file():
+            raise ValueError(problem or "The preview could not be made.")
+    return {"png": base64.b64encode(out.read_bytes()).decode()}
+
+
 def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
     """The checked upload -> characters/<id>/model.bin over the donor's costume model."""
     parts = clean_parts(parts)
@@ -1775,6 +1794,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(name_call_preview(data))
             if path == "/api/model/portrait":
                 return self._json(own_portrait(str(data.get("id", "")), data.get("look")))
+            if path == "/api/model/source":
+                return self._json(source_preview(str(data.get("id", ""))))
             if path == "/api/model/preview":
                 return self._json(model_preview(str(data.get("id", "")), data.get("parts")))
             if path == "/api/model/remove":

@@ -135,6 +135,8 @@ const T3Model = (() => {
     const own = saved && c.own_model;
     $("own-model").hidden = !(saved && c.has_model);
     $("model-undo").hidden = !(saved && c.model_undo);
+    $("model-before").hidden = !(saved && c.has_model && c.own_model && !c.own_model.kit);
+    $("model-before-img").hidden = true;
     if (own) {
       const m = c.own_model;
       const reduced = m.source_triangles && m.source_triangles !== m.triangles ? ` (reduced from ${m.source_triangles})` : "";
@@ -253,6 +255,16 @@ const T3Model = (() => {
   $("model-import").addEventListener("click", importModel);
   $("model-remove").addEventListener("click", remove);
   $("model-undo").addEventListener("click", undo);
+  $("model-before").addEventListener("click", async () => {
+    const button = $("model-before"), img = $("model-before-img");
+    button.disabled = true;
+    try {
+      const r = await api("/api/model/source", { id: state.current.id });
+      img.src = "data:image/png;base64," + r.png;
+      img.hidden = false;
+      if (window.showView) showView(true);           // after: the PS1 model in the 3D view
+    } catch (e) { toast(e.message); } finally { button.disabled = false; }
+  });
   refresh();
   return { refresh };
 })();

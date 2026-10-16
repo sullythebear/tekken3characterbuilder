@@ -36,7 +36,11 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 - Stage Lab: stage colour looks (patch 19: night, sunset, dusk, ice, inferno, black and white)
   with a texture preview; tested in game (night, sunset on Gon's beach) and in the browser pane.
 - Restore points per fighter (last 20 saves, Restore on the Fighter page): unit tests, browser pane.
-- Unit tests: 23 (some run twice through test-class inheritance).
+- Stage Lab own colour + strength; Builder "Surprise me" scheme and a clear message for colour
+  variants on an own-model costume (tested in game: such a variant never shows).
+- Model Importer: "Show before" (source render) next to the 3D result (browser pane, Tommy).
+- 0.5.0 candidate: README, version, `release/RELEASE-NOTES-0.5.0.md` (not published).
+- Unit tests: 25 (some run twice through test-class inheritance).
 
 ## For the owner to check
 
