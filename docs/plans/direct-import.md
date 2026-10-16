@@ -172,4 +172,4 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    work well?" help on the 3D model tab; narrow screens without sideways scroll. Checked in the
    browser pane (desktop and 375 px, no console errors). Released 2026-10-16 (user: "Yes je mag het
    uitbrengen"): tag v0.3.8 pushed; zip = `git archive HEAD:character-builder` (29 files, no game
-   data); the GitHub release page needs the user's login (gh CLI not installed).
+   data). Published with the GitHub CLI: https://github.com/sullythebear/tekken3characterbuilder/releases/tag/v0.3.8

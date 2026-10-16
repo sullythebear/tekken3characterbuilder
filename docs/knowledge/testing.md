@@ -123,3 +123,12 @@ textured), `stock.py` (a stock model with textures and wireframe).
   magenta: with `PAINTER=16` this is the closest offline view of what the PlayStation draws;
   look for magenta inside the silhouette (holes).
 
+
+## Releases (2026-10-16, works)
+
+Only after the user approves. Bump `APP_VERSION` (server.py) and the READMEs, commit, then:
+`git tag -a vX.Y.Z -m "Dizzy Character Creator X.Y.Z"`, `git push origin vX.Y.Z`,
+`git archive --format=zip --prefix=character-builder/ -o Dizzy-Character-Creator-X.Y.Z.zip HEAD:character-builder`
+(tracked files only: no game data; check the list), and
+`"C:\Program Files\GitHub CLI\gh.exe" release create vX.Y.Z <zip> --repo sullythebear/tekken3characterbuilder --title "Dizzy Character Creator X.Y.Z" --notes-file <notes.md> --verify-tag`
+(gh is logged in as sullythebear; from PowerShell, Git Bash does not have it on PATH).
