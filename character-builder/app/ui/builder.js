@@ -69,13 +69,13 @@
   }
 
   function randomize() {
-    // one or two other fighters (more do not fit one texture page); each part: the style's own or
-    // one of them
+    // one other fighter (two or more rarely fit the colour tables a fighter has); each part: the
+    // style's own or that fighter's
     const selects = [...document.querySelectorAll("#kit-parts select")];
     const usable = [...selects[0].options].filter((o) => o.value && !o.disabled).map((o) => o.value);
     if (!usable.length) return;
     const pick = () => usable[Math.floor(Math.random() * usable.length)];
-    const sources = [pick(), pick()].slice(0, 1 + (Math.random() < 0.5));
+    const sources = [pick()];
     for (const select of selects)
       select.value = Math.random() < 0.4 ? "" : sources[Math.floor(Math.random() * sources.length)];
     if (!Object.keys(chosen()).length) selects[0].value = sources[0];

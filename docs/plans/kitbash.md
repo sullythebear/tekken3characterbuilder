@@ -38,3 +38,16 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
    and writes model.bin on sync.
 3. In-game test (8-bit CLUT ids 16/32 when two models' skin areas are used).
 4. Colour variants (existing Clothing tab) on kitbash fighters.
+
+## CLUT space (tested 2026-10-16, user report "text glitches" in fights)
+
+- Every stock model keeps its CLUTs in its player's rows at row 0 x 0..255 (one 8-bit CLUT),
+  row 1 x 0..255 and row 2 x 0..159 (Nina, King, Julia, Heihachi read from the disc). A kitbash
+  model of three fighters wrote a second 8-bit CLUT at row 0 x 256..511 and 4-bit CLUTs up to
+  row 1 x 527: the fight HUD's top text ("STAGE 1", timer, "CREDIT 0") turned to orange blocks.
+- Now: all 8-bit areas share the one 8-bit CLUT (texels renumbered, closest colours merged when
+  more than 255), identical 4-bit CLUTs once, 4-bit CLUTs only in row 1 (16) and row 2 (10). A mix
+  that needs more refuses with "take parts from fewer different fighters"; the randomizer takes
+  one other fighter. Live: Xiaoyu head and legs on Nina, HUD text clean, 512 colours in 2 runs.
+- Limits seen: three fighters (Nina, Xiaoyu, Lei) need 33 small CLUTs; Law's body and a full
+  Xiaoyu do not fit one texture page (also before this change).

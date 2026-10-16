@@ -203,7 +203,8 @@ def build(root: Path, base: int, parts: dict, log=print):
     placed = {}
     clusters.sort(key=lambda c: -(c["hi"][1] - c["lo"][1] + 1) * (c["hi"][0] - c["lo"][0] + 1))
     for c in clusters:
-        sk = (c["model"], c["mat"] & 0x8000, tuple(c["lo"]), tuple(c["hi"]))
+        # 8-bit texels are renumbered per source CLUT (step 4), so those copies stay apart
+        sk = (c["model"], 0x8000 | (c["mat"] & 0x7EFF) if c["mat"] & 0x8000 else 0, tuple(c["lo"]), tuple(c["hi"]))
         if sk in placed:
             c["dst"] = placed[sk]
             continue
@@ -227,36 +228,87 @@ def build(root: Path, base: int, parts: dict, log=print):
         x1, y1 = c["hi"][0] // 4, c["hi"][1]
         dx, dy = c["dst"][0] // 4, c["dst"][1]
         band[dy:dy + y1 - y0 + 1, dx:dx + x1 - x0 + 1] = sm.band[y0:y1 + 1, x0:x1 + 1]
-    # 4. CLUTs: an 8-bit CLUT per source CLUT (a model's skin and clothes can have their own),
-    # ids 0, 16, 32, 48 (row 0) then 128.. (row 2); 4-bit CLUTs from id 64 on (row 1)
-    new_mat, runs8, pal4 = {}, [], {}
-    next4 = 64
-    eight = sorted({(m_, mat & 0x7eff) for (m_, mat) in groups if mat & 0x8000})
-    slots8 = [0, 16, 32, 48, 128, 144, 160, 176]
-    if len(eight) > len(slots8):
-        raise MI.Budget(f"{len(eight)} 8-bit colour tables; at most {len(slots8)}")
-    if len(eight) > 1:
-        log(f"8-bit areas with {len(eight)} colour tables: CLUT ids {slots8[:len(eight)]}")
-    for j, (mdl, clut) in enumerate(eight):
-        cid = slots8[j]
-        pal = src[mdl].cluts.get(clut, [0] * 256)
-        runs8.append((cid, list(pal[:256]) + [0] * (256 - len(pal[:256]))))
+    # 4. CLUTs, only where Tekken 3's own models keep theirs (tested 2026-10-16: every stock model
+    # uses row 0 x 0..255, row 1 x 0..255, row 2 x 0..159 of its player's CLUT rows; CLUTs past
+    # that overwrote the fight HUD's text palette). All 8-bit areas share the one 8-bit CLUT
+    # (id 0): their texels are renumbered into one palette, the closest colours merged if more
+    # than 255; 4-bit CLUTs (identical ones once) go to row 1 (ids 64..79) and row 2 (128..137).
+    new_mat = {}
+    eight_keys = sorted({(c["model"], c["mat"] & 0x7EFF) for c in clusters if c["mat"] & 0x8000})
+    lut = {}
+    if eight_keys:
+        used, colours = {}, []
+        for c in clusters:
+            if not c["mat"] & 0x8000:
+                continue
+            x0, x1 = c["dst"][0] // 4, c["dst"][0] // 4 + (c["hi"][0] - c["lo"][0]) // 4
+            y0, y1 = c["dst"][1], c["dst"][1] + c["hi"][1] - c["lo"][1]
+            area = band[y0:y1 + 1, x0:x1 + 1]
+            key = (c["model"], c["mat"] & 0x7EFF)
+            used.setdefault(key, set()).update(np.unique(area & 255).tolist() + np.unique(area >> 8).tolist())
+        entries = []                                   # (key, index, colour)
+        for key in eight_keys:
+            pal = list(src[key[0]].cluts.get(key[1], [0] * 256)) + [0] * 256
+            for i in sorted(used.get(key, ())):
+                if pal[i]:
+                    entries.append((key, i, pal[i]))
+        groups8 = {}                                   # colour -> merged group of entries
+        for e in entries:
+            groups8.setdefault(e[2], []).append(e)
+        swatch = [[(c & 31), (c >> 5) & 31, (c >> 10) & 31, len(m), c & 0x8000] for c, m in groups8.items()]
+        members = [list(m) for m in groups8.values()]
+        while len(swatch) > 255:                         # Ward merges of the closest colours
+            arr = np.array([[c[0], c[1], c[2]] for c in swatch], float)
+            n = np.array([c[3] for c in swatch], float)
+            d = ((arr[:, None, :] - arr[None, :, :]) ** 2).sum(2) * (n[:, None] * n[None, :]) / (n[:, None] + n[None, :])
+            np.fill_diagonal(d, np.inf)
+            i, j = np.unravel_index(np.argmin(d), d.shape)
+            ni, nj = n[i], n[j]
+            swatch[i] = [(swatch[i][k] * ni + swatch[j][k] * nj) / (ni + nj) for k in range(3)] + [ni + nj, swatch[i][4]]
+            members[i] += members[j]
+            del swatch[j], members[j]
+        palette = [0] * 256
+        for k, (c, m) in enumerate(zip(swatch, members), start=1):
+            r, g, b_ = (int(round(v)) for v in c[:3])
+            colour = c[4] | r | g << 5 | b_ << 10
+            palette[k] = colour or 0x8000                # black, not see-through
+            for key, i, _ in m:
+                lut.setdefault(key, np.zeros(256, np.uint16))[i] = k
+        if len(swatch) and len(entries) > len(swatch):
+            log(f"8-bit areas: {len(entries)} colours merged into {len(swatch)}")
+        for c in clusters:                             # renumber the copied 8-bit texels
+            if not c["mat"] & 0x8000:
+                continue
+            key = (c["model"], c["mat"] & 0x7EFF)
+            x0, x1 = c["dst"][0] // 4, c["dst"][0] // 4 + (c["hi"][0] - c["lo"][0]) // 4
+            y0, y1 = c["dst"][1], c["dst"][1] + c["hi"][1] - c["lo"][1]
+            area = band[y0:y1 + 1, x0:x1 + 1]
+            table = lut.get(key, np.zeros(256, np.uint16))
+            band[y0:y1 + 1, x0:x1 + 1] = table[area & 255] | (table[area >> 8] << 8)
         for (m_, mat) in groups:
-            if m_ == mdl and mat & 0x8000 and mat & 0x7eff == clut:
-                new_mat[(m_, mat)] = 0x8000 | cid
+            if mat & 0x8000:
+                new_mat[(m_, mat)] = 0x8000
+    slots4 = list(range(64, 80)) + list(range(128, 138))
+    pal4, by_colours = {}, {}
     for (m_, mat) in sorted(groups):
         if mat & 0x8000:
             continue
-        new_mat[(m_, mat)] = next4
-        pal4[next4] = list(src[m_].cluts.get(mat & 0x7eff, [0] * 16))[:16]
-        pal4[next4] += [0] * (16 - len(pal4[next4]))
-        next4 += 1
-    if next4 > 128:
-        raise MI.Budget("more than 64 four-bit CLUTs")
-    runs = list(runs8)
-    if pal4:
-        ids = sorted(pal4)
-        runs.append((ids[0], [c for i in ids for c in pal4[i]]))
+        pal = (list(src[m_].cluts.get(mat & 0x7EFF, [0] * 16))[:16] + [0] * 16)[:16]
+        key = tuple(pal)
+        if key not in by_colours:
+            if len(by_colours) >= len(slots4):
+                need = len({tuple((list(src[m2].cluts.get(t & 0x7EFF, [0] * 16))[:16] + [0] * 16)[:16])
+                            for (m2, t) in groups if not t & 0x8000})
+                raise MI.Budget(f"the chosen parts need {need} small colour tables, a fighter has room for "
+                                f"{len(slots4)}: take parts from fewer different fighters")
+            by_colours[key] = slots4[len(by_colours)]
+            pal4[by_colours[key]] = pal
+        new_mat[(m_, mat)] = by_colours[key]
+    runs = [(0, palette)] if eight_keys else []
+    for first, last in ((64, 80), (128, 138)):
+        ids = [i for i in sorted(pal4) if first <= i < last]
+        if ids:
+            runs.append((ids[0], [c for i in ids for c in pal4[i]]))
     # 5. per-face texture data for the writer: corners in 4-bit columns of the new page
     mats = sorted(set(new_mat.values()))
     chart_of = {m_: i for i, m_ in enumerate(mats)}
