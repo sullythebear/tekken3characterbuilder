@@ -12,6 +12,8 @@ debug server: load a save state, drive the pad, read memory, take screenshots.
       fighter at --cell, picks it (and the Tekken 3 moveset), waits for the fight, then takes
       a screenshot every N frames while pressing a few attacks; prints the paths.
       --cpu KEY: that roster fighter (e.g. cbmedea) is the CPU's stage 1 opponent (patch 15).
+  python tools/t3live.py nav route:practice r2:60 r2:60 square:90 square:120 square:120 log:"announced name"
+      runs a step script (buttons, waits, screenshots, VRAM dumps, log waits; see nav()).
 
 Screenshots: <game>/character-builder/live/shots/. The save folder: <game>/character-builder/
 live/saves (slot 7 = the select screen with the cursor on the fighter)."""
@@ -184,9 +186,88 @@ def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, ce
         print("  " + l.strip()[:150])
 
 
+# Main menu routes from the title screen (menu order: Arcade, VS, Team Battle, Time Attack,
+# Survival, Tekken Ball, Tekken Force, Practice); each ends on that mode's select screen.
+ROUTES = {"arcade": "start:200 start:200", "team": "start:200 down down start:260",
+          "practice": "start:200 down down down down down down down start:200"}
+
+
+def vram_dump(g: Game) -> bytes:
+    """The whole VRAM (1024 x 512 halfwords, big-endian as the debug server sends them)."""
+    rows = []
+    for ty in range(0, 512, 128):
+        block = [bytearray() for _ in range(128)]
+        for tx in range(0, 1024, 128):
+            raw = bytes.fromhex(g.q(cmd="vram_peek", x=tx, y=ty, w=128, h=128)["hex"])
+            for r in range(128):
+                block[r] += raw[r * 256:(r + 1) * 256]
+        rows += block
+    return b"".join(rows)
+
+
+def nav(game: Path, steps: list[str], env: dict | None = None):
+    """Runs a step script after boot; output in live/nav. Steps:
+    <button>[:frames]   press (cross square triangle circle up down left right start r2 l2), then wait
+    route:<name>        a ROUTES entry (arcade, team, practice)
+    wait:N  shot:NAME  vram:NAME (NAME.vram)  ram:ADDR:LEN  film:FRAMES:EVERY (shots named by state)
+    log:TEXT[:SECONDS]  waits until the game log has TEXT, prints the state then
+    fight               waits until a fight's fighters show (state 8, phase >= 6)"""
+    g = Game(game, False, env)
+    out = g.live / "nav"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    expanded = []
+    for s in steps:
+        expanded += ROUTES[s[6:]].split() if s.startswith("route:") else [s]
+    try:
+        g.wait_frames(700)
+        for s in expanded:
+            name, _, arg = s.partition(":")
+            if name == "wait":
+                g.wait_frames(int(arg))
+            elif name == "shot":
+                g.shot(out / f"{arg}.png")
+            elif name == "vram":
+                (out / f"{arg}.vram").write_bytes(vram_dump(g))
+            elif name == "ram":
+                at, n = arg.split(":")
+                print(at, g.q(cmd="read_ram", addr=at, len=int(n))["hex"])
+            elif name == "film":
+                total, every = map(int, arg.split(":"))
+                start, k = g.frame(), 0
+                while g.frame() - start < total:
+                    g.shot(out / f"f{k:03d}_s{g.word(0x800AE204)}_p{g.word(0x800AE224, 2)}.png")
+                    k += 1
+                    g.wait_frames(every)
+            elif name == "log":
+                text, _, secs = arg.partition(":")
+                end = time.monotonic() + float(secs or 60)
+                while text not in g.log.read_text(errors="replace"):
+                    if time.monotonic() > end:
+                        print(f"log: no '{text}'")
+                        break
+                    time.sleep(0.05)
+                else:
+                    print(f"log: '{text}' at state {g.word(0x800AE204)}, frame {g.frame()}")
+            elif name == "fight":
+                end = time.monotonic() + 150
+                while g.word(0x800AE204) != 8 or g.word(0x800AE224, 2) < 6:
+                    if time.monotonic() > end:
+                        print("fight: did not start")
+                        break
+                    time.sleep(0.3)
+            else:
+                g.press(name)
+                g.wait_frames(int(arg) if arg else 20)
+    finally:
+        g.stop()
+    print("output in", out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("setup", "fight"))
+    ap.add_argument("command", choices=("setup", "fight", "nav"))
+    ap.add_argument("steps", nargs="*", help="nav: the step script (see nav())")
     ap.add_argument("--game", type=Path, default=DEFAULT_GAME)
     ap.add_argument("--frames", type=int, default=600)
     ap.add_argument("--every", type=int, default=60)
@@ -198,6 +279,8 @@ def main():
     a = ap.parse_args()
     if a.command == "setup":
         setup(a.game)
+    elif a.command == "nav":
+        nav(a.game, a.steps, {"TEKKEN3_CPU_STAGE1": a.cpu} if a.cpu else None)
     else:
         fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, probe=a.probe, cpu=a.cpu)
 

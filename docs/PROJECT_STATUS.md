@@ -23,7 +23,8 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 
 ## Next
 
-1. Fold the Practice/Team Battle routes of the scratch `nav.py` into `tools/t3live.py`.
-2. Character Builder parts (kitbash UI).
+1. Character Builder parts (kitbash UI).
+
+`t3live nav` done (Practice route verified).
 
 Module tabs done (browser pane: all six pages switch, values kept).

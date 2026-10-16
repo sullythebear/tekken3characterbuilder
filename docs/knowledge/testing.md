@@ -73,6 +73,13 @@ textured), `stock.py` (a stock model with textures and wireframe).
   state 8, then screenshots every N frames while pressing attacks. Output:
   character-builder/live/shots, game log character-builder/live/game-log.txt.
 - Verified: TOMMY picked, own model installed and drawn (0 words differ), 11 screenshots.
+- `python tools/t3live.py nav <steps>` (2026-10-16): step scripts after boot: buttons (incl. `l2`),
+  `route:arcade|team|practice` (menu order Arcade, VS, Team Battle, Time Attack, Survival, Tekken
+  Ball, Tekken Force, Practice), `wait:N`, `shot:NAME`, `vram:NAME` (whole VRAM via `vram_peek`),
+  `ram:ADDR:LEN`, `film:FRAMES:EVERY` (shots named by state/phase), `log:TEXT[:SECONDS]`, `fight`;
+  `--cpu KEY` as for fight. Output in live/nav. Verified: Practice name call found in state 8.
+  Headless runs use the software renderer (`gl_fbo_peek` answers "GL pipeline inactive"), so CPU
+  VRAM is what is drawn.
 - Also: Shift+F1..F12 saves a state in the window, F1..F12 loads (`--memcard-dir` folder).
 
 ## Regression check of the model import (`python tools/t3cb.py regress`, 2026-10-15, works)
