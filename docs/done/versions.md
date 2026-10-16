@@ -4,7 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
-| (ready, not tagged) | 0.4.0: import progress + 3D result + Undo import; multi-mesh FBX, FBX colours, VRM, faster reduce; Team Battle generic icon (patch 16); findings: Start costume works, announcer silent on purpose, no second texture page, fixed hand shapes | regress --all green; live Medea vs CPU Tommy, TEST vs CPU Medea; browser pane import/undo on Medea (byte-identical) |
+| v0.4.0 (tag) | 0.4.0: import progress + 3D result + Undo import; multi-mesh FBX, FBX colours, VRM, faster reduce; Team Battle generic icon (patch 16); findings: Start costume works, announcer silent on purpose, no second texture page, fixed hand shapes | regress --all green; live Medea vs CPU Tommy, TEST vs CPU Medea; browser pane import/undo on Medea (byte-identical) |
 | v0.3.9 (tag) | 0.3.9: portrait from the 3D model, packages with own models, custom fighters as CPU opponents (patch 15) | browser pane; package round trip byte-identical; live Tommy vs CPU Medea |
 | v0.3.8 (tag) | 0.3.8: Dizzy Character Creator name and PS1/Tekken 3 style (approved mockup), model help; parts that stick out; Rogue holes; test models (Michelle, Soldier, Xbot, CesiumMan): leg webs, head-row retry, material colours, merged textures, bones by shape | regress (all green), live fights for all imports, browser pane checks; user test 2026-10-16: Rogue clean, release approved |
 | 6f53bb9 | Reduced models: charts split by material (Lab k-means), Lab palettes, faster packer; Medea 872 tris | offline decode = bake; PS1 emulation 4 sides; live fight 3 yaws; app import 75 s |
