@@ -23,7 +23,7 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 
 ## Next
 
-1. Phase 1: module navigation in the UI (Character Builder, Model Importer, Portrait Lab,
-   Voice Lab, Stage Lab, Move Lab) over the existing pages.
-2. Fold the Practice/Team Battle routes of the scratch `nav.py` into `tools/t3live.py`.
-3. Character Builder parts (kitbash UI).
+1. Fold the Practice/Team Battle routes of the scratch `nav.py` into `tools/t3live.py`.
+2. Character Builder parts (kitbash UI).
+
+Module tabs done (browser pane: all six pages switch, values kept).

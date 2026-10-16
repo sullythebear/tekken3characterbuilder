@@ -720,19 +720,21 @@ function showView(model) {
 }
 // editor pages: Fighter (name, style, portrait), Colours (costume variants, uses the 3D view)
 // and 3D model (an own model, model3d.js)
+// the Studio modules: Fighter, Character Builder (colours, costumes), Model Importer, Portrait Lab,
+// Voice Lab, Stage Lab
+const PAGES = ["fighter", "colours", "model", "portrait", "voice", "stage"];
 function showPage(page) {
   if (page === true) page = "colours";
   if (page === false) page = "fighter";
-  for (const name of ["fighter", "colours", "model"]) {
+  for (const name of PAGES) {
     $(`tab-${name}`).setAttribute("aria-selected", String(name === page));
     $(`page-${name}`).hidden = name !== page;
   }
   if (page === "colours" && $("model-view").hidden) showView(true);
+  if (page === "portrait" && !$("model-view").hidden) showView(false);
   if (page === "model" && window.T3Model) T3Model.refresh();
 }
-$("tab-fighter").addEventListener("click", () => showPage("fighter"));
-$("tab-colours").addEventListener("click", () => showPage("colours"));
-$("tab-model").addEventListener("click", () => showPage("model"));
+for (const name of PAGES) $(`tab-${name}`).addEventListener("click", () => showPage(name));
 $("view-portrait").addEventListener("click", () => showView(false));
 $("view-model").addEventListener("click", () => showView(true));
 loadReport(false).catch(() => {});

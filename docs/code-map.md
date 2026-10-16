@@ -86,7 +86,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 
 ## UI (`app/ui/`, no build step)
 
-- `index.html`, `style.css`.
+- `index.html`, `style.css`. Editor tabs = Studio modules (`PAGES` in app.js): fighter, colours
+  (Builder), model (Model Importer), portrait, voice, stage.
 - `app.js` – pages, character form, donors (`renderDonors`), portrait (`drawPortrait`,
   `quantizePS1`), roster, steps/gauges, project panel.
 - `model3d.js` – the 3D model page (upload, check/lock, import, remove).

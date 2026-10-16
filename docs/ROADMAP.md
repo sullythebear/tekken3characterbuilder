@@ -16,7 +16,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 | Item | Status |
 |---|---|
-| Module navigation in the UI over the existing pages | **open** |
+| Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab; Move Lab once it has real content) |
 | Model Importer separate from Character Builder | **partly** (own tab "3D model") |
 | Project versions / restore points per fighter | **open** (only Undo of the last import) |
 

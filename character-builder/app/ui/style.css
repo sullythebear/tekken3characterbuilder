@@ -339,7 +339,7 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 }
 .view-tab[aria-selected="true"], .costume-tab[aria-selected="true"] { background: var(--chrome); color: #10121a; border-color: #d9dde6; }
 .costume-tab.variant { color: var(--paper); }
-.editor-tabs { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 2px solid #2c3142; }
+.editor-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 1rem; border-bottom: 2px solid #2c3142; }
 .editor-tab {
   padding: .45rem 1.4rem; border: 1px solid #2c3142; border-bottom: 0; background: #12141d; color: #8a90a6; cursor: pointer;
   font: italic 1.15rem/1.1 var(--display); text-transform: uppercase; margin-bottom: -2px;

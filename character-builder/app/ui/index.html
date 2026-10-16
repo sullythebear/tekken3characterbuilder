@@ -74,8 +74,11 @@
   <section class="editor" aria-label="Edit fighter">
     <div class="editor-tabs" role="tablist" aria-label="Edit">
       <button type="button" class="editor-tab" id="tab-fighter" role="tab" aria-selected="true" aria-controls="page-fighter">Fighter</button>
-      <button type="button" class="editor-tab" id="tab-colours" role="tab" aria-selected="false" aria-controls="page-colours">Colours</button>
-      <button type="button" class="editor-tab" id="tab-model" role="tab" aria-selected="false" aria-controls="page-model">3D model</button>
+      <button type="button" class="editor-tab" id="tab-colours" role="tab" aria-selected="false" aria-controls="page-colours">Builder</button>
+      <button type="button" class="editor-tab" id="tab-model" role="tab" aria-selected="false" aria-controls="page-model">Model Importer</button>
+      <button type="button" class="editor-tab" id="tab-portrait" role="tab" aria-selected="false" aria-controls="page-portrait">Portrait Lab</button>
+      <button type="button" class="editor-tab" id="tab-voice" role="tab" aria-selected="false" aria-controls="page-voice">Voice Lab</button>
+      <button type="button" class="editor-tab" id="tab-stage" role="tab" aria-selected="false" aria-controls="page-stage">Stage Lab</button>
     </div>
     <form id="character-form" novalidate>
       <div class="editor-page" id="page-fighter" role="tabpanel" aria-labelledby="tab-fighter">
@@ -94,43 +97,7 @@
         <p class="donor-info" id="donor-info"></p>
       </fieldset>
 
-      <fieldset class="field">
-        <legend>Stage, music and name call</legend>
-        <div class="arena-lists">
-          <label>Stage <select id="stage"></select></label>
-          <label>Music <select id="music"></select></label>
-          <label>Name call
-            <select id="name-call">
-              <option value="auto">Computer voice (automatic)</option>
-              <option value="own">My own sound</option>
-              <option value="off">Silent</option>
-            </select>
-          </label>
-        </div>
-        <p class="hint">Your fighter's home stage and theme (where it is met in Arcade), and how the announcer says its name.</p>
-        <div class="portrait-buttons">
-          <button class="btn btn-ghost" type="button" id="name-play">Play</button>
-          <span class="portrait-buttons" id="name-own" hidden>
-            <button class="btn btn-ghost" type="button" id="name-record">Record</button>
-            <label class="btn btn-ghost file-btn">Choose sound<input type="file" id="name-file" accept="audio/*" hidden></label>
-          </span>
-        </div>
-        <p class="hint" id="name-hint"></p>
-      </fieldset>
 
-      <fieldset class="field">
-        <legend>Portrait</legend>
-        <div class="portrait-buttons">
-          <label class="btn btn-ghost file-btn">Choose image<input type="file" id="portrait-file" accept="image/*" hidden></label>
-          <button class="btn btn-ghost" type="button" id="portrait-from-model" hidden title="Head and shoulders of the fighter's own 3D model, turned a little">Make from 3D model</button>
-        </div>
-        <div class="sliders" id="portrait-controls" hidden>
-          <label>Zoom <input type="range" id="zoom" min="100" max="300" value="100"></label>
-          <label>Horizontal <input type="range" id="pan-x" min="-100" max="100" value="0"></label>
-          <label>Vertical <input type="range" id="pan-y" min="-100" max="100" value="0"></label>
-        </div>
-        <p class="hint" id="portrait-hint">With Tekken 3 Expanded your portrait appears on the select screen. With Tekken3Recompiled it is saved for a later version.</p>
-      </fieldset>
 
       <div class="field">
         <label for="author">Created by <span class="optional">(optional)</span></label>
@@ -198,6 +165,56 @@
             </div>
             <p class="hint" id="model-progress" hidden></p>
           </div>
+        </fieldset>
+      </div>
+
+      <div class="editor-page" id="page-portrait" role="tabpanel" aria-labelledby="tab-portrait" hidden>
+        <fieldset class="field">
+          <legend>Portrait</legend>
+          <div class="portrait-buttons">
+            <label class="btn btn-ghost file-btn">Choose image<input type="file" id="portrait-file" accept="image/*" hidden></label>
+            <button class="btn btn-ghost" type="button" id="portrait-from-model" hidden title="Head and shoulders of the fighter's own 3D model, turned a little">Make from 3D model</button>
+          </div>
+          <div class="sliders" id="portrait-controls" hidden>
+            <label>Zoom <input type="range" id="zoom" min="100" max="300" value="100"></label>
+            <label>Horizontal <input type="range" id="pan-x" min="-100" max="100" value="0"></label>
+            <label>Vertical <input type="range" id="pan-y" min="-100" max="100" value="0"></label>
+          </div>
+          <p class="hint" id="portrait-hint">With Tekken 3 Expanded your portrait appears on the select screen. With Tekken3Recompiled it is saved for a later version.</p>
+        </fieldset>
+      </div>
+
+      <div class="editor-page" id="page-voice" role="tabpanel" aria-labelledby="tab-voice" hidden>
+        <fieldset class="field">
+          <legend>Name call</legend>
+          <div class="arena-lists">
+            <label>Announcer
+              <select id="name-call">
+                <option value="auto">Computer voice (automatic)</option>
+                <option value="own">My own sound</option>
+                <option value="off">Silent</option>
+              </select>
+            </label>
+          </div>
+          <div class="portrait-buttons">
+            <button class="btn btn-ghost" type="button" id="name-play">Play</button>
+            <span class="portrait-buttons" id="name-own" hidden>
+              <button class="btn btn-ghost" type="button" id="name-record">Record</button>
+              <label class="btn btn-ghost file-btn">Choose sound<input type="file" id="name-file" accept="audio/*" hidden></label>
+            </span>
+          </div>
+          <p class="hint" id="name-hint"></p>
+        </fieldset>
+      </div>
+
+      <div class="editor-page" id="page-stage" role="tabpanel" aria-labelledby="tab-stage" hidden>
+        <fieldset class="field">
+          <legend>Home stage and music</legend>
+          <div class="arena-lists">
+            <label>Stage <select id="stage"></select></label>
+            <label>Music <select id="music"></select></label>
+          </div>
+          <p class="hint">Where your fighter is met in Arcade, and its theme. Tekken 3's own stages: building new stages is not possible yet (the stage format is still being researched).</p>
         </fieldset>
       </div>
 
