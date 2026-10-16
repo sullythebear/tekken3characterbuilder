@@ -120,24 +120,25 @@ def decimate(positions, triangles, target: int, keep=None, importance=None, unif
 
     count = len(faces)
 
+    def cross(u, w):                         # np.cross's arithmetic without its per-call overhead
+        return np.stack([u[:, 1] * w[:, 2] - u[:, 2] * w[:, 1], u[:, 2] * w[:, 0] - u[:, 0] * w[:, 2],
+                         u[:, 0] * w[:, 1] - u[:, 1] * w[:, 0]], 1)
+
     def flips(v, other, x):
-        """Would moving v to x flip (or degenerate) a face of v that survives the collapse?"""
-        for f in vfaces[v]:
-            t = faces[f]
-            if other in t:
-                continue
-            i = t.index(v)
-            a, b, c = (p[t[0]], p[t[1]], p[t[2]])
-            n0 = np.cross(b - a, c - a)
-            q = [p[t[0]], p[t[1]], p[t[2]]]
-            q[i] = x
-            n1 = np.cross(q[1] - q[0], q[2] - q[0])
-            l0 = np.linalg.norm(n0)
-            if l0 < 1e-12:                   # already degenerate: anything is an improvement
-                continue
-            if n0 @ n1 <= 0.2 * l0 * np.linalg.norm(n1):
-                return True
-        return False
+        """Would moving v to x flip (or degenerate) a face of v that survives the collapse?
+        (All of v's faces at once.)"""
+        fs = [faces[f] for f in vfaces[v] if other not in faces[f]]
+        if not fs:
+            return False
+        t = np.array(fs)
+        q0 = p[t]
+        q1 = q0.copy()
+        q1[np.arange(len(t)), (t == v).argmax(1)] = x
+        n0 = cross(q0[:, 1] - q0[:, 0], q0[:, 2] - q0[:, 0])
+        n1 = cross(q1[:, 1] - q1[:, 0], q1[:, 2] - q1[:, 0])
+        l0 = np.sqrt((n0 * n0).sum(1))
+        live = l0 >= 1e-12                   # an already degenerate face: anything is an improvement
+        return bool(np.any(live & ((n0 * n1).sum(1) <= 0.2 * l0 * np.sqrt((n1 * n1).sum(1)))))
 
     while count > target and heap:
         e, a, b, va, vb, x = heapq.heappop(heap)

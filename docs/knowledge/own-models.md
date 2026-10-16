@@ -234,3 +234,8 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
 - **inferred** (model rows, Law's open hand in his stance) A Tekken 3 model has one hand shape per
   hand row; nothing swaps fists for open hands during moves. Open hands for grabs would need game
   code changes; mittens (closed) stay the best fit for fighting.
+- **tested** (cProfile, Medea, 2026-10-16) Faster reduce, byte-identical output (regress same):
+  `decimate.flips` checks all faces of a vertex at once with an inline cross product (443k
+  np.cross calls were 21 s of overhead); `remesh.snap` grids padded instead of bounds tests per
+  neighbour (no time gained, kept: simpler). Reduce 65 s -> 45 s; the rest is spread (snap 12 s,
+  packing FFT 3 s, bake rays 6 s, argsort 3 s).

@@ -139,12 +139,17 @@ def snap(v, samples, origin, h, shape, reach=2):
     idx = np.floor((samples - origin) / h).astype(int)
     centre = origin + (idx + 0.5) * h
     dc = np.einsum("ij,ij->i", samples - centre, samples - centre)
+    # the grids get an empty border `reach` voxels wide (no bounds test per neighbour; a vertex
+    # outside the grid is clamped onto the border, where nothing is found, as before)
+    pad = reach + 1
     reps = []
     for order in (np.argsort(-dc), np.argsort(dc)):
-        rep = -np.ones(shape, dtype=np.int64)
-        rep[idx[order, 0], idx[order, 1], idx[order, 2]] = order     # the last write wins
+        rep = -np.ones(tuple(n + 2 * pad for n in shape), dtype=np.int64)
+        rep[idx[order, 0] + pad, idx[order, 1] + pad, idx[order, 2] + pad] = order     # the last write wins
         reps.append(rep)
     vi = np.floor((v - origin) / h).astype(int)
+    far = ((vi < -reach) | (vi >= np.array(shape) + reach)).any(1)    # no neighbour in the grid
+    vi = np.where(far[:, None], 0, vi) + pad
     best = np.full(len(v), -1)
     bestd = np.full(len(v), np.inf)
     r = range(-reach, reach + 1)
@@ -152,13 +157,12 @@ def snap(v, samples, origin, h, shape, reach=2):
         for dy in r:
             for dz in r:
                 c = vi + [dx, dy, dz]
-                ok = (c >= 0).all(1) & (c[:, 0] < shape[0]) & (c[:, 1] < shape[1]) & (c[:, 2] < shape[2])
-                c = np.where(ok[:, None], c, 0)
                 for rep in reps:
-                    s = np.where(ok, rep[c[:, 0], c[:, 1], c[:, 2]], -1)
+                    s = rep[c[:, 0], c[:, 1], c[:, 2]]
                     d = np.where(s >= 0, np.einsum("ij,ij->i", samples[s] - v, samples[s] - v), np.inf)
                     better = d < bestd
                     best[better], bestd[better] = s[better], d[better]
+    best[far] = -1
     return best
 
 
