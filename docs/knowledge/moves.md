@@ -55,3 +55,25 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   titles). The builder shows it read-only in the Move Lab tab (`command_list.py`,
   `model_export.py commandlist`, `/api/moves`, cached per model).
 - Fonts: words are not stored as text in RAM; the screen draws them from its own data.
+
+## Native cancel lists (2026-10-16, live RAM; partly tested)
+
+- **tested** A record's word 3 points to its cancel list. An entry is 12 bytes
+  (`<4H4B`): command, condition (high byte), parameter, destination alias (alias 3 = standing),
+  transition, window, end (2 bytes). `0xC000` ends the list; its destination is the end-of-clip
+  link.
+- **tested** `0xC00C` with destination N jumps to entry N of the fighter's own list block
+  (header `+4`): shared sub-lists. Record 0's list starts at entry 0 of that block.
+- **tested** The common moveset (`*(0x800ADC28)`, key 99) has the same header layout.
+- **tested** The command's low nibble holds the buttons:
+  - 1 = 0x01, 2 = 0x02, 3 = 0x04, 4 = 0x08;
+  - Xiaoyu u+4 started the record behind command `0008` (25 damage), 1+2 started `0003`.
+- **inferred** The high byte is the direction; low byte 0x10 means a direction alone. `0410` is
+  forward (it starts walking forward) and `0110` is back. Commands `0x8000+` and `0xE000+` are
+  special or input sequences (Expanded `moves.py`).
+- **open** Mapping every COMMAND LIST line to its record. Most single presses in the Xiaoyu test
+  did not land on a standing-list entry: she changes stance, and the 110-frame recovery wait was
+  too short.
+
+Next test: Paul (no stances), one input per Practice reset, 240-frame wait. Script pattern:
+scratch `inputs.py`, using `t3live.Game` with `set_input` and read `actor + 0x54`.
