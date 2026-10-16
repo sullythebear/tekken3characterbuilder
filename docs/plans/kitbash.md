@@ -96,3 +96,20 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   cache key. Works without other parts too: the style's own body in new colours, which reaches
   the game (colour variants do not reach a costume with an own model). Live: KITTEST hue -60,
   blue outfit, skin kept, HUD clean.
+
+## Body shape (2026-10-16, tested in game)
+
+Vertices are scaled in their row's local space inside `place()`. Every bone runs along local +X.
+- **Head (rows 19/20):** all axes, 0.85-1.3.
+- **Arms (11-13, 15-17) and legs (5, 6, 8, 9):** Y and Z only, 0.8-1.3, so joints stay where the
+  animations put them.
+- **Body (rows 1-4):** Y and Z only, 0.85-1.25.
+- **Hands and feet:** not scaled.
+
+Borrowed seam vertices are scaled with the row that owns them, so no gaps open.
+
+Tested on KITTEST (head 1.25, arms 1.25, body 1.2):
+- the render before/after has no seams;
+- `t3live fight` drew it with 0 of 5386 words differing, and the HUD text stays clean.
+
+Same size in bytes and triangles as without a shape.

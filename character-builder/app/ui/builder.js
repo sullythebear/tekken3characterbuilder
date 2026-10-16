@@ -52,6 +52,9 @@
     costume.value = String(own.file === "Character Builder" ? own.costume || 0 : 0);
     const c = own.colours || [0, 100, 0, true];
     [$("kit-hue").value, $("kit-sat").value, $("kit-light").value, $("kit-skin").checked] = c;
+    const sh = own.file === "Character Builder" ? own.shape || {} : {};
+    for (const input of document.querySelectorAll(".kit-shape input"))
+      input.value = String(Math.round((sh[input.dataset.shape] || 1) * 100));
     matchBuild();
   }
 
@@ -72,6 +75,16 @@
     const c = [Number($("kit-hue").value), Number($("kit-sat").value), Number($("kit-light").value), $("kit-skin").checked];
     return c[0] === 0 && c[1] === 100 && c[2] === 0 ? null : c;
   }
+
+  // body shape: head size on all axes; arms, legs and body thicker or thinner (kitbash.SHAPES)
+  function shape() {
+    const out = {};
+    for (const input of document.querySelectorAll(".kit-shape input"))
+      if (Number(input.value) !== 100) out[input.dataset.shape] = Number(input.value) / 100;
+    return out;
+  }
+
+  const nothing = () => !Object.keys(chosen()).length && !colours() && !Object.keys(shape()).length;
 
   function chosen() {
     const parts = {};
@@ -104,12 +117,12 @@
 
   async function preview() {
     const parts = chosen(), note = $("kit-progress"), run = ++previewRun;
-    if (!state.current.id || (!Object.keys(parts).length && !colours())) return;
+    if (!state.current.id || nothing()) return;
     note.hidden = false;
     note.textContent = "Preview: building the mix…";
     try {
       const json = await api("/api/kit/preview", { id: state.current.id, costume: Number($("kit-costume").value), parts,
-        colours: colours() });
+        colours: colours(), shape: shape() });
       if (run !== previewRun) return;
       showView(true);
       T3Costumes.preview(json, "Preview of the chosen parts: not built yet. Build puts it in the game.");
@@ -123,7 +136,7 @@
     if (busy) return;
     if (state.dirty) { toast("Save the fighter first."); return; }
     const parts = chosen();
-    if (!Object.keys(parts).length && !colours()) { toast("Choose a body part from another fighter, or colours."); return; }
+    if (nothing()) { toast("Choose a body part from another fighter, colours or a body shape."); return; }
     busy = true;
     const button = $("kit-build"), note = $("kit-progress");
     button.disabled = true;
@@ -131,7 +144,7 @@
     note.textContent = "Building the fighter from the chosen parts…";
     try {
       const saved = await api("/api/kit/build", { id: state.current.id, costume: Number($("kit-costume").value), parts,
-        colours: colours() });
+        colours: colours(), shape: shape() });
       state.current = copyFighter(saved);
       await loadCharacters();
       fillForm();
@@ -150,6 +163,14 @@
     $("kit-random").addEventListener("click", randomize);
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
     for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);
+    for (const input of document.querySelectorAll(".kit-shape input")) {
+      input.addEventListener("change", schedulePreview);
+      input.addEventListener("input", () => { input.title = `${input.value} %`; });
+    }
+    $("kit-shape-reset").addEventListener("click", () => {
+      for (const input of document.querySelectorAll(".kit-shape input")) input.value = "100";
+      schedulePreview();
+    });
     for (const [name, h, s, l] of PRESETS) {
       const b = document.createElement("button");
       b.type = "button"; b.className = "btn btn-ghost mini"; b.textContent = name;

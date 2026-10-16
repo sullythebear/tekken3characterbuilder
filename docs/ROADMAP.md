@@ -24,7 +24,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 | Module | Now | Next |
 |---|---|---|
-| Character Builder | style (donor), name, colour variants, costumes, **body parts from the disc's fighters (similar build, randomizer, live 3D preview, mixes of three fighters, whole skins, hands), body colours with presets** | body shapes (proportions); shoes not possible as a separate part (documented) |
+| Character Builder | style (donor), name, colour variants, costumes, **body parts from the disc's fighters (similar build, randomizer, live 3D preview, mixes of three fighters, whole skins, hands), body colours with presets, body shape: head size, arms, legs, body (tested in game on KITTEST)** | taller/shorter (bone lengths) not tried; shoes not possible as a separate part (documented) |
 | Model Importer | FBX/GLB/VRM import, parts choices, progress, undo, regression, **before (source render) next to after (3D view)** + **Face detail / Body detail for big models** (tested: Medea 60% = 532 triangles) + **pre-import check list: geometry, materials, rigging** (tested on all 12 test models + 3 fighters) | — |
 | Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark), **saved portraits: keep, use again, delete (12 per fighter; tested on KITTEST)** | saved portraits are not in exported packages |
 | Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |

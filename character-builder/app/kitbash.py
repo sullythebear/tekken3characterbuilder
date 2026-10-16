@@ -26,6 +26,36 @@ PARTS = {"head": (19, 20), "body": (1, 2, 3, 4),
          # floated under it (tested 2026-10-16)
          "hands": (14, 18)}
 FINE = ("hands",)
+# body shape: {name: factor}. The head grows on all axes (rows 19/20 scaled 1.5x and 2.5x drew
+# fine in game, own-models.md); arms, legs and body only across the bone (local Y and Z: every
+# bone runs along local +X), so joints stay where the animations put them. Hands and feet keep
+# their size.
+SHAPES = {"head": ((19,), (1, 1, 1), (0.85, 1.3)),
+          "arms": ((11, 12, 13, 15, 16, 17), (0, 1, 1), (0.8, 1.3)),
+          "legs": ((5, 6, 8, 9), (0, 1, 1), (0.8, 1.3)),
+          "body": ((1, 3), (0, 1, 1), (0.85, 1.25))}
+
+
+def clean_shape(shape) -> dict:
+    """{name: factor} within each shape's range; factors of 1 are left out."""
+    out = {}
+    for name, value in (shape or {}).items() if isinstance(shape, dict) else ():
+        if name in SHAPES:
+            lo, hi = SHAPES[name][2]
+            f = round(min(hi, max(lo, float(value))), 2)
+            if f != 1:
+                out[name] = f
+    return out
+
+
+def shape_scale(shape: dict) -> dict:
+    """{frame row: per-axis scale} for a clean shape."""
+    out = {}
+    for name, f in shape.items():
+        rows, axes, _ = SHAPES[name]
+        for r in rows:
+            out[r] = np.array([f if a else 1.0 for a in axes])
+    return out
 SECOND = {2: 1, 4: 3, 20: 19}
 CHILD = {5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
 BAND_WORDS = 128
@@ -97,9 +127,10 @@ def recolour(colour: int, hue: float, sat: float, light: float, keep_skin: bool 
     return out if out & 0x7FFF else 0x8000 | (colour & 0x8000)   # black, not see-through
 
 
-def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None):
-    """parts: {part name: model}; missing parts come from the base. -> (stock base model bytes,
-    new model bytes, texture dict for own_model_file, report)."""
+def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None, shape: dict | None = None):
+    """parts: {part name: model}; missing parts come from the base. shape: body shape factors
+    (SHAPES). -> (stock base model bytes, new model bytes, texture dict for own_model_file, report)."""
+    scale = shape_scale(clean_shape(shape))
     import anim_model as A
     from fmt import row, block, parse_b, parse_c_ps1
     import model_import as MI
@@ -128,6 +159,8 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         kb, ks = B.bone(fr), sm.bone(fr)
         if kb and ks:                          # stretch along the bone to the base's length
             loc = loc * [kb / ks, 1, 1]
+        if fr in scale:
+            loc = loc * scale[fr]
         R, T = B.W[fr]
         return R @ loc + T
 
@@ -525,6 +558,7 @@ def main():
     ap.add_argument("--heights", nargs="*", type=int, help="print {model: standing height} as JSON")
     ap.add_argument("--colours", type=lambda v: (lambda h, s, l, k: (float(h), float(s), float(l), k == "1"))(*v.split(",")),
                     help="hue,saturation,lightness,keep skin (1/0): e.g. 120,100,0,1")
+    ap.add_argument("--shape", type=json.loads, default=None, help='body shape JSON, e.g. {"head": 1.2, "arms": 1.1}')
     a = ap.parse_args()
     X.setup(a.root)
     if a.heights is not None:
@@ -540,7 +574,7 @@ def main():
         parts[n] = int(v)
     import model_import as MI
     try:
-        stock, new, tx, report = build(a.root, a.base, parts, tint=a.colours)
+        stock, new, tx, report = build(a.root, a.base, parts, tint=a.colours, shape=a.shape)
     except MI.Budget as error:
         text = str(error)
         if "GPU packets" in text:               # the writer's budget, said for a player

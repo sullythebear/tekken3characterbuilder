@@ -239,6 +239,15 @@ class RestorePointTests(CharacterTests):
 
 
 
+
+class BodyShapeTests(unittest.TestCase):
+    def test_clean_shape(self):
+        self.assertEqual(server.clean_kit_shape({"head": 1.2, "arms": 1, "legs": 5, "tail": 2}),
+                         {"head": 1.2, "legs": 1.3})
+        self.assertEqual(server.clean_kit_shape(None), {})
+        with self.assertRaises(ValueError):
+            server.clean_kit_shape({"body": "wide"})
+
 class PortraitVariantTests(CharacterTests):
     @staticmethod
     def image(colour):

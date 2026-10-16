@@ -64,4 +64,5 @@ Stage Lab, Move Lab.
 
 1. Model Importer: done for now (detail settings, pre-import check list).
 2. Portrait Lab: saved portraits done (keep / use / delete; the one in use is kept automatically).
-3. Character Builder: body shapes (proportions) if the skeleton allows it.
+3. Character Builder: body shape done (head size; arms, legs, body thicker or thinner). Height is not
+   done: bone lengths are used by the animations (not tried).

@@ -127,6 +127,13 @@
             <label class="check"><input type="checkbox" id="kit-skin" checked> Keep skin tones</label>
           </div>
           <div class="portrait-buttons" id="kit-presets"></div>
+          <div class="arena-lists kit-shape">
+            <label>Head size <input type="range" id="kit-shape-head" data-shape="head" min="85" max="130" value="100"></label>
+            <label>Arms <input type="range" id="kit-shape-arms" data-shape="arms" min="80" max="130" value="100"></label>
+            <label>Legs <input type="range" id="kit-shape-legs" data-shape="legs" min="80" max="130" value="100"></label>
+            <label>Body <input type="range" id="kit-shape-body" data-shape="body" min="85" max="125" value="100"></label>
+            <button class="btn btn-ghost" type="button" id="kit-shape-reset">Normal shape</button>
+          </div>
           <div class="model-import-row">
             <label for="kit-costume">Replaces</label>
             <select id="kit-costume"></select>
