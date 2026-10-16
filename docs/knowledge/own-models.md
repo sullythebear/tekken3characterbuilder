@@ -226,3 +226,11 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   (model-prev.bin, source-prev.*, model-prev.json with the old own_model, null after a first
   import); "Undo import" (`/api/model/undo`) puts it back: Medea byte-identical after import + undo.
   A failed import never touches model.bin (model-new.bin is only moved on success).
+- **tested** (VRAM snapshots vram14_*.bin, Medea over Nina, 2026-10-16) No second texture page for
+  own models: the player's band is 128 halfwords wide (stock models may use page 2, material
+  0x100), but with a one-page donor the game fills about half of x 448-511 (both players) with
+  other textures (hit sparks, small sprites, a colour ramp). Using it would wipe them. Own models
+  stay on page 1 (64 x 256 halfwords).
+- **inferred** (model rows, Law's open hand in his stance) A Tekken 3 model has one hand shape per
+  hand row; nothing swaps fists for open hands during moves. Open hands for grabs would need game
+  code changes; mittens (closed) stay the best fit for fighting.
