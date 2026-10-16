@@ -16,7 +16,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 | Item | Status |
 |---|---|
-| Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab; Move Lab once it has real content) |
+| Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab) |
 | Model Importer separate from Character Builder | **partly** (own tab "3D model") |
 | Project versions / restore points per fighter | **open** (only Undo of the last import) |
 
@@ -29,7 +29,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark) | several saved variants per fighter |
 | Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |
 | Stage Lab | home stage + music per fighter (patch 17) | **research**: stage file format before any editor |
-| Move Lab | whole movesets (donor) | **research**: move list of a donor read-only, then one-value change |
+| Move Lab | whole movesets (donor); **the style's COMMAND LIST read from the disc, read-only tab** | move records (damage, frames) per move; then the one-value change experiment |
 
 ## Release
 

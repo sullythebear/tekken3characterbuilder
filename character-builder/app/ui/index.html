@@ -11,6 +11,7 @@
 <script src="/ui/costumes.js" defer></script>
 <script src="/ui/arena.js" defer></script>
 <script src="/ui/builder.js" defer></script>
+<script src="/ui/movelab.js" defer></script>
 <script src="/ui/app.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
 </head>
@@ -80,6 +81,7 @@
       <button type="button" class="editor-tab" id="tab-portrait" role="tab" aria-selected="false" aria-controls="page-portrait">Portrait Lab</button>
       <button type="button" class="editor-tab" id="tab-voice" role="tab" aria-selected="false" aria-controls="page-voice">Voice Lab</button>
       <button type="button" class="editor-tab" id="tab-stage" role="tab" aria-selected="false" aria-controls="page-stage">Stage Lab</button>
+      <button type="button" class="editor-tab" id="tab-moves" role="tab" aria-selected="false" aria-controls="page-moves">Move Lab</button>
     </div>
     <form id="character-form" novalidate>
       <div class="editor-page" id="page-fighter" role="tabpanel" aria-labelledby="tab-fighter">
@@ -239,6 +241,15 @@
       </div>
 
       <p class="form-error" id="form-error" role="alert"></p>
+      <div class="editor-page" id="page-moves" role="tabpanel" aria-labelledby="tab-moves" hidden>
+        <fieldset class="field">
+          <legend>Moves</legend>
+          <p class="hint">The moves your fighter gets from its fighting style, as Tekken 3's COMMAND LIST shows them. 1 left punch, 2 right punch, 3 left kick, 4 right kick; d, df, f, b, u: directions (capitals: hold); N: neutral; (*): the move other entries refer to. Changing single moves is not possible yet.</p>
+          <p class="hint" id="move-note"></p>
+          <table class="move-table"><tbody id="move-list"></tbody></table>
+        </fieldset>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-primary" type="submit" id="save">Save fighter</button>
         <button class="btn btn-ghost" type="button" id="export" hidden>Export</button>

@@ -13,6 +13,7 @@
 | Body parts from Tekken 3's fighters | **tested** (similar build only, see `plans/kitbash.md`) | no |
 | Home stage and music | **tested** (patch 17) | no |
 | Name call | **tested** in log, Practice only (as Tekken 3 itself) | no |
+| Move Lab: style's command list | **tested** (read from the disc) | **code** (same disc data; Recompiled not tried) |
 | CPU opponents | **tested** (patch 15) | no |
 | Team Battle icons, mixed teams | **tested** select, FIGHT, FIGHT 2 (grey) and results screens (patch 18) | n/a |
 | `.t3char` packages | **tested** | **code** (same format) |

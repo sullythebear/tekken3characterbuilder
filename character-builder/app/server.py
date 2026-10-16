@@ -1019,6 +1019,30 @@ def undo_model(cid: str) -> dict:
     return get_character(folder.name)
 
 
+# ------------------------------------------------------------- move lab --
+
+def command_list(donor) -> dict:
+    """The style's COMMAND LIST as the game shows it, read from the player's disc (cached)."""
+    try:
+        donor = int(donor)
+    except (TypeError, ValueError):
+        raise ValueError("Choose a fighting style.") from None
+    donors = donor_models()
+    if not donors.get("available"):
+        raise ValueError(donors.get("reason", "The fighters' data is not available."))
+    models = donors["donors"].get(str(donor))
+    if not models:
+        raise ValueError("That style does not exist.")
+    path = CACHE / f"commandlist-{models[0]}.json"
+    if not path.is_file():
+        problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0])], timeout=120)
+        if problem:
+            raise ValueError(problem)
+        CACHE.mkdir(exist_ok=True)
+        path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
+    return {"donor": donor, "moves": json.loads(path.read_text(encoding="utf-8"))}
+
+
 # --------------------------------------------------- character builder --
 
 KIT_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r")   # kitbash.PARTS
@@ -1587,6 +1611,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/undo":
                 saved = undo_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/moves":
+                return self._json(command_list(data.get("donor")))
             if path == "/api/kit/models":
                 donors = donor_models()
                 if not donors.get("available"):

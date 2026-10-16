@@ -107,7 +107,7 @@ function renderDonors() {
       based.textContent = `based on ${donor.name}`;
       button.append(style, based);
       button.title = donorLabel(donor.id);
-      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Costumes.refresh(); });
+      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Costumes.refresh(); if (!$("page-moves").hidden) T3MoveLab.show(); });
       cards.append(button);
     }
     section.append(title, cards);
@@ -289,6 +289,7 @@ function fillForm() {
   renderStage();
   T3Arena.fill();
   T3Builder.fill();
+  if (!$("page-moves").hidden) T3MoveLab.show();
   if (window.T3Model) T3Model.refresh();
   showPortraitFromModel();
 }
@@ -725,7 +726,7 @@ function showView(model) {
 // and 3D model (an own model, model3d.js)
 // the Studio modules: Fighter, Character Builder (colours, costumes), Model Importer, Portrait Lab,
 // Voice Lab, Stage Lab
-const PAGES = ["fighter", "colours", "model", "portrait", "voice", "stage"];
+const PAGES = ["fighter", "colours", "model", "portrait", "voice", "stage", "moves"];
 function showPage(page) {
   if (page === true) page = "colours";
   if (page === false) page = "fighter";
@@ -735,6 +736,7 @@ function showPage(page) {
   }
   if (page === "colours" && $("model-view").hidden) showView(true);
   if (page === "portrait" && !$("model-view").hidden) showView(false);
+  if (page === "moves") T3MoveLab.show();
   if (page === "model" && window.T3Model) T3Model.refresh();
 }
 for (const name of PAGES) $(`tab-${name}`).addEventListener("click", () => showPage(name));

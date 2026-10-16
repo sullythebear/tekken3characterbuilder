@@ -31,6 +31,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `announcer` (lower, echo), `own`, `read_wav`, `pack` (`<Key>-TTT1-sfx.jus`, sound 1025),
   `fighter_sound` (cached automatic call), `write`. Server: `decode_wav`, `name_call_preview`
   (`/api/namecall/preview`), `write_name_call` (in `sync_customs`), `custom_entry` (customs.txt line).
+- `app/command_list.py` (stdlib) – decodes a fighter's COMMAND LIST (ARC member 4, word tokens, Tekken notation); `model_export.py commandlist --model N`; server `command_list` (`/api/moves`); UI `movelab.js`.
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
 - `app/expanded_custom.py` (venv) – writes portrait pack, name plate, customs.txt (`install`,

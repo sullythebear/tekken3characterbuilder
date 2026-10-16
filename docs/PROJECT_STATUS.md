@@ -28,9 +28,9 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 - Portrait Lab presets (angle, framing, light, background): tested offline and in the UI.
 - Voice Lab: announcer effect for own recordings (unit test; browser pane: processed, playback
   blocked only by the automated browser's autoplay rule).
-- `t3live nav dump:NAME` (whole RAM). Move Lab research started: the COMMAND LIST buffer
-  (0x800A3628) holds names and inputs with word tokens (bytes 0x01-0x1F, 0xA0-0xBF, 0xFB/0xFC);
-  the word table was not found as ASCII in RAM yet.
+- `t3live nav dump:NAME` (whole RAM). Move Lab: the style's COMMAND LIST decoded for all 21
+  styles (ARC member 4, word tokens read off the game's screen), shown read-only in the Move Lab
+  tab (browser pane: King 20 moves).
 - Regression `t3cb regress --all`: 11 models, all byte-identical (after the CLUT-run split).
 
 ## Next

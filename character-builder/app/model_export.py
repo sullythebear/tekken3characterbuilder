@@ -610,7 +610,7 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756), look
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait", "commandlist"))
     parser.add_argument("--look", help='ownportrait: JSON {"angle", "frame", "light", "backdrop"}')
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
@@ -628,6 +628,13 @@ def main() -> None:
             fail("ownjson needs --file and --out.")
         args.out.write_text(json.dumps(export_own(args.root, args.file)), encoding="utf-8")
         print(f"OK {args.out}")
+        return
+    if args.command == "commandlist":              # the COMMAND LIST of a costume model, JSON
+        if args.model is None:
+            fail("commandlist needs --model.")
+        import command_list
+        rid = FIRST_MODEL_RECORD + 4 * args.model + 2
+        print(json.dumps(command_list.moves(records(args.root, [rid])[rid])))
         return
     if args.command == "ownportrait":
         if args.file is None or args.out is None:

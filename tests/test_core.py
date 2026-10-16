@@ -189,5 +189,33 @@ class VoiceLabTests(unittest.TestCase):
         self.assertAlmostEqual(len(kept) / 44100, 0.9, delta=0.01)
 
 
+class MoveLabTests(unittest.TestCase):
+    def test_command_list_from_arc_member_4(self):
+        import command_list as M
+        entries = [b"Phoenix Smasher", bytes([0x81, 0x82, 0x84, 0x93]),          # d df f 2
+                   b"Doc's One-Two", bytes([0x92, 0x93]),                          # 1 2
+                   bytes([0xBF]) + b" Rush", bytes([0x84, 0x8C, 0x94]),            # token Elbow; f F 1+2
+                   bytes([0xFC]), bytes([0x0D]) + b" Stance",                     # section title
+                   b"Mokujinken", b"?"]
+        body = bytes([5]) + b"".join(e + bytes(1) for e in entries)
+        members = [b"x" * 8, b"y" * 8, b"z" * 8, b"w" * 8, body]
+        offset, table, blob = 4 + 8 * 5, b"", b""
+        for m in members:
+            table += struct.pack("<II", offset + len(blob), len(m))
+            blob += m
+        arc = struct.pack("<I", 5) + table + blob
+        got = M.moves(arc)
+        self.assertEqual(got, [{"name": "Phoenix Smasher", "command": "d, df, f+2"},
+                               {"name": "Doc's One-Two", "command": "1, 2"},
+                               {"name": "Elbow Rush", "command": "f, F+1+2"},
+                               {"section": "Left Stance"},
+                               {"name": "Mokujinken", "command": "?"}])
+
+    def test_marks(self):
+        import command_list as M
+        self.assertEqual(M.text(b"Flamingo @#"), "Flamingo (*)")
+        self.assertEqual(M.text(bytes([0x0A]) + b" @#,"), "During (*) ,")
+
+
 if __name__ == "__main__":
     unittest.main()
