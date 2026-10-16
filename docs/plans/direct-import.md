@@ -173,3 +173,14 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    browser pane (desktop and 375 px, no console errors). Released 2026-10-16 (user: "Yes je mag het
    uitbrengen"): tag v0.3.8 pushed; zip = `git archive HEAD:character-builder` (29 files, no game
    data). Published with the GitHub CLI: https://github.com/sullythebear/tekken3characterbuilder/releases/tag/v0.3.8
+
+## Pre-import check list (2026-10-16, tested)
+
+`direct_import.checks` lists Geometry / Materials / Rigging lines with ok, info, warn or bad.
+Run on all 12 test models and Tommy, Medea and Test:
+- BrainStem: 0 of 14 needed bones (bad; the import stays locked).
+- CesiumMan: bone names recognised from the skeleton's shape (warn).
+- VRM_Sample: 1632 triangles with UVs outside 0-1 (warn). `merge_textures` wraps each corner on
+  its own, so a repeating triangle can look smeared (inferred from the code).
+- The pose warning (arms not spread, width/height < 0.5) did not trigger on any test model.
+  The importer is tested only with T-pose and A-pose models.

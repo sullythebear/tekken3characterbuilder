@@ -565,9 +565,6 @@ def inspect(path: Path) -> dict:
         info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
     info["rigged"] = not info["problems"]
     info["notes"] = []
-    if src.get("renamed"):
-        info["notes"].append(f"The bone names are not standard: {len(src['renamed'])} bones were recognised "
-                             "from the skeleton's shape (hips, legs, arms, head).")
     if info["triangles"] > REDUCE_ABOVE:
         info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the creator "
                              "reduces it to PS1 size and bakes a new 256 x 256 texture (1 to 3 minutes).")
@@ -575,7 +572,66 @@ def inspect(path: Path) -> dict:
     if not info["textured"]:
         info["problems"].append("The model has no embedded texture: it will be drawn without one.")
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
+    info["checks"] = checks(src, info, weighted)
     return info
+
+
+def checks(src: dict, info: dict, weighted: int) -> list:
+    """The pre-import check list the builder shows: geometry, materials and rigging, each line
+    {"area", "level" ("ok", "info", "warn" or "bad"), "text"}. Only what the importer is known to do."""
+    out = []
+
+    def add(area, level, text):
+        out.append({"area": area, "level": level, "text": text})
+
+    P, T = np.asarray(src["P"], float), np.asarray(src["T"])
+    n = len(T)
+    if n > REDUCE_ABOVE:
+        add("Geometry", "info", f"{n} triangles: reduced to PS1 size (see below)")
+    else:
+        add("Geometry", "ok", f"{n} triangles: PS1 size, kept as it is")
+    e1, e2 = P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]]
+    area = np.linalg.norm(np.cross(e1, e2), axis=1)
+    flat = int((area <= 1e-9 * max(float(area.max()), 1e-12)).sum()) if n else 0
+    if flat:
+        add("Geometry", "warn", f"{flat} triangles have no area (they are left out)")
+    size = P.max(0) - P.min(0) if len(P) else np.zeros(3)
+    if size[1] > 0:
+        spread = max(size[0], size[2]) / size[1]
+        if spread < 0.5:
+            add("Geometry", "warn", "The arms are not spread out: the importer is tested with T-pose and "
+                                    "A-pose models; arms-down models may stretch at the shoulders")
+        else:
+            add("Geometry", "ok", "Pose: arms spread out (T-pose or A-pose)")
+    # materials
+    mats = sorted(set(np.asarray(src["MAT"]).tolist()))
+    tex = src.get("textures") or {}
+    bare = [m for m in mats if m not in tex]
+    add("Materials", "ok" if not bare else "warn",
+        f"{len(mats)} material{'s' if len(mats) != 1 else ''}, {len(tex)} embedded texture{'s' if len(tex) != 1 else ''}"
+        + (f"; {len(bare)} without a texture are drawn in plain colour" if bare else ""))
+    if len(mats) > 1:
+        add("Materials", "ok", f"The {len(mats)} materials share one 256 x 256 texture page (each gets a cell)")
+    UV = np.asarray(src["UV"], float)
+    if len(UV) and n:
+        tri = UV[T]
+        wraps = int(((tri < -1e-3) | (tri > 1 + 1e-3)).any(axis=(1, 2)).sum())
+        if wraps:
+            add("Materials", "warn", f"{wraps} triangles repeat their texture (UVs outside 0-1): "
+                                     "they may look smeared, as the PS1 page cannot repeat")
+    # rigging
+    bones = src.get("bones") or []
+    if not bones:
+        add("Rigging", "bad", "No skeleton")
+    else:
+        found = len(NEEDED) - len(info.get("missing", []))
+        add("Rigging", "ok" if found == len(NEEDED) else "bad",
+            f"{len(bones)} bones; {found} of the {len(NEEDED)} Tekken needs found")
+        share = weighted / max(len(src["P"]), 1)
+        add("Rigging", "ok" if share >= 0.95 else "bad", f"Skin weights on {share:.0%} of the vertices")
+        if src.get("renamed"):
+            add("Rigging", "warn", f"Bone names not standard: {len(src['renamed'])} bones recognised from the skeleton's shape")
+    return out
 
 
 def build(root: Path, model: int, path: Path, log=print, parts=None, settings=None):

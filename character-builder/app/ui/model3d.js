@@ -28,7 +28,23 @@ const T3Model = (() => {
     $("model-file-name").textContent = info.file || "";
     const facts = $("model-facts");
     facts.replaceChildren();
-    if (info.ok) {
+    if (info.ok && info.checks) {
+      // pre-import checks (direct_import.checks): geometry, materials, rigging
+      const marks = { ok: "✓", info: "i", warn: "!", bad: "✗" };
+      let area = "";
+      for (const c of info.checks) {
+        if (c.area !== area) {
+          area = c.area;
+          const head = fact(area);
+          head.className = "check-area";
+          facts.append(head);
+        }
+        const li = fact(c.text);
+        li.className = "check check-" + c.level;
+        li.dataset.mark = marks[c.level] || "";
+        facts.append(li);
+      }
+    } else if (info.ok) {
       facts.append(fact(`${info.triangles} triangles, ${info.vertices} vertices`));
       facts.append(fact(info.textured ? "Texture: embedded" : "Texture: none"));
       facts.append(fact(info.bones ? `Skeleton: ${info.bones} bones` : "Skeleton: none"));

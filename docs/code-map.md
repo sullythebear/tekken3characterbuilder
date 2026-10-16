@@ -73,6 +73,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   Used by `direct_import.inspect` (`parts`), `build(parts=, settings=)`, CLI `--parts JSON`, `--settings JSON`
   (`head` 4/2/1 face detail, `detail` 100/80/60 % triangle budget; server `clean_import_settings`, stored in
   `own_model.settings`, UI `#model-settings` shown for reduced models), `--preview PNG`;
+  `checks(src, info, weighted)`: the pre-import list in `inspect()["checks"]` ({area, level ok/info/warn/bad, text}:
+  triangles, flat triangles, pose spread, materials/textures, UVs outside 0-1, bones found, weights), shown grouped in `model3d.js showCheck`;
   server `/api/model/preview`, choices stored in `own_model.parts` (refit uses them); UI in
   `ui/model3d.js` (`showParts`, `partRow`, debounced preview).
 - `app/reduce.py` – high-poly rigged model -> PS1 size: `reduce(src, target)` (`_shell` with
