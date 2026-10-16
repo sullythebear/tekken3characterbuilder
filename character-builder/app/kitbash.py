@@ -198,17 +198,40 @@ def build(root: Path, base: int, parts: dict, log=print):
             lo = np.maximum(lo, 0)
             hi = np.minimum(hi, [BAND_WORDS * 4 - 1, 255])
             clusters.append({"model": mdl, "mat": mat, "faces": members, "lo": lo, "hi": hi})
+    # 4-bit CLUTs beyond a fighter's room (26, step 4): the smallest 4-bit areas become 8-bit
+    # ("wide": one 8-bit texel per 4-bit texel, twice as wide in the page) and take their colours
+    # from the shared 8-bit CLUT, until the rest fits
+    ROOM4 = 26
+    area_of = {}
+    for c in clusters:
+        if not c["mat"] & 0x8000:
+            key = (c["model"], c["mat"] & 0x7EFF)
+            area_of[key] = area_of.get(key, 0) + int(np.prod(c["hi"] - c["lo"] + 1))
+    pals4 = {}
+    for key in area_of:
+        pals4.setdefault(tuple((list(src[key[0]].cluts.get(key[1], [0] * 16))[:16] + [0] * 16)[:16]), []).append(key)
+    wide_keys = set()
+    if len(pals4) > ROOM4:
+        order = sorted(pals4.values(), key=lambda keys: sum(area_of[k] for k in keys))
+        for keys in order[:len(pals4) - ROOM4]:
+            wide_keys.update(keys)
+        log(f"4-bit areas: {len(order) - ROOM4} colour tables over the room become 8-bit")
+    for c in clusters:
+        c["wide"] = not c["mat"] & 0x8000 and (c["model"], c["mat"] & 0x7EFF) in wide_keys
     # same texels used by two clusters (shared tiles) are copied once: identical source boxes merge
     occ = np.zeros((256, 256), bool)
     placed = {}
     clusters.sort(key=lambda c: -(c["hi"][1] - c["lo"][1] + 1) * (c["hi"][0] - c["lo"][0] + 1))
     for c in clusters:
         # 8-bit texels are renumbered per source CLUT (step 4), so those copies stay apart
-        sk = (c["model"], 0x8000 | (c["mat"] & 0x7EFF) if c["mat"] & 0x8000 else 0, tuple(c["lo"]), tuple(c["hi"]))
+        sk = (c["model"], 0x8000 | (c["mat"] & 0x7EFF) if c["mat"] & 0x8000 or c["wide"] else 0,
+              tuple(c["lo"]), tuple(c["hi"]))
         if sk in placed:
             c["dst"] = placed[sk]
             continue
         w_, h_ = c["hi"] - c["lo"] + 1
+        if c["wide"]:
+            w_ = 2 * w_
         spot = None
         for y in range(0, 256 - h_ + 1):
             for x in range(0, 256 - w_ + 1, 4):
@@ -223,6 +246,8 @@ def build(root: Path, base: int, parts: dict, log=print):
         c["dst"] = placed[sk] = spot
     band = np.zeros((256, 64), dtype=np.uint16)
     for c in clusters:
+        if c["wide"]:
+            continue
         sm = src[c["model"]]
         x0, y0 = c["lo"][0] // 4, c["lo"][1]
         x1, y1 = c["hi"][0] // 4, c["hi"][1]
@@ -234,7 +259,7 @@ def build(root: Path, base: int, parts: dict, log=print):
     # (id 0): their texels are renumbered into one palette, the closest colours merged if more
     # than 255; 4-bit CLUTs (identical ones once) go to row 1 (ids 64..79) and row 2 (128..137).
     new_mat = {}
-    eight_keys = sorted({(c["model"], c["mat"] & 0x7EFF) for c in clusters if c["mat"] & 0x8000})
+    eight_keys = sorted({(c["model"], c["mat"] & 0x7EFF) for c in clusters if c["mat"] & 0x8000 or c["wide"]})
     lut = {}
     if eight_keys:
         used, colours = {}, []
@@ -246,6 +271,14 @@ def build(root: Path, base: int, parts: dict, log=print):
             area = band[y0:y1 + 1, x0:x1 + 1]
             key = (c["model"], c["mat"] & 0x7EFF)
             used.setdefault(key, set()).update(np.unique(area & 255).tolist() + np.unique(area >> 8).tolist())
+        for c in clusters:                             # wide areas: the 4-bit indices of their source
+            if not c["wide"]:
+                continue
+            x0, y0, x1, y1 = c["lo"][0] // 4, c["lo"][1], c["hi"][0] // 4, c["hi"][1]
+            area = src[c["model"]].band[y0:y1 + 1, x0:x1 + 1]
+            key = (c["model"], c["mat"] & 0x7EFF)
+            for k in range(4):
+                used.setdefault(key, set()).update(np.unique((area >> (4 * k)) & 15).tolist())
         entries = []                                   # (key, index, colour)
         for key in eight_keys:
             pal = list(src[key[0]].cluts.get(key[1], [0] * 256)) + [0] * 256
@@ -276,6 +309,17 @@ def build(root: Path, base: int, parts: dict, log=print):
                 lut.setdefault(key, np.zeros(256, np.uint16))[i] = k
         if len(swatch) and len(entries) > len(swatch):
             log(f"8-bit areas: {len(entries)} colours merged into {len(swatch)}")
+        for c in clusters:                             # wide areas: 4-bit source -> 8-bit texels
+            if not c["wide"]:
+                continue
+            x0, y0, x1, y1 = c["lo"][0] // 4, c["lo"][1], c["hi"][0] // 4, c["hi"][1]
+            area = src[c["model"]].band[y0:y1 + 1, x0:x1 + 1]
+            table = lut.get((c["model"], c["mat"] & 0x7EFF), np.zeros(256, np.uint16))
+            nib = np.stack([(area >> (4 * k)) & 15 for k in range(4)], 2).reshape(area.shape[0], -1)
+            idx = table[nib]
+            words = idx[:, 0::2] | (idx[:, 1::2] << 8)
+            dx, dy = c["dst"][0] // 4, c["dst"][1]
+            band[dy:dy + words.shape[0], dx:dx + words.shape[1]] = words
         for c in clusters:                             # renumber the copied 8-bit texels
             if not c["mat"] & 0x8000:
                 continue
@@ -286,24 +330,47 @@ def build(root: Path, base: int, parts: dict, log=print):
             table = lut.get(key, np.zeros(256, np.uint16))
             band[y0:y1 + 1, x0:x1 + 1] = table[area & 255] | (table[area >> 8] << 8)
         for (m_, mat) in groups:
-            if mat & 0x8000:
+            if mat & 0x8000 or (m_, mat & 0x7EFF) in wide_keys:
                 new_mat[(m_, mat)] = 0x8000
     slots4 = list(range(64, 80)) + list(range(128, 138))
-    pal4, by_colours = {}, {}
-    for (m_, mat) in sorted(groups):
-        if mat & 0x8000:
+    # 4-bit CLUTs share a slot when they agree on every index their texels use (lossless: the
+    # texels stay as they are); the indices used come from the copied areas
+    used4 = {}
+    for c in clusters:
+        if c["mat"] & 0x8000 or c["wide"]:
             continue
+        x0, x1 = c["dst"][0] // 4, c["dst"][0] // 4 + (c["hi"][0] - c["lo"][0]) // 4
+        y0, y1 = c["dst"][1], c["dst"][1] + c["hi"][1] - c["lo"][1]
+        area = band[y0:y1 + 1, x0:x1 + 1]
+        nib = set()
+        for k in range(4):
+            nib.update(np.unique((area >> (4 * k)) & 15).tolist())
+        used4.setdefault((c["model"], c["mat"] & 0x7EFF), set()).update(nib)
+    bins, pal4 = [], {}                               # bins: [16 colours or None]
+    for (m_, mat) in sorted(groups):
+        if mat & 0x8000 or (m_, mat & 0x7EFF) in wide_keys:
+            continue
+        key = (m_, mat & 0x7EFF)
         pal = (list(src[m_].cluts.get(mat & 0x7EFF, [0] * 16))[:16] + [0] * 16)[:16]
-        key = tuple(pal)
-        if key not in by_colours:
-            if len(by_colours) >= len(slots4):
-                need = len({tuple((list(src[m2].cluts.get(t & 0x7EFF, [0] * 16))[:16] + [0] * 16)[:16])
-                            for (m2, t) in groups if not t & 0x8000})
-                raise MI.Budget(f"the chosen parts need {need} small colour tables, a fighter has room for "
-                                f"{len(slots4)}: take parts from fewer different fighters")
-            by_colours[key] = slots4[len(by_colours)]
-            pal4[by_colours[key]] = pal
-        new_mat[(m_, mat)] = by_colours[key]
+        need = sorted(used4.get(key, set(range(16))))
+        home = None
+        for j, b_ in enumerate(bins):
+            if all(b_[i] is None or b_[i] == pal[i] for i in need):
+                home = j
+                break
+        if home is None:
+            if len(bins) >= len(slots4):
+                raise MI.Budget(f"the chosen parts need more than {len(slots4)} small colour tables "
+                                "(a fighter's room): take parts from fewer different fighters")
+            bins.append([None] * 16)
+            home = len(bins) - 1
+        for i in need:
+            bins[home][i] = pal[i]
+        new_mat[(m_, mat)] = slots4[home]
+    for j, b_ in enumerate(bins):
+        pal4[slots4[j]] = [c if c is not None else 0 for c in b_]
+    if bins:
+        log(f"4-bit CLUTs: {sum(1 for k in groups if not k[1] & 0x8000)} materials in {len(bins)} tables")
     runs = [(0, palette)] if eight_keys else []
     for first, last in ((64, 80), (128, 138)):
         ids = [i for i in sorted(pal4) if first <= i < last]
@@ -316,7 +383,11 @@ def build(root: Path, base: int, parts: dict, log=print):
     for c in clusters:
         off = np.array(c["dst"]) - c["lo"]
         for i in c["faces"]:
-            face_uv[i] = [(int(u), int(v)) for u, v in (cols(faces[i]) + off)]
+            if c["wide"]:
+                rel = cols(faces[i]) - c["lo"]
+                face_uv[i] = [(int(c["dst"][0] + 2 * u), int(c["dst"][1] + v)) for u, v in rel]
+            else:
+                face_uv[i] = [(int(u), int(v)) for u, v in (cols(faces[i]) + off)]
     for i, f in enumerate(faces):
         f["chart"] = chart_of[new_mat[(f["model"], f["smat"])]]
     texture = {"uv": face_uv, "band": band, "runs": runs, "mats": {chart_of[m_]: m_ for m_ in mats},

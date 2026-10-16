@@ -59,3 +59,13 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   (`T3Costumes.preview`, held until the fighter or its model changes); the saved model is not
   touched. A mix that does not fit says why before Build. Browser pane: Julia head + Law body +
   Xiaoyu legs shown; Xiaoyu 2 head/body + Lei 2 arms: "28 small colour tables, room for 26".
+
+## More fighters per mix (2026-10-16)
+
+- 4-bit CLUTs that agree on every index their texels use share a slot (lossless; in practice
+  rare: palettes use all 16 indices).
+- Over 26 small CLUTs: the smallest 4-bit areas become 8-bit ("wide": twice as wide in the page,
+  UV columns dst + 2 x (src - lo)) and take colours from the shared 8-bit CLUT (Ward merge to
+  255). Xiaoyu 2 head/body/right leg + Lei 2 arms on Nina (was refused: 33 tables): 7 tables
+  converted, offline render clean, live: HUD text clean, 672 colours in 3 CLUT runs (exactly the
+  stock space), 0 words differ. What still refuses: a mix whose textures exceed one page.
