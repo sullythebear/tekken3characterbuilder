@@ -1,6 +1,6 @@
 # Project status
 
-Updated: 2026-10-16. Builder 0.5.0 released (tag v0.5.0, pushed): Studio modules, patches 17-19.
+Updated: 2026-10-16. Builder 0.5.1 released (tag v0.5.1): kitbash HUD text fix on top of 0.5.0 (Studio modules, patches 17-19).
 
 ## Done this session
 

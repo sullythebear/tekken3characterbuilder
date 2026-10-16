@@ -4,6 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
+| v0.5.1 (tag) | Kitbash CLUTs only where stock models keep theirs (fight HUD text glitches, user report); randomizer one other fighter | live: Xiaoyu head + legs on Nina, HUD text clean; unit tests 25 |
 | v0.5.0 (tag) | Studio: module tabs, Builder body parts (kitbash, fit gate), Portrait Lab presets, Voice Lab effect, Stage Lab colour looks (patch 19), Move Lab command list, restore points, unit tests | unit tests 25; live: kitbash fighters, stage night/sunset, Practice name call, Team Battle; regress 11 same; browser pane for every tab. released 2026-10-16 on the owner's approval; name call Silent by default |
 | (next) | Patch 18: both guest pages' tiles in VRAM (custom tiles at 384,256), Team Battle mixed teams correct | live Team Battle select/FIGHT/FIGHT 2 grey (t3live nav) |
 | (next) | Own stage and music per fighter (patch 17, customs.txt columns 3-4), name call (automatic Windows voice with announcer effect, own recording or file, silent) as `<Key>-TTT1-sfx.jus` | live: CPU Tommy on Gon's stage with Dr. B's theme (screenshot); Practice: "Tommy: P1 announced name" in state 8; browser pane: lists, save, own sound, package round trip byte-identical |
