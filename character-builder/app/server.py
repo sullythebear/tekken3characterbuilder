@@ -667,7 +667,9 @@ def character_list() -> list[dict]:
         except (OSError, ValueError):
             continue
         data["id"] = folder.name
-        stamp = int(info.stat().st_mtime)
+        # the portrait files can change without character.json (a saved portrait put back in use)
+        stamp = max(int(f.stat().st_mtime_ns // 1000) for f in (info, folder / "portrait-ps1.png", folder / "portrait.png")
+                    if f.is_file())
         data["portrait"] = (f"/characters/{folder.name}/portrait-ps1.png?v={stamp}"
                             if (folder / "portrait-ps1.png").is_file() else None)
         data["source"] = (f"/characters/{folder.name}/portrait.png?v={stamp}"
@@ -1538,6 +1540,81 @@ def restore_character(cid: str, point: str) -> dict:
     return save_character({"id": folder.name, **{k: data[k] for k in RESTORE_FIELDS if k in data}})
 
 
+PORTRAIT_FILES = ("portrait.png", "portrait-ps1.png", "portrait-full.png")
+PORTRAIT_VARIANTS = 12
+
+
+def _portrait_variant_dir(folder: Path, vid: str) -> Path:
+    if not re.fullmatch(r"[0-9-]{8,40}", vid or ""):
+        raise ValueError("Unknown portrait.")
+    path = folder / "portraits" / vid
+    if not (path / "portrait-ps1.png").is_file():
+        raise ValueError("Unknown portrait.")
+    return path
+
+
+def _same_portrait(folder: Path, variant: Path) -> bool:
+    return (folder / "portrait-ps1.png").read_bytes() == (variant / "portrait-ps1.png").read_bytes()
+
+
+def portrait_variants(cid: str) -> list[dict]:
+    """The fighter's saved portraits, newest first: {id, image, current}."""
+    folder = DATA / safe_id(cid)
+    root = folder / "portraits"
+    out = []
+    for path in sorted(root.iterdir(), reverse=True) if root.is_dir() else []:
+        if (path / "portrait-ps1.png").is_file() and re.fullmatch(r"[0-9-]{8,40}", path.name):
+            current = (folder / "portrait-ps1.png").is_file() and _same_portrait(folder, path)
+            out.append({"id": path.name, "image": f"/characters/{folder.name}/portraits/{path.name}/portrait-ps1.png",
+                        "current": current})
+    return out
+
+
+def keep_portrait(cid: str) -> list[dict]:
+    """Saves the fighter's current portrait (all three files) as a variant, unless it is saved
+    already; the oldest variants go beyond PORTRAIT_VARIANTS."""
+    folder = DATA / safe_id(cid)
+    if not (folder / "portrait-ps1.png").is_file():
+        raise ValueError("This fighter has no portrait yet: choose an image or make one from the 3D model, then Save.")
+    root = folder / "portraits"
+    if root.is_dir() and any(_same_portrait(folder, p) for p in root.iterdir() if (p / "portrait-ps1.png").is_file()):
+        return portrait_variants(cid)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = root / stamp
+    n = 1
+    while target.exists():
+        n += 1
+        target = root / f"{stamp}-{n}"
+    target.mkdir(parents=True)
+    for name in PORTRAIT_FILES:
+        if (folder / name).is_file():
+            shutil.copyfile(folder / name, target / name)
+    for old in sorted((p for p in root.iterdir() if p.is_dir()), reverse=True)[PORTRAIT_VARIANTS:]:
+        shutil.rmtree(old)
+    return portrait_variants(cid)
+
+
+def use_portrait(cid: str, vid: str) -> dict:
+    """Makes a saved variant the fighter's portrait. The current one is saved as a variant first,
+    so nothing is lost."""
+    folder = DATA / safe_id(cid)
+    variant = _portrait_variant_dir(folder, vid)
+    if (folder / "portrait-ps1.png").is_file():
+        keep_portrait(cid)
+    for name in PORTRAIT_FILES:
+        if (variant / name).is_file():
+            shutil.copyfile(variant / name, folder / name)
+        elif name == "portrait-full.png":
+            (folder / name).unlink(missing_ok=True)   # the game pack falls back to portrait.png
+    return get_character(folder.name)
+
+
+def drop_portrait(cid: str, vid: str) -> list[dict]:
+    folder = DATA / safe_id(cid)
+    shutil.rmtree(_portrait_variant_dir(folder, vid))
+    return portrait_variants(cid)
+
+
 def delete_character(cid: str) -> None:
     folder = DATA / safe_id(cid)
     if folder.is_dir():
@@ -1707,9 +1784,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._error("Not found.", 404)
         if path.startswith("/characters/"):
             parts = path.split("/")
-            if len(parts) == 4 and parts[3] in ("portrait.png", "portrait-ps1.png"):
+            if len(parts) == 4 and parts[3] in ("portrait.png", "portrait-ps1.png") or (
+                    len(parts) == 6 and parts[3] == "portraits" and re.fullmatch(r"[0-9-]{8,40}", parts[4])
+                    and parts[5] == "portrait-ps1.png"):
                 try:
-                    target = DATA / safe_id(parts[2]) / parts[3]
+                    target = DATA / safe_id(parts[2]) / "/".join(parts[3:])
                 except ValueError:
                     return self._error("Not found.", 404)
                 if target.is_file():
@@ -1835,6 +1914,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/history":
                 return self._json({"points": restore_points(str(data.get("id", "")))})
+            if path == "/api/portraits":
+                return self._json({"variants": portrait_variants(str(data.get("id", "")))})
+            if path == "/api/portraits/keep":
+                return self._json({"variants": keep_portrait(str(data.get("id", "")))})
+            if path == "/api/portraits/drop":
+                return self._json({"variants": drop_portrait(str(data.get("id", "")), str(data.get("variant", "")))})
+            if path == "/api/portraits/use":
+                saved = use_portrait(str(data.get("id", "")), str(data.get("variant", "")))
+                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/history/restore":
                 saved = restore_character(str(data.get("id", "")), str(data.get("point", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})

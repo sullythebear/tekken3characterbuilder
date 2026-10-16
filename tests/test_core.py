@@ -238,6 +238,39 @@ class RestorePointTests(CharacterTests):
         self.assertEqual(len(server.restore_points(c["id"])), server.RESTORE_POINTS)
 
 
+
+class PortraitVariantTests(CharacterTests):
+    @staticmethod
+    def image(colour):
+        import base64
+        import custom_page
+        return "data:image/png;base64," + base64.b64encode(custom_page.png([bytes(colour) * 2] * 2)).decode()
+
+    def test_keep_use_drop(self):
+        red, blue = self.image((255, 0, 0, 255)), self.image((0, 0, 255, 255))
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "portrait_ps1": red, "portrait_source": red})
+        kept = server.keep_portrait(c["id"])
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0]["current"])
+        self.assertEqual(len(server.keep_portrait(c["id"])), 1)         # the same one is not kept twice
+        server.save_character({"id": c["id"], "name": "A", "donor": 1, "costumes": [], "portrait_ps1": blue})
+        self.assertFalse(server.portrait_variants(c["id"])[0]["current"])
+        server.use_portrait(c["id"], kept[0]["id"])                       # blue is kept automatically
+        variants = server.portrait_variants(c["id"])
+        self.assertEqual(len(variants), 2)
+        self.assertEqual(sum(v["current"] for v in variants), 1)
+        folder = server.DATA / c["id"]
+        self.assertEqual((folder / "portrait-ps1.png").read_bytes(), (folder / "portraits" / kept[0]["id"] / "portrait-ps1.png").read_bytes())
+        left = server.drop_portrait(c["id"], kept[0]["id"])
+        self.assertEqual(len(left), 1)
+        with self.assertRaises(ValueError):
+            server.use_portrait(c["id"], "../..")
+
+    def test_needs_a_portrait(self):
+        c = server.save_character({"name": "A", "donor": 1, "costumes": []})
+        with self.assertRaises(ValueError):
+            server.keep_portrait(c["id"])
+
 class StageLabTests(unittest.TestCase):
     def test_custom_look_args(self):
         args, label = server.stage_look_args("custom", "#30FF60", 70)

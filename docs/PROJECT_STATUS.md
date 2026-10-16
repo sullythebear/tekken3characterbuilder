@@ -63,5 +63,5 @@ Module order (owner, 2026-10-16): Character Builder, Model Importer, Portrait La
 Stage Lab, Move Lab.
 
 1. Model Importer: done for now (detail settings, pre-import check list).
-2. Portrait Lab: several saved portrait variants per fighter.
+2. Portrait Lab: saved portraits done (keep / use / delete; the one in use is kept automatically).
 3. Character Builder: body shapes (proportions) if the skeleton allows it.

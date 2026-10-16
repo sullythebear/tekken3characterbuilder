@@ -290,6 +290,7 @@ function fillForm() {
   T3Arena.fill();
   T3Builder.fill();
   loadHistory();
+  loadPortraits();
   if (!$("page-moves").hidden) T3MoveLab.show();
   if (window.T3Model) T3Model.refresh();
   showPortraitFromModel();
@@ -323,6 +324,66 @@ async function restorePoint() {
     fillForm();
     T3Costumes.refresh(true);
     if (!showWarnings(saved)) toast("Restored: the replaced settings are a restore point too");
+  } catch (e) { toast(e.message); }
+}
+
+// saved portraits: variants of the select-screen portrait (server keeps the last 12)
+function showPortraits(variants) {
+  const list = $("portrait-variants");
+  list.textContent = "";
+  for (const v of variants) {
+    const li = document.createElement("li");
+    li.className = "portrait-variant" + (v.current ? " current" : "");
+    const use = document.createElement("button");
+    use.type = "button";
+    use.className = "portrait-variant-use";
+    use.title = v.current ? "In use" : "Use this portrait";
+    use.disabled = v.current;
+    use.append(Object.assign(document.createElement("img"), { src: v.image, alt: v.current ? "Portrait in use" : "Saved portrait" }));
+    use.addEventListener("click", () => usePortrait(v.id));
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "portrait-variant-drop";
+    drop.textContent = "Delete";
+    drop.addEventListener("click", () => dropPortrait(v.id));
+    li.append(use, drop);
+    list.append(li);
+  }
+}
+
+async function loadPortraits() {
+  const field = $("portrait-variants-field");
+  field.hidden = !state.current.id;
+  if (!state.current.id) return;
+  try {
+    showPortraits((await api("/api/portraits", { id: state.current.id })).variants);
+  } catch { field.hidden = true; }
+}
+
+async function keepPortrait() {
+  if (!state.current.id) return;
+  if (state.dirty) { toast("Save your changes first: the saved portrait is the one kept."); return; }
+  try {
+    showPortraits((await api("/api/portraits/keep", { id: state.current.id })).variants);
+    toast("Portrait kept");
+  } catch (e) { toast(e.message); }
+}
+
+async function usePortrait(variant) {
+  if (state.dirty && !confirm("You have unsaved changes. Use this portrait anyway?")) return;
+  try {
+    const saved = await api("/api/portraits/use", { id: state.current.id, variant });
+    state.dirty = false;
+    await loadCharacters();
+    await selectCharacter(saved);
+    if (!showWarnings(saved)) toast("Portrait in use; the previous one is kept");
+  } catch (e) { toast(e.message); }
+}
+
+async function dropPortrait(variant) {
+  if (!confirm("Delete this saved portrait?")) return;
+  try {
+    showPortraits((await api("/api/portraits/drop", { id: state.current.id, variant })).variants);
   } catch (e) { toast(e.message); }
 }
 
@@ -649,6 +710,7 @@ function wire() {
   T3Arena.init();
   T3Builder.init();
   $("history-restore").addEventListener("click", restorePoint);
+  $("portrait-keep").addEventListener("click", keepPortrait);
   $("name").addEventListener("input", (e) => {
     const cleaned = e.target.value.toUpperCase().replace(NAME_BLOCKED, "");
     if (cleaned !== e.target.value) e.target.value = cleaned;

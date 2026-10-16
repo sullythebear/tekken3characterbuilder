@@ -35,6 +35,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Restore points: `keep_restore_point` (in `save_character`, `characters/<id>/history/`), `restore_points` (`/api/history`), `restore_character` (`/api/history/restore`); UI `loadHistory`, `restorePoint` in app.js.
 - `app/stage_look.py` (venv) – stage colour looks: `variant` (CLUT rows of record 36 + arena, recoloured), `preview` (texture sheet); server `write_stage_look` (in sync), `stage_preview` (`/api/stage/preview`), `STAGE_ARENA`.
 - `app/command_list.py` (stdlib) – decodes a fighter's COMMAND LIST (ARC member 4, word tokens, Tekken notation); `model_export.py commandlist --model N`; server `command_list` (`/api/moves`); UI `movelab.js`.
+- Saved portraits (server): `portrait_variants`, `keep_portrait`, `use_portrait` (keeps the current one first, then
+  copies the variant back and syncs), `drop_portrait`; files in `characters/<id>/portraits/<stamp>/`, at most
+  `PORTRAIT_VARIANTS` = 12; routes `/api/portraits`, `/keep`, `/use`, `/drop`; UI `app.js loadPortraits`.
+  The portrait URL stamp uses the newest of character.json and the portrait files (browser cache).
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
 - `app/expanded_custom.py` (venv) – writes portrait pack, name plate, customs.txt (`install`,
