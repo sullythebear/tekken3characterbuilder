@@ -170,23 +170,7 @@ def _layer(geo: Node, name: str, data: str, index: str):
             "data": el.value(data) or [], "index": el.value(index) or []}
 
 
-def character(path: Path) -> dict:
-    """The (first) skinned mesh in its bind pose, in the file's units and axes:
-    positions (flat xyz), triangles (vertex indices), corner_uvs (per triangle corner),
-    materials (per triangle), bones [{name, parent, matrix (bind, global)}], weights
-    [{bone index: weight}] per vertex, textures {material index: (name, PNG/JPG bytes)}."""
-    s = scene(path)
-    objs, parents, children = s["objects"], s["parents"], s["children"]
-    geo = next((n for n in objs.values() if n.name == "Geometry" and n.find("Vertices")), None)
-    if geo is None:
-        raise FbxError("The FBX file holds no mesh.")
-    gid = geo.props[0]
-    raw = geo.value("Vertices")
-    idx = geo.value("PolygonVertexIndex")
-    uv = _layer(geo, "LayerElementUV", "UV", "UVIndex")
-    mat = _layer(geo, "LayerElementMaterial", "Materials", "")
-
-    # skin: Geometry <- Deformer/Skin <- Deformer/Cluster <- Model/LimbNode
+def _skin_clusters(objs, children, gid):
     clusters = []
     for skin_id, kind, _ in children.get(gid, []):
         skin = objs.get(skin_id)
@@ -197,19 +181,73 @@ def character(path: Path) -> dict:
             if c is not None and c.name == "Deformer":
                 bone = next((b for b, _, _ in children.get(cid, []) if b in objs and objs[b].name == "Model"), None)
                 clusters.append((c, bone))
-    # Cluster Transform is the bind offset (bone bind inverse x mesh); TransformLink is the bone's
-    # bind matrix, so TransformLink x Transform is the mesh's matrix at bind time.
-    mesh_matrix = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-    if clusters and clusters[0][0].value("TransformLink"):
-        a, b = _matrix(clusters[0][0].value("TransformLink")), _matrix(clusters[0][0].value("Transform"))
-        mesh_matrix = [[sum(a[r][k] * b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
-    positions = []
-    for i in range(0, len(raw), 3):
-        positions += _apply(mesh_matrix, raw[i:i + 3])
+    return clusters
 
-    # bones: every LimbNode, parent = the Model it is connected to
+
+def character(path: Path) -> dict:
+    """Every skinned mesh (body, hair, clothes: Mixamo characters come in several) in its bind
+    pose, merged, in the file's units and axes: positions (flat xyz), triangles (vertex indices),
+    corner_uvs (per triangle corner), materials (per triangle), bones [{name, parent, matrix (bind,
+    global)}], weights [{bone index: weight}] per vertex, textures {material index: (name, PNG/JPG
+    bytes)}, colours {material index: rgba}. A file without skins: its first mesh."""
+    s = scene(path)
+    objs, parents, children = s["objects"], s["parents"], s["children"]
+    geos = [n for n in objs.values() if n.name == "Geometry" and n.find("Vertices")
+            and (len(n.props) < 3 or n.props[2] in ("Mesh", ""))]
+    skinned = [g for g in geos if _skin_clusters(objs, children, g.props[0])]
+    geos = skinned or geos[:1]
+    if not geos:
+        raise FbxError("The FBX file holds no mesh.")
+    parts = []
+    for geo in geos:
+        gid = geo.props[0]
+        clusters = _skin_clusters(objs, children, gid)
+        # Cluster Transform is the bind offset (bone bind inverse x mesh); TransformLink is the
+        # bone's bind matrix, so TransformLink x Transform is the mesh's matrix at bind time.
+        mesh_matrix = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+        if clusters and clusters[0][0].value("TransformLink"):
+            a, b = _matrix(clusters[0][0].value("TransformLink")), _matrix(clusters[0][0].value("Transform"))
+            mesh_matrix = [[sum(a[r][k] * b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
+        raw = geo.value("Vertices")
+        positions = []
+        for i in range(0, len(raw), 3):
+            positions += _apply(mesh_matrix, raw[i:i + 3])
+        idx = geo.value("PolygonVertexIndex")
+        uv = _layer(geo, "LayerElementUV", "UV", "UVIndex")
+        mat = _layer(geo, "LayerElementMaterial", "Materials", "")
+        triangles, corner_uvs, materials = [], [], []
+        poly, pcount = [], 0
+        for k, v in enumerate(idx):
+            poly.append((v if v >= 0 else ~v, k))
+            if v < 0:
+                m = 0
+                if mat and mat["data"]:
+                    m = mat["data"][0] if mat["mapping"] == "AllSame" else mat["data"][pcount]
+                for j in range(1, len(poly) - 1):
+                    tri = (poly[0], poly[j], poly[j + 1])
+                    triangles += [t[0] for t in tri]
+                    for vert, corner_at in tri:
+                        if uv and uv["data"]:
+                            u_at = uv["index"][corner_at] if uv["reference"] == "IndexToDirect" else corner_at
+                            if uv["mapping"] == "ByControlPoint":
+                                u_at = uv["index"][vert] if uv["reference"] == "IndexToDirect" else vert
+                            corner_uvs += uv["data"][2 * u_at:2 * u_at + 2]
+                        else:
+                            corner_uvs += [0.0, 0.0]
+                    materials.append(m)
+                poly = []; pcount += 1
+        # textures: Model(mesh) <- Material <- Texture (DiffuseColor) <- Video (Content)
+        mesh_model = next((p for p, _, _ in parents.get(gid, []) if p in objs and objs[p].name == "Model"), None)
+        mats = [m for m, _, _ in children.get(mesh_model, []) if m in objs and objs[m].name == "Material"]
+        parts.append((positions, triangles, corner_uvs, materials, clusters, mats, len(raw) // 3))
+
+    # bones: every LimbNode, parent = the Model it is connected to; bind matrices from all skins
     limb = {i: n for i, n in objs.items() if n.name == "Model" and len(n.props) > 2 and n.props[2] in ("LimbNode", "Root", "Null")}
-    bind = {bone: _matrix(c.value("TransformLink")) for c, bone in clusters if bone is not None and c.value("TransformLink")}
+    bind = {}
+    for part in parts:
+        for c, bone in part[4]:
+            if bone is not None and bone not in bind and c.value("TransformLink"):
+                bind[bone] = _matrix(c.value("TransformLink"))
     for pose in (n for n in objs.values() if n.name == "Pose"):
         for pn in pose.all("PoseNode"):
             node = pn.value("Node")
@@ -221,41 +259,36 @@ def character(path: Path) -> dict:
     for i in ids:
         parent = next((p for p, _, _ in parents.get(i, []) if p in order), None)
         bones.append({"name": object_name(limb[i]).replace("mixamorig:", ""), "parent": order.get(parent, -1), "matrix": bind[i]})
-    weights = [dict() for _ in range(len(raw) // 3)]
-    for c, bone in clusters:
-        if bone not in order:
-            continue
-        for v, w in zip(c.value("Indexes") or [], c.value("Weights") or []):
-            if w > 0:
-                weights[v][order[bone]] = weights[v].get(order[bone], 0) + w
 
-    triangles, corner_uvs, materials = [], [], []
-    poly, corner, pcount = [], 0, 0
-    for k, v in enumerate(idx):
-        poly.append((v if v >= 0 else ~v, k))
-        if v < 0:
-            m = 0
-            if mat and mat["data"]:
-                m = mat["data"][0] if mat["mapping"] == "AllSame" else mat["data"][pcount]
-            for j in range(1, len(poly) - 1):
-                tri = (poly[0], poly[j], poly[j + 1])
-                triangles += [t[0] for t in tri]
-                for vert, corner_at in tri:
-                    if uv and uv["data"]:
-                        u_at = uv["index"][corner_at] if uv["reference"] == "IndexToDirect" else corner_at
-                        if uv["mapping"] == "ByControlPoint":
-                            u_at = uv["index"][vert] if uv["reference"] == "IndexToDirect" else vert
-                        corner_uvs += uv["data"][2 * u_at:2 * u_at + 2]
-                    else:
-                        corner_uvs += [0.0, 0.0]
-                materials.append(m)
-            poly = []; pcount += 1
-
-    # textures: Model(mesh) <- Material <- Texture (DiffuseColor) <- Video (Content)
-    mesh_model = next((p for p, _, _ in parents.get(gid, []) if p in objs and objs[p].name == "Model"), None)
-    mats = [m for m, _, _ in children.get(mesh_model, []) if m in objs and objs[m].name == "Material"]
-    textures = {}
-    for k, mid in enumerate(mats):
+    positions, triangles, corner_uvs, materials, weights = [], [], [], [], []
+    textures, colours, names, material_ids = {}, {}, [], {}
+    for pos, tris, cuv, mts, clusters, mats, nverts in parts:
+        base = len(positions) // 3
+        w = [dict() for _ in range(nverts)]
+        for c, bone in clusters:
+            if bone not in order:
+                continue
+            for v, wt in zip(c.value("Indexes") or [], c.value("Weights") or []):
+                if wt > 0:
+                    w[v][order[bone]] = w[v].get(order[bone], 0) + wt
+        local = []                                    # a material shared by two meshes keeps one index
+        for mid in mats:
+            if mid not in material_ids:
+                material_ids[mid] = len(material_ids)
+                names.append(object_name(objs[mid]))
+            local.append(material_ids[mid])
+        positions += pos
+        triangles += [t + base for t in tris]
+        corner_uvs += cuv
+        materials += [local[m] if m < len(local) else (local[0] if local else 0) for m in mts]
+        weights += w
+    for mid, k in material_ids.items():
+        props = _props70(objs[mid])                   # a material's own colour (no texture: Mixamo's bots)
+        dc = props.get("DiffuseColor") or props.get("Diffuse")
+        if dc and len(dc) >= 3:
+            f = props.get("DiffuseFactor")
+            f = float(f[0]) if f else 1.0
+            colours[k] = [float(x) * f for x in dc[:3]] + [1.0]
         for tid, kind, prop in children.get(mid, []):
             if objs.get(tid) is None or objs[tid].name != "Texture" or (prop and "Diffuse" not in prop):
                 continue
@@ -264,8 +297,8 @@ def character(path: Path) -> dict:
                 if content:
                     textures[k] = (object_name(objs[tid]), content)
     return {"positions": positions, "triangles": triangles, "corner_uvs": corner_uvs, "materials": materials,
-            "material_names": [object_name(objs[m]) for m in mats], "bones": bones, "weights": weights,
-            "textures": textures, "up": s["settings"].get("UpAxis", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}
+            "material_names": names, "bones": bones, "weights": weights,
+            "textures": textures, "colours": colours, "up": s["settings"].get("UpAxis", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}
 
 
 if __name__ == "__main__":

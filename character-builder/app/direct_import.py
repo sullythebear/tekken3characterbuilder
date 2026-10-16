@@ -142,7 +142,7 @@ def _name_by_shape(src: dict) -> None:
         bones[i]["name"] = nm
 
 
-def _colour_swatches(src: dict, colours: dict) -> None:
+def _colour_swatches(src: dict, colours: dict, linear: bool = True) -> None:
     """Materials with only a colour (no texture, as Xbot's body and joints): a small texture of
     that colour, and their triangles' UVs on it."""
     from PIL import Image
@@ -151,7 +151,7 @@ def _colour_swatches(src: dict, colours: dict) -> None:
         if mi in src["textures"] or mi not in colours:
             continue
         lin = np.clip(np.array(colours[mi][:3]), 0, 1)
-        srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055)
+        srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055) if linear else lin
         buf = io.BytesIO()
         Image.new("RGBA", (8, 8), tuple(int(round(c * 255)) for c in srgb) + (255,)).save(buf, "PNG")
         src["textures"][mi] = buf.getvalue()
@@ -244,7 +244,7 @@ def _upright(src: dict) -> None:
 
 
 def _load(path: Path) -> dict:
-    if path.suffix.lower() == ".glb":
+    if path.suffix.lower() in (".glb", ".vrm"):            # VRM (VRoid) is glTF binary
         import glb
         g = glb.read(path)
         out = {"P": g["positions"], "T": g["triangles"], "UV": g["uv"], "MAT": g["materials"],
@@ -267,6 +267,7 @@ def _load(path: Path) -> dict:
     UV[:, 1] = 1 - UV[:, 1]
     out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
            "textures": {k: v for k, (n, v) in c["textures"].items()}}
+    _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:
         # a real rig (e.g. from Mixamo): joints and the strongest bone of every vertex
         w = c["weights"]
@@ -544,8 +545,8 @@ def inspect(path: Path) -> dict:
     rigged (a skeleton with the bones Tekken needs and skin weights). `rigged` False locks the
     import in the builder."""
     path = Path(path)
-    if path.suffix.lower() not in (".fbx", ".glb"):
-        return {"ok": False, "rigged": False, "problems": ["Use an .fbx (FBX Binary) or .glb file."]}
+    if path.suffix.lower() not in (".fbx", ".glb", ".vrm"):
+        return {"ok": False, "rigged": False, "problems": ["Use an .fbx (FBX Binary), .glb or .vrm file."]}
     try:
         src = load(path)
     except Exception as error:                        # a damaged or unsupported file
@@ -962,6 +963,8 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     face_isl = sorted({isl[i] for i in src.get("face_tris", []) if i < len(isl)})[:4]
     idx, palette, group = TB.quantise_groups(img, owner, min(n_cluts, int(owner.max()) + 1), own=face_isl,
                                              lab_=bool(src.get("reduced")))
+    if len(group) < len(ids):                        # islands without a texel of their own (all covered
+        group = np.concatenate([np.asarray(group, int), np.zeros(len(ids) - len(group), int)])   # by others)
     clear &= owner >= 0
     if clear.sum() > 0.25 * (owner >= 0).sum():      # alpha that is not a cut-out (an export quirk)
         log(f"texture alpha ignored: {int(clear.sum())} of {int((owner >= 0).sum())} used texels would vanish")

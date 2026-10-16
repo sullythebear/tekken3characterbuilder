@@ -68,6 +68,7 @@ def read(path: Path) -> dict:
     # a skin: its joints become the bones (bind matrix = inverse of the inverse bind matrix),
     # skinned meshes are already in bind space (glTF ignores their node transform)
     bones, WTS, skin_of = [], [], {}
+    human = vrm_human_bones(j)                         # VRM (VRoid) files name their humanoid bones
     for si, sk in enumerate(j.get("skins", [])):
         ibm = acc(sk["inverseBindMatrices"]).reshape(-1, 4, 4).transpose(0, 2, 1) if "inverseBindMatrices" in sk             else np.tile(np.eye(4), (len(sk["joints"]), 1, 1))
         base = len(bones)
@@ -77,7 +78,7 @@ def read(path: Path) -> dict:
             up = parent.get(nd)
             while up is not None and up not in index:
                 up = parent.get(up)
-            bones.append({"name": j["nodes"][nd].get("name", f"joint{k}"), "parent": index.get(up, -1),
+            bones.append({"name": human.get(nd) or j["nodes"][nd].get("name", f"joint{k}"), "parent": index.get(up, -1),
                           "matrix": np.linalg.inv(ibm[k]).tolist()})
         skin_of[si] = base
     for ni, n in enumerate(j["nodes"]):
@@ -120,4 +121,28 @@ def read(path: Path) -> dict:
            "skinned": any("skin" in n for n in j["nodes"])}
     if bones and any(WTS):
         out["bones"], out["weights"] = bones, WTS
+    return out
+
+
+# VRM's humanoid bone names -> the Mixamo-style names the importer reads (model_import._part)
+VRM_NAMES = {"hips": "Hips", "spine": "Spine", "chest": "Spine1", "upperChest": "Spine2", "neck": "Neck",
+             "head": "Head"}
+for _s, _w in (("left", "Left"), ("right", "Right")):
+    VRM_NAMES.update({f"{_s}Shoulder": f"{_w}Shoulder", f"{_s}UpperArm": f"{_w}Arm", f"{_s}LowerArm": f"{_w}ForeArm",
+                      f"{_s}Hand": f"{_w}Hand", f"{_s}UpperLeg": f"{_w}UpLeg", f"{_s}LowerLeg": f"{_w}Leg",
+                      f"{_s}Foot": f"{_w}Foot", f"{_s}Toes": f"{_w}ToeBase"})
+
+
+def vrm_human_bones(j: dict) -> dict:
+    """{node index: Mixamo-style name} from a VRM file's humanoid table (VRM 1.0 VRMC_vrm or 0.x VRM)."""
+    ext = j.get("extensions", {})
+    out = {}
+    hb = ext.get("VRMC_vrm", {}).get("humanoid", {}).get("humanBones", {})
+    if isinstance(hb, dict):
+        for bone, v in hb.items():
+            if bone in VRM_NAMES and isinstance(v, dict) and "node" in v:
+                out[int(v["node"])] = VRM_NAMES[bone]
+    for v in ext.get("VRM", {}).get("humanoid", {}).get("humanBones", []) or []:
+        if isinstance(v, dict) and v.get("bone") in VRM_NAMES and "node" in v:
+            out[int(v["node"])] = VRM_NAMES[v["bone"]]
     return out

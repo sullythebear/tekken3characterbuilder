@@ -131,10 +131,10 @@
             <summary>What makes a model work well?</summary>
             <ul>
               <li><strong>Rigged human shape:</strong> a skeleton with a head, two arms and two legs, and every vertex
-                weighted to a bone. Mixamo, Character Creator and most game rigs work as they are; unusual bone names
+                weighted to a bone. Mixamo, Character Creator, Ready Player Me, VRoid and most game rigs work as they are; unusual bone names
                 are recognised from the skeleton's shape.</li>
               <li><strong>Standing in T-pose or A-pose</strong>, arms away from the body.</li>
-              <li><strong>File:</strong> .fbx (FBX Binary) or .glb, up to 16 MB, with the texture embedded. Models with
+              <li><strong>File:</strong> .fbx (FBX Binary), .glb or .vrm (VRoid), up to 16 MB, with the texture embedded. Models with
                 only material colours work too.</li>
               <li><strong>Any size:</strong> Tekken 3 fighters have 650-1100 triangles. A bigger model is reduced to that
                 size and gets a new texture made for it (1 to 3 minutes).</li>
@@ -151,7 +151,7 @@
           </div>
           <p class="hint" id="model-need-save">Save the fighter first, then add a model.</p>
           <div id="model-upload-box" hidden>
-            <label class="btn btn-ghost file-btn">Choose .fbx or .glb<input type="file" id="model-file" accept=".fbx,.glb" hidden></label>
+            <label class="btn btn-ghost file-btn">Choose .fbx, .glb or .vrm<input type="file" id="model-file" accept=".fbx,.glb,.vrm" hidden></label>
             <div class="model-check" id="model-check" hidden>
               <p class="model-file-name" id="model-file-name"></p>
               <ul class="model-facts" id="model-facts"></ul>

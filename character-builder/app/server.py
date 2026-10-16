@@ -696,7 +696,7 @@ def donor_models() -> dict:
     return {"available": True, "donors": json.loads(path.read_text(encoding="utf-8"))}
 
 
-MODEL_SOURCES = (".fbx", ".glb")
+MODEL_SOURCES = (".fbx", ".glb", ".vrm")
 
 
 def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
@@ -744,7 +744,7 @@ def check_model(cid: str, name: str, payload: str) -> dict:
         raise ValueError("Save the character first.")
     ext = Path(str(name)).suffix.lower()
     if ext not in MODEL_SOURCES:
-        raise ValueError("Use an .fbx (FBX Binary) or .glb file.")
+        raise ValueError("Use an .fbx (FBX Binary), .glb or .vrm file.")
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This model file is too large (16 MB at most).")
@@ -1147,7 +1147,7 @@ def import_character(payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
-    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "source.fbx", "source.glb"}
+    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "source.fbx", "source.glb", "source.vrm"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -1176,13 +1176,15 @@ def import_character(payload: str) -> dict:
         raise ValueError("source.fbx is not an FBX Binary file.")
     if "source.glb" in files and not files["source.glb"].startswith(b"glTF"):
         raise ValueError("source.glb is not a glTF binary file.")
+    if "source.vrm" in files and not files["source.vrm"].startswith(b"glTF"):
+        raise ValueError("source.vrm is not a VRM (glTF binary) file.")
     record = {**validate_character(data), "costumes": validate_costumes(data.get("costumes"))}
     for key, name in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                       ("portrait_full", "portrait-full.png")):
         if name in files:
             record[key] = "data:image/png;base64," + base64.b64encode(files[name]).decode()
     saved = save_character(record)
-    name = next((n for n in ("source.fbx", "source.glb") if n in files), None)
+    name = next((n for n in ("source.fbx", "source.glb", "source.vrm") if n in files), None)
     if not name:
         return saved
     folder = DATA / saved["id"]

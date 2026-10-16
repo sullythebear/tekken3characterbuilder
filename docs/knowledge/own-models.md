@@ -239,3 +239,17 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   np.cross calls were 21 s of overhead); `remesh.snap` grids padded instead of bounds tests per
   neighbour (no time gained, kept: simpler). Reduce 65 s -> 45 s; the rest is spread (snap 12 s,
   packing FFT 3 s, bake rays 6 s, argsort 3 s).
+- **tested** (2026-10-16, 4 more test models: three.js readyplayer.me.glb, Samba Dancing.fbx,
+  mixamo.fbx; pixiv three-vrm VRM1_Constraint_Twist_Sample.vrm) 1. The FBX reader read only the
+  first mesh: Mixamo files hold several (Y-bot: body + joints; characters: body, hair, eyes,
+  clothes). `fbx.character` now merges every skinned mesh (shared bone list from all skins,
+  materials re-indexed, a material shared by meshes kept once); single-mesh files are unchanged
+  (regress same). 2. FBX material DiffuseColor x DiffuseFactor -> swatch (display values, no
+  gamma). 3. VRM: `glb.vrm_human_bones` reads the humanoid table (VRM 1.0 `VRMC_vrm`, 0.x `VRM`)
+  and names those bones as Mixamo's; `.vrm` is accepted as upload, package source and test
+  model. 4. Islands without texels of their own no longer crash the palette step (group padded).
+  RPM and VRM pass a live fight (4 model checks, 0 differ). All in `regress --all`.
+- **code, not done** Team Battle with both guest pages' tiles: 12 more 16 x 58 tile slots and
+  palette rows would be needed in VRAM; whether the select/team screens use that VRAM can't be
+  measured (snapshots work only in fights, t3live has no Team Battle route). The generic icon
+  (patch 16) stays.

@@ -137,7 +137,7 @@ def main():
             items.append((d.name, info, src, d / "model.bin"))
     if "--all" in sys.argv:
         for f in sorted((root / "testmodels").glob("*")):
-            if f.suffix.lower() not in (".glb", ".fbx"):
+            if f.suffix.lower() not in (".glb", ".fbx", ".vrm"):
                 continue
             if not DI.inspect(f)["rigged"]:
                 print(f"tm-{f.stem:11} locked (not rigged as Tekken needs), skipped")
