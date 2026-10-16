@@ -28,8 +28,7 @@ ROSTER = [
  "static int page_total(void){return roster_count>tag_count?3:2;}\n"
  "static int guest_page(unsigned k){return k>=tag_count?2:1;}\n"
  "static const char *page_name(int p){return p==2?\"Custom\":p?\"Tag\":\"Tekken 3\";}\n"
- "/* The guests whose tiles are in VRAM: the last guest page shown. */\n"
- "static int tile_set=1;\n", 1),
+ "", 1),
 # --- page-relative Tag layout ---
 ("static unsigned tag_cols(void){return roster_count>TAG_BASE?TAG_BASE_COLS+1:TAG_BASE_COLS;}",
  "static unsigned tag_cols(void){return page_len(page)>TAG_BASE?TAG_BASE_COLS+1:TAG_BASE_COLS;}", 1),
@@ -343,6 +342,9 @@ ROSTER = [
  "static void custom_model_check(void) {\n"
  "    static unsigned frame;\n"
  "    if(psx_mod_read_word(0x800ae204)!=8)return;\n"
+ "    /* T3CB-PATCH-18: not on Team Battle's FIGHT screen (state 8 before phase 6): the fighters\n"
+ "     * are not drawn yet, and the team's tiles and palettes are up in the same VRAM */\n"
+ "    if(psx_mod_read_word(0x800afa88)==2 && psx_mod_read_half(0x800ae224)<6)return;\n"
  "    frame++;\n"
  "    for(unsigned p=0;p<2;p++) {\n"
  "        if(!custom_mdl_at[p])continue;\n"
@@ -410,7 +412,6 @@ ROSTER = [
  "static void grid_switch(int step) {\n"
  "    int previous=grid_page;\n"
  "    grid_page=(grid_page+step+page_total())%page_total();\n"
- "    if(grid_page && grid_page!=tile_set){tiles_release();tile_set=grid_page;}\n"
  "    write_grid_page();grid_availability();", 1),
 ("            grid_confirmed_page[p]=!grid_page;", "            grid_confirmed_page[p]=previous;", 1),
 ("            int guest=tekken3_guest_character(id)>=0;\n            if(guest==grid_page)mask&=~(1u<<(id&31));",
@@ -423,27 +424,113 @@ ROSTER = [
  "    unsigned cells=grid_page?page_len(grid_page):STOCK_GRID_CELLS,left=cells-y*grid_cols();", 1),
 ("        unsigned id=grid_page && cell<roster_count?GUEST_ID+cell:0;",
  "        unsigned id=grid_page && cell<page_len(grid_page)?GUEST_ID+page_first(grid_page)+cell:0;", 1),
-# --- tiles follow the guest page shown ---
+# --- T3CB-PATCH-18: both guest pages' tiles are in VRAM together. Custom fighters' tiles have
+# their own place (a Team Battle team can mix the pages); their palettes are cut to 128 colours,
+# two per palette row. ---
+("static const VramArea tile_areas[2]={{TILE_X,TILE_Y,AREA_W,AREA_H},{TILE_X,EXTRA_Y,EXTRA_MAX*TILE_W,TILE_H}};\n"
+ "static const VramArea palette_areas[2]={{0,TILE_PALETTE_Y,256,TAG_BASE},{0,EXTRA_PALETTE_Y,256,EXTRA_MAX}};",
+ "/* T3CB-PATCH-18: custom fighters' tiles at (384,256), texture page 0x96, eight per row, and\n"
+ " * their palettes, cut to 128 colours, two per row from (0,504): both measured empty at the\n"
+ " * selector and Team Battle's FIGHT screen (2026-10-16), so both guest pages' tiles are up\n"
+ " * together. */\n"
+ "enum { CUSTOM_TILE_Y=256, CUSTOM_PAGE=0x96, CUSTOM_PALETTE_Y=504 };\n"
+ "static const VramArea tile_areas[3]={{TILE_X,TILE_Y,AREA_W,AREA_H},{TILE_X,EXTRA_Y,EXTRA_MAX*TILE_W,TILE_H},\n"
+ "    {TILE_X,CUSTOM_TILE_Y,AREA_W,AREA_H}};\n"
+ "static const VramArea palette_areas[3]={{0,TILE_PALETTE_Y,256,TAG_BASE},{0,EXTRA_PALETTE_Y,256,EXTRA_MAX},\n"
+ "    {0,CUSTOM_PALETTE_Y,256,CUSTOM_MAX/2}};", 1),
 ("static unsigned tile_x(unsigned k){return TILE_X+(k<TAG_BASE?k%TAG_BASE_COLS:k-TAG_BASE)*TILE_W;}\n"
  "static unsigned tile_y(unsigned k){return k<TAG_BASE?TILE_Y+(k/TAG_BASE_COLS)*TILE_H:EXTRA_Y;}\n"
  "static unsigned tile_palette_y(unsigned k){return k<TAG_BASE?TILE_PALETTE_Y+k:EXTRA_PALETTE_Y+k-TAG_BASE;}",
- "/* Custom fighters reuse the Tag tiles' slots: only one guest page is up. */\n"
- "static unsigned tile_slot(unsigned k){return k>=tag_count?k-tag_count:k;}\n"
- "static unsigned tile_x(unsigned k){k=tile_slot(k);return TILE_X+(k<TAG_BASE?k%TAG_BASE_COLS:k-TAG_BASE)*TILE_W;}\n"
- "static unsigned tile_y(unsigned k){k=tile_slot(k);return k<TAG_BASE?TILE_Y+(k/TAG_BASE_COLS)*TILE_H:EXTRA_Y;}\n"
- "static unsigned tile_palette_y(unsigned k){k=tile_slot(k);return k<TAG_BASE?TILE_PALETTE_Y+k:EXTRA_PALETTE_Y+k-TAG_BASE;}", 1),
+ "static int custom_tile(unsigned k){return k>=tag_count;}\n"
+ "static unsigned tile_x(unsigned k){\n"
+ "    if(custom_tile(k))return TILE_X+(k-tag_count)%TAG_BASE_COLS*TILE_W;\n"
+ "    return TILE_X+(k<TAG_BASE?k%TAG_BASE_COLS:k-TAG_BASE)*TILE_W;\n"
+ "}\n"
+ "static unsigned tile_y(unsigned k){\n"
+ "    if(custom_tile(k))return CUSTOM_TILE_Y+(k-tag_count)/TAG_BASE_COLS*TILE_H;\n"
+ "    return k<TAG_BASE?TILE_Y+(k/TAG_BASE_COLS)*TILE_H:EXTRA_Y;\n"
+ "}\n"
+ "static unsigned tile_palette_y(unsigned k){\n"
+ "    if(custom_tile(k))return CUSTOM_PALETTE_Y+(k-tag_count)/2;\n"
+ "    return k<TAG_BASE?TILE_PALETTE_Y+k:EXTRA_PALETTE_Y+k-TAG_BASE;\n"
+ "}\n"
+ "static unsigned tile_palette_x(unsigned k){return custom_tile(k)?(k-tag_count)%2*128:0;}\n"
+ "static unsigned tile_page(unsigned k){return custom_tile(k)?CUSTOM_PAGE:TILE_PAGE;}", 1),
+("    return ((uint32_t)(tile_palette_y(k)<<6)<<16)|(tile_y(k)<<8)|((tile_x(k)-TILE_X)*2);",
+ "    return ((uint32_t)(tile_palette_y(k)<<6|tile_palette_x(k)>>4)<<16)|((tile_y(k)&255)<<8)|((tile_x(k)-TILE_X)*2);", 1),
 ("EXTRA_Y=144, EXTRA_PALETTE_Y=498, EXTRA_MAX=GUEST_MAX-TAG_BASE };",
  "EXTRA_Y=144, EXTRA_PALETTE_Y=498, EXTRA_MAX=TAG_MAX-TAG_BASE };", 1),
+("static uint16_t tile_pixels[2][AREA_H*AREA_W],tile_backup[2][AREA_H*AREA_W];",
+ "static uint16_t tile_pixels[3][AREA_H*AREA_W],tile_backup[3][AREA_H*AREA_W];\n"
+ "static uint16_t custom_palette[CUSTOM_MAX][128];   /* T3CB-PATCH-18: a custom tile's 128 colours */\n"
+ "/* T3CB-PATCH-18: the areas in use: Tag tiles, Tag tiles past sixteen, custom tiles. */\n"
+ "static int area_used(unsigned a){return a==0?tag_count>0:a==1?tag_count>TAG_BASE:roster_count>tag_count;}", 1),
+("static uint16_t palette_pixels[2][AREA_H*AREA_W],palette_backup[2][AREA_H*AREA_W];",
+ "static uint16_t palette_pixels[3][AREA_H*AREA_W],palette_backup[3][AREA_H*AREA_W];", 1),
+("    for(unsigned i=0;i<n;i++)gr_vram_transfer_in(a[i].x,a[i].y,a[i].w,a[i].h,pixels[i]);",
+ "    for(unsigned i=0;i<n;i++)if(area_used(i))gr_vram_transfer_in(a[i].x,a[i].y,a[i].w,a[i].h,pixels[i]);", 1),
+("    for(unsigned i=0;i<n;i++)gr_vram_transfer_out(a[i].x,a[i].y,a[i].w,a[i].h,pixels[i]);",
+ "    for(unsigned i=0;i<n;i++)if(area_used(i))gr_vram_transfer_out(a[i].x,a[i].y,a[i].w,a[i].h,pixels[i]);", 1),
 ("static unsigned tile_area_count(void){return roster_count>TAG_BASE?2:1;}",
- "static unsigned tile_area_count(void){return page_len(tile_set)>TAG_BASE?2:1;}", 1),
-("        for(unsigned k=0;k<roster_count;k++) {\n            const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2];\n            unsigned a=k>=TAG_BASE,",
- "        for(unsigned k=page_first(tile_set);k<page_first(tile_set)+page_len(tile_set);k++) {\n"
- "            const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2];\n"
- "            unsigned a=tile_slot(k)>=TAG_BASE,", 1),
+ "static unsigned tile_area_count(void){return 3;}   /* T3CB-PATCH-18: area_used skips the empty ones */", 1),
+("    for(unsigned a=0;a<n;a++) {\n        gr_vram_transfer_out(tile_areas[a].x,",
+ "    for(unsigned a=0;a<n;a++) {\n        if(!area_used(a))continue;\n        gr_vram_transfer_out(tile_areas[a].x,", 1),
+("static void tiles_upload(void) {\n",
+ "/* T3CB-PATCH-18: a custom fighter's tile in at most 128 colours (index 0, transparent, kept),\n"
+ " * so two share a palette row: the pair of colours that costs least to merge (by how many\n"
+ " * texels use them) merges until 127 are left. */\n"
+ "static void custom_tile_pixels(unsigned k,const unsigned char *p,unsigned a,unsigned x,unsigned y0) {\n"
+ "    const unsigned char *texels=p+544;\n"
+ "    unsigned count[256]={0},owner[256],used=0,s=k-tag_count;\n"
+ "    double r[256],g[256],b[256];\n"
+ "    for(unsigned i=0;i<TILE_W*2*TILE_H;i++)count[texels[i]]++;\n"
+ "    for(unsigned i=0;i<256;i++) {\n"
+ "        unsigned c=p[20+i*2]|(unsigned)p[21+i*2]<<8;\n"
+ "        owner[i]=i;r[i]=(double)(c&31)*count[i];g[i]=(double)(c>>5&31)*count[i];b[i]=(double)(c>>10&31)*count[i];\n"
+ "        if(i && count[i])used++;\n"
+ "    }\n"
+ "    while(used>127) {\n"
+ "        double best=-1;unsigned bi=0,bj=0;\n"
+ "        for(unsigned i=1;i<256;i++)if(count[i])for(unsigned j=i+1;j<256;j++)if(count[j]) {\n"
+ "            double dr=r[i]/count[i]-r[j]/count[j],dg=g[i]/count[i]-g[j]/count[j],db=b[i]/count[i]-b[j]/count[j];\n"
+ "            double cost=(dr*dr+dg*dg+db*db)*count[i]*count[j]/(count[i]+count[j]);\n"
+ "            if(best<0 || cost<best){best=cost;bi=i;bj=j;}\n"
+ "        }\n"
+ "        r[bi]+=r[bj];g[bi]+=g[bj];b[bi]+=b[bj];count[bi]+=count[bj];count[bj]=0;owner[bj]=bi;used--;\n"
+ "    }\n"
+ "    unsigned char map[256]={0};unsigned next=1;\n"
+ "    memset(custom_palette[s],0,sizeof custom_palette[s]);\n"
+ "    for(unsigned i=1;i<256;i++)if(count[i]) {\n"
+ "        unsigned c=p[20+i*2]|(unsigned)p[21+i*2]<<8;\n"
+ "        unsigned rr=(unsigned)(r[i]/count[i]+.5),gg=(unsigned)(g[i]/count[i]+.5),bb=(unsigned)(b[i]/count[i]+.5);\n"
+ "        uint16_t colour=(uint16_t)((c&0x8000)|rr|gg<<5|bb<<10);\n"
+ "        custom_palette[s][next]=colour?colour:0x8000;   /* black, not transparent */\n"
+ "        map[i]=(unsigned char)next++;\n"
+ "    }\n"
+ "    for(unsigned i=1;i<256;i++){unsigned o=i;while(owner[o]!=o)o=owner[o];map[i]=map[o];}\n"
+ "    for(unsigned y=0;y<TILE_H;y++)for(unsigned i=0;i<TILE_W;i++)\n"
+ "        tile_pixels[a][(y0+y)*tile_areas[a].w+x+i]=(uint16_t)(map[texels[y*TILE_W*2+i*2]]|map[texels[y*TILE_W*2+i*2+1]]<<8);\n"
+ "    memcpy(&palette_pixels[a][(tile_palette_y(k)-palette_areas[a].y)*256+tile_palette_x(k)],custom_palette[s],256);\n"
+ "}\n"
+ "static void tiles_upload(void) {\n", 1),
+("            unsigned a=k>=TAG_BASE,x=tile_x(k)-tile_areas[a].x,y0=tile_y(k)-tile_areas[a].y;\n",
+ "            unsigned a=custom_tile(k)?2:k>=TAG_BASE,x=tile_x(k)-tile_areas[a].x,y0=tile_y(k)-tile_areas[a].y;\n"
+ "            if(custom_tile(k)){custom_tile_pixels(k,p,a,x,y0);continue;}   /* T3CB-PATCH-18 */\n", 1),
+# grey icons borrow full palette rows: the Tag guests'
 ("    for(unsigned f=0;f<roster_count;f++) {\n        unsigned y=tile_palette_y(f);",
- "    for(unsigned f=page_first(tile_set);f<page_first(tile_set)+page_len(tile_set);f++) {\n        unsigned y=tile_palette_y(f);", 1),
+ "    for(unsigned f=0;f<tag_count;f++) {             /* T3CB-PATCH-18: full rows only, the Tag guests' */\n"
+ "        unsigned y=tile_palette_y(f);", 1),
+("        const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2]+20;\n        uint16_t grey[256];",
+ "        const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2]+20;\n"
+ "        unsigned char own[512]={0};                /* T3CB-PATCH-18: a custom tile's own 128 colours */\n"
+ "        if(custom_tile(k)){memcpy(own,custom_palette[k-tag_count],256);p=own;}\n"
+ "        uint16_t grey[256];", 1),
 ("    if(tiles_active)for(unsigned f=0;f<roster_count;f++)",
- "    if(tiles_active)for(unsigned f=page_first(tile_set);f<page_first(tile_set)+page_len(tile_set);f++)", 1),
+ "    if(tiles_active)for(unsigned f=0;f<tag_count;f++)   /* T3CB-PATCH-18: only Tag rows are lent */", 1),
+("        psx_mod_write_word(e+4,TILE_PAGE);",
+ "        psx_mod_write_word(e+4,tile_page(k));       /* T3CB-PATCH-18 */", 1),
+("                tpage=TILE_PAGE;\n",
+ "                tpage=tile_page((unsigned)k);         /* T3CB-PATCH-18 */\n", 1),
 # --- the cabinet selector's pages ---
 ("static int page,stock_saved;", "static int stock_saved;", 1),
 ("static void write_tag_page(void) {\n    for(unsigned k=0;k<roster_count;k++) {",
@@ -457,7 +544,6 @@ ROSTER = [
  "static void switch_page(int step) {\n"
  "    int previous=page;\n"
  "    page=(page+step+page_total())%page_total();\n"
- "    if(page && page!=tile_set){tiles_release();tile_set=page;}\n"
  "    if(page)write_tag_page();else write_stock_page();", 1),
 ("        if(confirmed_page[p]<0){confirmed_page[p]=!page;", "        if(confirmed_page[p]<0){confirmed_page[p]=previous;", 1),
 ("    fprintf(stderr,\"TTT1 characters: %s page\\n\",page?\"Tag\":\"Tekken 3\");",
@@ -467,13 +553,6 @@ ROSTER = [
 ("    if((edges&(PAD_R2|PAD_L2)) && stock_saved)switch_page();",
  "    if((edges&PAD_R2) && stock_saved)switch_page(1);\n    else if((edges&PAD_L2) && stock_saved)switch_page(-1);", 1),
 ("            if(closed_on_tag && !page)switch_page();", "            if(closed_on_tag && !page)switch_page(closed_on_tag);", 1),
-# --- Team Battle icons: custom fighters share the Tag tiles' VRAM slots, so a mixed team showed
-# one of them with the other page's tile; the generic icon is drawn instead ---
-("            psx_mod_write_word(slot,21*4);\n            psx_mod_write_word(0x8002152c+21*8,uv);\n",
- "            /* T3CB-PATCH-16: the other guest page's tiles are not in VRAM: the generic icon,\n"
- "             * not another fighter's tile */\n"
- "            if(tpage==TILE_PAGE && tiles_active && guest_page((unsigned)k)!=tile_set){uv=stock_icon_uv;tpage=stock_icon_page;}\n"
- "            psx_mod_write_word(slot,21*4);\n            psx_mod_write_word(0x8002152c+21*8,uv);\n", 1),
 # --- CPU opponents: custom fighters are drawn as the TTT1 guests are (Arcade, Time Attack,
 # Survival, Team Battle, Tekken Ball: Expanded's loops over roster_count stay as they are) ---
 ("    if(nb && boss_one_in && !draw(boss_one_in)) {",

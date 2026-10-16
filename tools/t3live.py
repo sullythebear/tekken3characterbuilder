@@ -28,7 +28,7 @@ from pathlib import Path
 
 DEFAULT_GAME = Path(r"D:\Tekken 3 Recompiled\tekken3-expanded-1.1.3")
 PAD = {"none": 0xFFFF, "cross": 0xBFFF, "square": 0x7FFF, "triangle": 0xEFFF, "circle": 0xDFFF,
-       "right": 0xFFDF, "left": 0xFF7F, "up": 0xFFEF, "down": 0xFFBF, "start": 0xFFF7, "r2": 0xFDFF}
+       "right": 0xFFDF, "left": 0xFF7F, "up": 0xFFEF, "down": 0xFFBF, "start": 0xFFF7, "r2": 0xFDFF, "l2": 0xFEFF}
 
 
 class Game:

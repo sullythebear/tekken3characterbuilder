@@ -153,7 +153,13 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   one per fighter. In Arcade the CPU opponent's fighter decides the stage (stage 1: chosen before
   `TEKKEN3_CPU_STAGE1` swaps the opponent, so the hook now also sets the custom fighter's stage
   and music). Live: CPU Tommy (`cbtommy 3 17 19`) -> stage 0x0d music 0x19, Gon's beach.
-- **code, not live tested** (T3CB-PATCH-16) Team Battle icons: custom fighters reuse the Tag tiles'
+- **tested** (T3CB-PATCH-18, 2026-10-16, replaces 16) Team Battle icons: custom tiles have their own VRAM place
+  (384,256 page 0x96, 8 per row; palettes cut to 128 colours in C, two per row from (0,504)), so both guest
+  pages' tiles are up together; grey icons borrow only Tag rows; custom_model_check skips Team Battle's FIGHT
+  screen (state 8, phase < 6). Live: select panel Tommy + Kazuya correct on Tag and Custom pages, FIGHT screen
+  Tommy small icon, FIGHT 2 Tommy greyed. Results screen icons not yet zoomed. (Test/Medea tiles are a blue
+  gradient: they have no portrait.)
+- **superseded** (T3CB-PATCH-16) Team Battle icons: custom fighters reuse the Tag tiles'
   VRAM slots (`tile_slot`), only one guest page's tiles are up (`tile_set`), so a team mixing a TTT1
   guest and a custom fighter showed one with the other's tile. Now a guest of the page not in VRAM
   gets the generic icon (`stock_icon_uv/page`). Builds; a normal fight passes (t3live has no Team

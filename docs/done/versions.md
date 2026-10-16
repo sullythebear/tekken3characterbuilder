@@ -4,6 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
+| (next) | Patch 18: both guest pages' tiles in VRAM (custom tiles at 384,256), Team Battle mixed teams correct | live Team Battle select/FIGHT/FIGHT 2 grey (t3live nav) |
 | (next) | Own stage and music per fighter (patch 17, customs.txt columns 3-4), name call (automatic Windows voice with announcer effect, own recording or file, silent) as `<Key>-TTT1-sfx.jus` | live: CPU Tommy on Gon's stage with Dr. B's theme (screenshot); Practice: "Tommy: P1 announced name" in state 8; browser pane: lists, save, own sound, package round trip byte-identical |
 | v0.4.0 (tag) | 0.4.0: import progress + 3D result + Undo import; multi-mesh FBX, FBX colours, VRM, faster reduce; Team Battle generic icon (patch 16); findings: Start costume works, announcer silent on purpose, no second texture page, fixed hand shapes | regress --all green; live Medea vs CPU Tommy, TEST vs CPU Medea; browser pane import/undo on Medea (byte-identical) |
 | v0.3.9 (tag) | 0.3.9: portrait from the 3D model, packages with own models, custom fighters as CPU opponents (patch 15) | browser pane; package round trip byte-identical; live Tommy vs CPU Medea |
