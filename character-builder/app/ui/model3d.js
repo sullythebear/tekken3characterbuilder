@@ -134,6 +134,7 @@ const T3Model = (() => {
     $("model-upload-box").hidden = !saved;
     const own = saved && c.own_model;
     $("own-model").hidden = !(saved && c.has_model);
+    $("model-undo").hidden = !(saved && c.model_undo);
     if (own) {
       const m = c.own_model;
       const reduced = m.source_triangles && m.source_triangles !== m.triangles ? ` (reduced from ${m.source_triangles})` : "";
@@ -203,13 +204,43 @@ const T3Model = (() => {
       ? "Importing: reducing the model to PS1 size, baking its texture and fitting it to the style's skeleton (1 to 3 minutes)…"
       : "Importing: fitting the model to the style's skeleton, texture and joints (a few seconds)…";
     try {
-      const saved = await api("/api/model/import", { id: state.current.id, costume: Number($("model-costume").value),
-        parts: choices });
+      const id = state.current.id;
+      await api("/api/model/import", { id, costume: Number($("model-costume").value), parts: choices });
+      // the import runs in the background: its log lines name the step it is at
+      let job;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1000));
+        job = await api("/api/model/progress", { id });
+        if (job.done) break;
+        progress.textContent = `${stepOf(job.lines)} (${job.seconds} s)…`;
+      }
+      if (job.error) throw new Error(job.error);
       progress.hidden = true;
-      await after(saved, `${saved.name} has its own model now`);
+      await after(job.result, `${job.result.name} has its own model now: here it is in 3D`);
+      if (window.showView) showView(true);           // the result, to keep or undo
     } catch (e) {
       progress.textContent = e.message;
     } finally { busy = false; showCheck(state.current.model_upload); }
+  }
+
+  // the import's log lines -> the step a person understands
+  function stepOf(lines) {
+    const steps = [["OK direct import", "Writing the PS1 model"], ["triangle pairs", "Writing the PS1 model"],
+      ["seam vertices", "Posing it in the style's stance"], ["auto rig", "Fitting it to the style's skeleton"],
+      ["do not fit", "Too big for the slot: trying a smaller version"], ["texture baked", "Fitting it to the style's skeleton"],
+      ["texture charts", "Baking the texture"], ["reduced to", "Laying out the texture"],
+      ["left out", "Reducing it to PS1 size"], ["part ", "Reducing it to PS1 size"]];
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const hit = steps.find(([key]) => lines[i].includes(key));
+      if (hit) return hit[1];
+    }
+    return "Reading the model";
+  }
+
+  async function undo() {
+    if (busy || !state.current.id) return;
+    try { await after(await api("/api/model/undo", { id: state.current.id }), "Import undone"); }
+    catch (e) { toast(e.message); }
   }
 
   async function remove() {
@@ -221,6 +252,7 @@ const T3Model = (() => {
   $("model-file").addEventListener("change", (e) => upload(e.target.files[0]));
   $("model-import").addEventListener("click", importModel);
   $("model-remove").addEventListener("click", remove);
+  $("model-undo").addEventListener("click", undo);
   refresh();
   return { refresh };
 })();

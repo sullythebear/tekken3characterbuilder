@@ -218,3 +218,11 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   data). `import_character` saves the fighter, then `fit_source` builds model.bin again over the
   style's costume (Expanded and donor models needed, else a warning). Rogue exported and imported
   as test-2: model.bin byte-identical to TEST's (7 s); a fake source.fbx is refused.
+- **tested** (browser pane, Medea, 2026-10-16) Import UX: `/api/model/import` starts a background job
+  (`start_import`, one per fighter, under `model_lock`); the import tool's stdout is streamed
+  (`run_import_tool(on_line=)`, PYTHONUNBUFFERED) and `/api/model/progress` returns the last lines;
+  the page maps them to steps (`stepOf` in model3d.js: reducing, laying out the texture, baking,
+  fitting, writing) with seconds, then shows the 3D view. The replaced model is kept
+  (model-prev.bin, source-prev.*, model-prev.json with the old own_model, null after a first
+  import); "Undo import" (`/api/model/undo`) puts it back: Medea byte-identical after import + undo.
+  A failed import never touches model.bin (model-new.bin is only moved on success).

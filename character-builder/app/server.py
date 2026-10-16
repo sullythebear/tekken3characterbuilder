@@ -514,6 +514,7 @@ def character_list() -> list[dict]:
         data["source"] = (f"/characters/{folder.name}/portrait.png?v={stamp}"
                           if (folder / "portrait.png").is_file() else None)
         data["has_model"] = (folder / "model.bin").is_file()
+        data["model_undo"] = (folder / "model-prev.json").is_file()
         if not data["has_model"]:
             data.pop("own_model", None)
         try:                                       # a checked upload waiting for its import
@@ -698,12 +699,27 @@ def donor_models() -> dict:
 MODEL_SOURCES = (".fbx", ".glb")
 
 
-def run_import_tool(root: Path, args: list[str], timeout: int = 1800) -> tuple[str | None, str]:
-    """Runs direct_import.py (own 3D models); returns (error or None, stdout)."""
+def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
+    """Runs direct_import.py (own 3D models); returns (error or None, stdout). on_line(text) gets
+    every line while it runs (the import's progress)."""
+    cmd = [venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)]
     try:
-        done = subprocess.run([venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=timeout, creationflags=NO_WINDOW, cwd=str(APP))
+        if on_line is None:
+            done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=timeout, creationflags=NO_WINDOW, cwd=str(APP))
+        else:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                    encoding="utf-8", errors="replace", creationflags=NO_WINDOW, cwd=str(APP),
+                                    env={**os.environ, "PYTHONUNBUFFERED": "1"})
+            out, start = [], time.time()
+            for line in proc.stdout:
+                out.append(line)
+                on_line(line.rstrip())
+                if time.time() - start > timeout:
+                    proc.kill()
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+            proc.wait()
+            done = subprocess.CompletedProcess(cmd, proc.returncode, "".join(out), "")
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"The model import could not run: {error}", ""
     if done.returncode:
@@ -777,7 +793,7 @@ def model_preview(cid: str, parts) -> dict:
     return {"png": png, "angles": angles}
 
 
-def import_model(cid: str, costume: int, parts=None) -> dict:
+def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
     """The checked upload -> characters/<id>/model.bin over the donor's costume model."""
     parts = clean_parts(parts)
     root = project_root()
@@ -797,10 +813,21 @@ def import_model(cid: str, costume: int, parts=None) -> dict:
         raise ValueError("This donor has no such costume.")
     out = folder / "model-new.bin"
     problem, text = run_import_tool(root, [str(upload), "--model", str(models[costume]), "--out", str(out),
-                                           "--parts", json.dumps(parts)])
+                                           "--parts", json.dumps(parts)], on_line=on_line)
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         raise ValueError(problem or "The model import failed.")
+    # the model it replaces is kept for "Undo import" (model-prev.bin, source-prev.*, model-prev.json)
+    for old in folder.glob("source-prev.*"):
+        old.unlink()
+    (folder / "model-prev.bin").unlink(missing_ok=True)
+    before = json.loads((folder / "character.json").read_text(encoding="utf-8")).get("own_model")
+    if (folder / "model.bin").is_file():
+        (folder / "model.bin").replace(folder / "model-prev.bin")
+        for old in folder.glob("source.*"):
+            old.replace(folder / f"source-prev{old.suffix}")
+    kept = before if (folder / "model-prev.bin").is_file() else None
+    (folder / "model-prev.json").write_text(json.dumps({"own_model": kept}), encoding="utf-8")
     out.replace(folder / "model.bin")
     for old in folder.glob("source.*"):
         old.unlink()
@@ -885,11 +912,64 @@ def refit_model(cid: str) -> list[str]:
     return []
 
 
+def undo_model(cid: str) -> dict:
+    """Back to the model the last import replaced (or to none, after a first import)."""
+    folder = DATA / safe_id(cid)
+    memo = folder / "model-prev.json"
+    if not memo.is_file():
+        raise ValueError("There is no import to undo.")
+    before = json.loads(memo.read_text(encoding="utf-8")).get("own_model")
+    if before is None or not (folder / "model-prev.bin").is_file():
+        return remove_model(cid)
+    (folder / "model-prev.bin").replace(folder / "model.bin")
+    for old in folder.glob("source.*"):
+        old.unlink()
+    for old in folder.glob("source-prev.*"):
+        old.replace(folder / f"source{old.suffix}")
+    memo.unlink()
+    info = folder / "character.json"
+    data = json.loads(info.read_text(encoding="utf-8"))
+    data["own_model"] = before
+    info.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return get_character(folder.name)
+
+
+# imports run in the background so the page can show their progress: {id: job}
+IMPORT_JOBS: dict = {}
+
+
+def start_import(cid: str, costume: int, parts) -> dict:
+    cid = safe_id(cid)
+    job = IMPORT_JOBS.get(cid)
+    if job and not job["done"]:
+        raise ValueError("This fighter's model is being imported already.")
+    job = IMPORT_JOBS[cid] = {"lines": [], "done": False, "error": None, "result": None, "started": time.time()}
+
+    def run():
+        try:
+            with model_lock:
+                saved = import_model(cid, costume, parts, on_line=lambda l: job["lines"].append(l[:200]))
+            job["result"] = {**saved, "warnings": sync_customs(changed=saved["id"])}
+        except Exception as error:                   # shown on the page, as a request error would be
+            job["error"] = str(error) or "The model import failed."
+        job["done"] = True
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True}
+
+
+def import_progress(cid: str) -> dict:
+    job = IMPORT_JOBS.get(safe_id(cid))
+    if not job:
+        raise ValueError("No import is running for this fighter.")
+    return {"lines": job["lines"][-8:], "done": job["done"], "error": job["error"], "result": job["result"],
+            "seconds": round(time.time() - job["started"])}
+
+
 def remove_model(cid: str) -> dict:
     folder = DATA / safe_id(cid)
-    for name in ("model.bin", "model-new.bin", "upload.json"):
+    for name in ("model.bin", "model-new.bin", "upload.json", "model-prev.bin", "model-prev.json"):
         (folder / name).unlink(missing_ok=True)
-    for pattern in ("source.*", "upload.*"):
+    for pattern in ("source.*", "upload.*", "source-prev.*"):
         for old in folder.glob(pattern):
             old.unlink()
     info = folder / "character.json"
@@ -1285,8 +1365,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/check":
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":
-                with model_lock:
-                    saved = import_model(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"))
+                return self._json(start_import(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts")))
+            if path == "/api/model/progress":
+                return self._json(import_progress(str(data.get("id", ""))))
+            if path == "/api/model/undo":
+                saved = undo_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/model/portrait":
                 return self._json(own_portrait(str(data.get("id", ""))))
