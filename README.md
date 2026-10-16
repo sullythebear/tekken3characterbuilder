@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.4.0 | Model import runs in the background with step-by-step progress, shows the result in 3D and can be undone ("Undo import"). Team Battle shows a generic icon instead of a wrong tile for mixed teams (patch T3CB-PATCH-16). |
 | 0.3.9 | Portrait made from the fighter's own 3D model. Packages (.t3char) share a fighter with its own 3D model (the source file and choices; rebuilt on import). Custom fighters are CPU opponents (Arcade/Time Attack stages 5-8, Survival, Team Battle, Tekken Ball; patch T3CB-PATCH-15). |
 | 0.3.8 | Renamed Dizzy Character Creator, restyled after the PS1 and Tekken 3. Own 3D models: upload a rigged .fbx/.glb (locked when not rigged), big models reduced to PS1 size with a baked texture, parts that stick out folded down (adjustable), bones recognised by shape, material colours. Tested in game with TOMMY, MEDEA and Rogue, plus Mixamo/glTF sample models. |
 | 0.3.7 | Costumes in 3D in the builder (standing pose, read from your own disc) and colour variants on a Colours tab: recolour every piece of clothing or accessory, the whole costume, or a scheme. A variant goes into the game as a replaced costume or as costume 3 (Start). |
