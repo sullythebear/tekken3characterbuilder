@@ -442,6 +442,9 @@ async function importPackage(file) {
   const buffer = new Uint8Array(await file.arrayBuffer());
   let binary = "";
   for (let i = 0; i < buffer.length; i += 0x8000) binary += String.fromCharCode(...buffer.subarray(i, i + 0x8000));
+  // a package with an own 3D model is built again here (a big model takes 1 to 3 minutes)
+  log(`Importing ${file.name}… a fighter with its own 3D model can take a few minutes.`);
+  toast("Importing… (a fighter with its own 3D model takes up to 3 minutes)");
   try {
     const character = await api("/api/import", { file: btoa(binary) });
     await loadCharacters();

@@ -212,3 +212,9 @@ Goal (user): import a 3D model (glTF/FBX) that is rigged automatically and fight
   normal light from the front left, a charcoal backdrop with a warm glow; 504 x 756 PNG, then
   the usual crop and 4-band conversion in the browser. Tried on Medea, Rogue, Tommy, Michelle,
   Soldier, CesiumMan.
+- **tested** (server API round trip, 2026-10-16) Sharing: `.t3char` packages carry an own model
+  as `source.fbx`/`source.glb` (magic checked: "Kaydara FBX Binary" / "glTF"; up to 16 MB) with
+  `own_model` (costume, parts, file) in character.json; never model.bin (it holds the disc's donor
+  data). `import_character` saves the fighter, then `fit_source` builds model.bin again over the
+  style's costume (Expanded and donor models needed, else a warning). Rogue exported and imported
+  as test-2: model.bin byte-identical to TEST's (7 s); a fake source.fbx is refused.

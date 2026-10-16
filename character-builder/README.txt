@@ -37,8 +37,10 @@ With Tekken3Recompiled
 Sharing
 -------
 "Export" creates a .t3char file you can share. Others load it with
-"Import package". A package only contains a description and images, never
-game files or programs.
+"Import package". A package only contains a description, images and, for a
+fighter with its own 3D model, the model's source file (.fbx/.glb) with your
+choices; the receiving creator builds the model again. Never game files or
+programs.
 
 Costumes and colours
 --------------------

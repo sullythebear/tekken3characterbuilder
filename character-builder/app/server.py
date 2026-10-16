@@ -1026,14 +1026,48 @@ def export_character(cid: str) -> tuple[str, bytes]:
         for name in ("character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png"):
             if (folder / name).is_file():
                 z.write(folder / name, name)
+        # an own 3D model travels as its source file (the user's own work) with the choices in
+        # character.json; model.bin holds parts of the disc's donor model and never leaves
+        source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
+        if source:
+            z.write(source, source.name)
     return f"{folder.name}.t3char", buffer.getvalue()
+
+
+def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str) -> list[str]:
+    """An own model built from a source file already next to the character (an imported package):
+    model.bin over the style's costume, own_model in character.json. -> warnings."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    if not root or creator_patch.project_kind(root) != "expanded":
+        return ["The package has its own 3D model; it is built once you use Tekken 3 Expanded."]
+    data = json.loads((folder / "character.json").read_text(encoding="utf-8"))
+    donors = donor_models()
+    models = donors.get("donors", {}).get(str(data["donor"]), []) if donors.get("available") else []
+    if not models:
+        return ["The package's 3D model could not be built: " + donors.get("reason", "no donor models.")]
+    costume = max(0, min(int(costume), len(models) - 1))
+    out = folder / "model-new.bin"
+    with model_lock:
+        problem, text = run_import_tool(root, [str(source), "--model", str(models[costume]), "--out", str(out),
+                                               "--parts", json.dumps(clean_parts(parts))])
+    if problem or not out.is_file():
+        out.unlink(missing_ok=True)
+        return [f"The package's 3D model could not be built: {problem or 'the import failed.'}"]
+    out.replace(folder / "model.bin")
+    made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
+    data["own_model"] = {"file": label, "costume": costume, "model": models[costume],
+                         "triangles": int(made[-1]) if made else None, "textured": True,
+                         "parts": clean_parts(parts), "imported": datetime.now().isoformat(timespec="seconds")}
+    (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return []
 
 
 def import_character(payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
-    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png"}
+    allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "source.fbx", "source.glb"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -1045,8 +1079,8 @@ def import_character(payload: str) -> dict:
                 continue
             if info.filename not in allowed:
                 raise ValueError(f"Unexpected file in package: {info.filename}. "
-                                 "Packages may only contain a description and images.")
-            if info.file_size > MAX_UPLOAD:
+                                 "Packages may only contain a description, images and a 3D model source.")
+            if info.file_size > (MAX_IMPORT if info.filename.startswith("source.") else MAX_UPLOAD):
                 raise ValueError("A file in the package is too large.")
             files[info.filename] = z.read(info)
     if "character.json" not in files:
@@ -1058,12 +1092,25 @@ def import_character(payload: str) -> dict:
     for name in ("portrait.png", "portrait-ps1.png", "portrait-full.png"):
         if name in files and not files[name].startswith(PNG_SIGNATURE):
             raise ValueError(f"{name} is not a valid PNG.")
+    if "source.fbx" in files and not files["source.fbx"].startswith(b"Kaydara FBX Binary"):
+        raise ValueError("source.fbx is not an FBX Binary file.")
+    if "source.glb" in files and not files["source.glb"].startswith(b"glTF"):
+        raise ValueError("source.glb is not a glTF binary file.")
     record = {**validate_character(data), "costumes": validate_costumes(data.get("costumes"))}
     for key, name in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                       ("portrait_full", "portrait-full.png")):
         if name in files:
             record[key] = "data:image/png;base64," + base64.b64encode(files[name]).decode()
-    return save_character(record)
+    saved = save_character(record)
+    name = next((n for n in ("source.fbx", "source.glb") if n in files), None)
+    if not name:
+        return saved
+    folder = DATA / saved["id"]
+    (folder / name).write_bytes(files[name])
+    own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
+    warnings = fit_source(saved["id"], folder / name, int(own.get("costume", 0) or 0), own.get("parts") or {},
+                          str(own.get("file") or name)[:80])
+    return {**get_character(saved["id"]), "model_warnings": warnings}
 
 
 # ----------------------------------------------------------------- server --
@@ -1250,7 +1297,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/import":
                 imported = import_character(str(data.get("file", "")))
-                return self._json({**imported, "warnings": sync_customs(changed=imported["id"])})
+                model_warnings = imported.pop("model_warnings", [])
+                return self._json({**imported, "warnings": model_warnings + sync_customs(changed=imported["id"])})
             if path == "/api/unlinked/adopt":
                 adopted = adopt_unlinked(unlinked_key(data.get("key")))
                 return self._json(adopted)
