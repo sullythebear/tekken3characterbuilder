@@ -3,8 +3,15 @@
 Tekken 3 (SLUS-00402) as recompiled by Tekken3Recompiled and extended by Tekken 3 Expanded.
 Facts are marked **tested** (seen in game), **code** (read in source) or **inferred**.
 
+- `PROJECT_STATUS.md` – where the work is now, next tasks (Tekken 3 Studio).
+- `ROADMAP.md` – the six Studio modules, phases and progress.
+- `AUDIT.md` – repository audit 2026-10-16 (basis of the roadmap).
+- `DECISIONS.md` – important technical choices and why.
+- `COMPATIBILITY.md` – features per game variant (Expanded / Recompiled).
+- `ASSET_LICENSES.md` – asset rules and register.
 - `vision.md` – direction of the project (layers: style, donors, own models...).
-- `code-map.md` – what every file in `character-builder/` does and its key functions.
+- `code-map.md` – architecture: what every file in `character-builder/` does and its key functions.
+- Tests: `knowledge/testing.md`; offline unit tests `python -m unittest discover tests`.
 
 ## knowledge/ (what we know)
 

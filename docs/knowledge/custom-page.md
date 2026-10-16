@@ -157,7 +157,8 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   (384,256 page 0x96, 8 per row; palettes cut to 128 colours in C, two per row from (0,504)), so both guest
   pages' tiles are up together; grey icons borrow only Tag rows; custom_model_check skips Team Battle's FIGHT
   screen (state 8, phase < 6). Live: select panel Tommy + Kazuya correct on Tag and Custom pages, FIGHT screen
-  Tommy small icon, FIGHT 2 Tommy greyed. Results screen icons not yet zoomed. (Test/Medea tiles are a blue
+  Tommy small icon, FIGHT 2 Tommy greyed. Results screen: Tommy and Kazuya greyed with checks.
+  Arcade with own models after the custom_model_check change: 0 words differ, both drawn. (Test/Medea tiles are a blue
   gradient: they have no portrait.)
 - **superseded** (T3CB-PATCH-16) Team Battle icons: custom fighters reuse the Tag tiles'
   VRAM slots (`tile_slot`), only one guest page's tiles are up (`tile_set`), so a team mixing a TTT1

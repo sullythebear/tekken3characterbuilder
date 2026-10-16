@@ -1,0 +1,24 @@
+# Asset licences
+
+The builder ships **no** third-party art, models or sounds. Game data (disc, `generated/`,
+`workspace/`, models, textures) is read from the player's own copy at runtime and never
+committed or packaged (`CLAUDE.md`).
+
+## Categories
+
+1. **Shippable**: licence allows redistribution and modification (e.g. CC0). None yet.
+2. **Shippable with conditions**: e.g. CC-BY (credit kept in this file and in the app). None yet.
+3. **User import only**: the player brings the file; the app converts it locally and never
+   redistributes it (`.t3char` carries the player's own source model, their responsibility).
+4. **Unsuitable**: non-commercial/no-derivatives licences, unclear origin, game rips.
+
+## Register
+
+| Asset | Source | Author | Licence | Category | Technical fit | Checked |
+|---|---|---|---|---|---|---|
+
+Test models used for the regression check (`character-builder/testmodels`, not committed) are
+category 3: downloaded with the owner's permission for local testing only.
+
+Candidate sources to check one by one before any download (licence per asset, not per site):
+Kenney (CC0), Quaternius (CC0), Poly Haven (CC0), OpenGameArt (mixed), Sketchfab (mixed).
