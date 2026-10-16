@@ -187,3 +187,14 @@ costumes. Phase 0 proved the model can be shown from the user's own disc, withou
   - Editor split into tabs **Fighter** (name, style, portrait, author) and **Colours** (costume
     variants); Colours switches the preview to 3D, and a click on the model opens Colours. At
     widths ≤ 1100 px the preview is no longer sticky (it covered the form below it).
+
+## Colour variants and own 3D models (tested 2026-10-16)
+
+- A costume with an own 3D model keeps the model's own colours in the game (patch 11 uploads the
+  model's CLUTs every frame); a variant on that costume never shows (KITTEST, kitbash model on
+  costume 1, live). A variant based on that costume cannot be saved either: the preview then
+  takes the own model's CLUT runs (e.g. 288 colours), which are not the style's 16/256-colour
+  palettes. The Builder now says so (`ownModelProblem` in costumes.js) and blocks the save with
+  that message; variants on the style's other costumes work as before.
+- Builder Schemes: "Surprise me" makes a random matching scheme (base hue, complementary accent,
+  dark and light steps).

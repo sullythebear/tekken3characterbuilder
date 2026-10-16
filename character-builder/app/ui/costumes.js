@@ -462,6 +462,8 @@ const T3Costumes = (() => {
     list.forEach((_, c) => option(c, `Replaces costume ${c + 1}`));
     if (list.length === 2) option(2, "Extra costume 3 (press Start)");
     box.append(el("label", { className: "slot-pick" }, "In the game ", slotSel));
+    const problem = ownModelProblem(v);
+    if (problem) box.append(el("p", { className: "hint warn", textContent: problem }));
 
     const modes = el("div", { className: "mode-tabs", role: "tablist" });
     for (const [key, label] of [["parts", "Clothing"], ["whole", "Whole costume"], ["schemes", "Schemes"]])
@@ -524,11 +526,30 @@ const T3Costumes = (() => {
           el("span", { className: "scheme-swatches" }, ...cols.map((c) => { const s = el("span"); s.style.background = c; return s; })), label);
         grid.append(b);
       }
+      // a random, matching scheme: a base hue, its complement as accent, light and dark steps
+      grid.append(el("button", { type: "button", className: "scheme", onclick: () => {
+        const h = Math.random(), acc = (h + 0.42 + Math.random() * 0.16) % 1, sat = 0.45 + Math.random() * 0.45;
+        applyScheme([fromHsl(h, sat, 0.45), fromHsl(acc, sat, 0.5), fromHsl(h, sat * 0.6, 0.22), fromHsl(h, sat * 0.4, 0.78)]
+          .map((rgb) => rgbToHex(...rgb)));
+      } }, el("span", { className: "scheme-swatches" }, "?"), "Surprise me"));
       box.append(grid);
     }
     box.append(el("div", { className: "variant-actions" },
       el("button", { type: "button", className: "btn btn-ghost", textContent: "Reset colours", onclick: () => { v.recipe = blankRecipe(); changed(); renderPanel(); } }),
       el("button", { type: "button", className: "btn btn-danger", textContent: "Delete variant", onclick: deleteVariant })));
+  }
+
+  // tested 2026-10-16: an own 3D model keeps its own colours in the game (patch 11 uploads them
+  // every frame), and its palettes are not the style's, so a variant cannot be based on it
+  function ownModelProblem(v) {
+    const f = fighter(), own = f.own_model;
+    if (!own || !f.has_model) return null;
+    const c = own.costume || 0;
+    if (v.base === c)
+      return `"${v.name}" is based on costume ${c + 1}, which has your own 3D model with its own colours: base the variant on another costume.`;
+    if (v.slot === c)
+      return `Costume ${c + 1} has your own 3D model, which keeps its own colours in the game: put "${v.name}" on another costume.`;
+    return null;
   }
 
   function tab(label, active, onclick, extra = "") {
@@ -586,6 +607,7 @@ const T3Costumes = (() => {
     },
     showModel() { show(); },
     // what goes into character.json: the recipe (to keep editing) and the resulting palettes
+    problem() { for (const v of variants()) { const p = ownModelProblem(v); if (p) return p; } return null; },
     serialize() { return variants().map((v) => ({ name: v.name, base: v.base, slot: v.slot ?? -1, cluts: v.cluts || {}, recipe: v.recipe || blankRecipe() })); },
   };
 })();

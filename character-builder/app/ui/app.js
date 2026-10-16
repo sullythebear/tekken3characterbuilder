@@ -440,6 +440,8 @@ async function save(event) {
   const name = $("name").value.trim().toUpperCase();
   if (!NAME_VALID.test(name)) { error.textContent = "Enter a name of 1 to 15 characters: letters (no F or Q), space, period, hyphen or 2."; $("name").focus(); return; }
   if (state.current.donor === null) { error.textContent = "Choose a fighting style."; return; }
+  const variantProblem = T3Costumes.problem();
+  if (variantProblem) { error.textContent = variantProblem; return; }
   error.textContent = "";
   const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
     costumes: T3Costumes.serialize(), ...T3Arena.body() };
