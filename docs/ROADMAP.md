@@ -24,7 +24,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 | Module | Now | Next |
 |---|---|---|
-| Character Builder | style (donor), name, colour variants, costumes, **body parts from the disc's fighters (similar build, randomizer)** | material/colour presets, package round trip of a kit fighter in game, kit for Recompiled? (no: own models are Expanded only) |
+| Character Builder | style (donor), name, colour variants, costumes, **body parts from the disc's fighters (similar build, randomizer, live 3D preview, mixes of three fighters, whole skins)** | material/colour presets, package round trip of a kit fighter in game, kit for Recompiled? (no: own models are Expanded only) |
 | Model Importer | FBX/GLB/VRM import, parts choices, progress, undo, regression, **before (source render) next to after (3D view)** | more conversion settings exposed (only the parts' choices are now) |
 | Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark) | several saved variants per fighter |
 | Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |

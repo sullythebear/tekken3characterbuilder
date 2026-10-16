@@ -218,32 +218,80 @@ def build(root: Path, base: int, parts: dict, log=print):
         log(f"4-bit areas: {len(order) - ROOM4} colour tables over the room become 8-bit")
     for c in clusters:
         c["wide"] = not c["mat"] & 0x8000 and (c["model"], c["mat"] & 0x7EFF) in wide_keys
-    # same texels used by two clusters (shared tiles) are copied once: identical source boxes merge
-    occ = np.zeros((256, 256), bool)
-    placed = {}
-    clusters.sort(key=lambda c: -(c["hi"][1] - c["lo"][1] + 1) * (c["hi"][0] - c["lo"][0] + 1))
+    # placing the areas in the one page: first the model with the most texels keeps its own
+    # layout (its areas may overlap where they are the same texels: same model, same 8-bit CLUT
+    # or 4-bit) and the rest goes into the free space; if that fails, every area is packed anew,
+    # biggest first. Identical source boxes are copied once.
+    texels = {}
     for c in clusters:
-        # 8-bit texels are renumbered per source CLUT (step 4), so those copies stay apart
-        sk = (c["model"], 0x8000 | (c["mat"] & 0x7EFF) if c["mat"] & 0x8000 or c["wide"] else 0,
-              tuple(c["lo"]), tuple(c["hi"]))
-        if sk in placed:
-            c["dst"] = placed[sk]
-            continue
+        texels[c["model"]] = texels.get(c["model"], 0) + int(np.prod(c["hi"] - c["lo"] + 1))
+    def main8(model):
+        area8 = {}
+        for c in clusters:
+            if c["model"] == model and c["mat"] & 0x8000:
+                area8[c["mat"] & 0x7EFF] = area8.get(c["mat"] & 0x7EFF, 0) + int(np.prod(c["hi"] - c["lo"] + 1))
+        return (model, max(area8, key=area8.get)) if area8 else None
+    keeper = keeper8 = None
+
+    def size(c):
         w_, h_ = c["hi"] - c["lo"] + 1
-        if c["wide"]:
-            w_ = 2 * w_
-        spot = None
-        for y in range(0, 256 - h_ + 1):
-            for x in range(0, 256 - w_ + 1, 4):
-                if not occ[y:y + h_, x:x + w_].any():
-                    spot = (x, y)
-                    break
-            if spot:
-                break
-        if spot is None:
-            raise MI.Budget("the chosen parts' textures do not fit in one texture page: take parts from fewer different fighters")
-        occ[spot[1]:spot[1] + h_, spot[0]:spot[0] + w_] = True
-        c["dst"] = placed[sk] = spot
+        return (2 * w_ if c["wide"] else w_), h_
+
+    def pack(keep):
+        occ = np.zeros((256, 256), np.int32)          # 0 free, else the owner's tag
+        placed, spots = {}, {}
+        order = sorted(range(len(clusters)), key=lambda i: (
+            not (keep and clusters[i]["model"] == keeper and not clusters[i]["wide"]),
+            -size(clusters[i])[0] * size(clusters[i])[1]))
+        for i in order:
+            c = clusters[i]
+            sk = (c["model"], 0x8000 | (c["mat"] & 0x7EFF) if c["mat"] & 0x8000 or c["wide"] else 0,
+                  tuple(c["lo"]), tuple(c["hi"]))
+            if sk in placed:
+                spots[i] = placed[sk]
+                continue
+            w_, h_ = size(c)
+            spot = None
+            if keep and c["model"] == keeper and not c["wide"]:
+                tag = 1 if not c["mat"] & 0x8000 or (keeper, c["mat"] & 0x7EFF) == keeper8 else 2 + (c["mat"] & 0x7EFF)
+                x_, y_ = int(c["lo"][0]), int(c["lo"][1])
+                if x_ + w_ <= 256 and y_ + h_ <= 256:
+                    region = occ[y_:y_ + h_, x_:x_ + w_]
+                    if ((region == 0) | (region == tag)).all():
+                        spot = (x_, y_)
+                        region[:] = tag
+                if spot is None:
+                    log(f"keeping the layout failed at model {c['model']} mat {c['mat']:#06x} box {tuple(c['lo'])}-{tuple(c['hi'])}")
+                    return None
+            else:
+                for y in range(0, 256 - h_ + 1):
+                    for x in range(0, 256 - w_ + 1, 4):
+                        if not occ[y:y + h_, x:x + w_].any():
+                            spot = (x, y)
+                            break
+                    if spot:
+                        break
+                if spot is None:
+                    log(f"no free space for model {c['model']} mat {c['mat']:#06x} size {w_}x{h_} ({'kept' if keep else 'packed'})")
+                    return None
+                occ[spot[1]:spot[1] + h_, spot[0]:spot[0] + w_] = -1
+            spots[i] = placed[sk] = spot
+        return spots
+
+    spots = None
+    for keeper in sorted(texels, key=texels.get, reverse=True):   # each model in turn keeps its layout
+        keeper8 = main8(keeper)
+        spots = pack(True)
+        if spots is not None:
+            break
+    kept = spots is not None
+    if not kept:
+        keeper = keeper8 = None
+        spots = pack(False)
+    if spots is None:
+        raise MI.Budget("the chosen parts' textures do not fit in one texture page: take parts from fewer different fighters")
+    for i, c in enumerate(clusters):
+        c["dst"] = spots[i]
     band = np.zeros((256, 64), dtype=np.uint16)
     for c in clusters:
         if c["wide"]:
@@ -280,35 +328,64 @@ def build(root: Path, base: int, parts: dict, log=print):
             for k in range(4):
                 used.setdefault(key, set()).update(np.unique((area >> (4 * k)) & 15).tolist())
         entries = []                                   # (key, index, colour)
+        ident = keeper8 if kept and keeper8 in eight_keys else None
         for key in eight_keys:
+            if key == ident:
+                continue
             pal = list(src[key[0]].cluts.get(key[1], [0] * 256)) + [0] * 256
             for i in sorted(used.get(key, ())):
                 if pal[i]:
                     entries.append((key, i, pal[i]))
-        groups8 = {}                                   # colour -> merged group of entries
-        for e in entries:
-            groups8.setdefault(e[2], []).append(e)
-        swatch = [[(c & 31), (c >> 5) & 31, (c >> 10) & 31, len(m), c & 0x8000] for c, m in groups8.items()]
-        members = [list(m) for m in groups8.values()]
-        while len(swatch) > 255:                         # Ward merges of the closest colours
-            arr = np.array([[c[0], c[1], c[2]] for c in swatch], float)
-            n = np.array([c[3] for c in swatch], float)
-            d = ((arr[:, None, :] - arr[None, :, :]) ** 2).sum(2) * (n[:, None] * n[None, :]) / (n[:, None] + n[None, :])
-            np.fill_diagonal(d, np.inf)
-            i, j = np.unravel_index(np.argmin(d), d.shape)
-            ni, nj = n[i], n[j]
-            swatch[i] = [(swatch[i][k] * ni + swatch[j][k] * nj) / (ni + nj) for k in range(3)] + [ni + nj, swatch[i][4]]
-            members[i] += members[j]
-            del swatch[j], members[j]
         palette = [0] * 256
-        for k, (c, m) in enumerate(zip(swatch, members), start=1):
-            r, g, b_ = (int(round(v)) for v in c[:3])
-            colour = c[4] | r | g << 5 | b_ << 10
-            palette[k] = colour or 0x8000                # black, not see-through
-            for key, i, _ in m:
-                lut.setdefault(key, np.zeros(256, np.uint16))[i] = k
-        if len(swatch) and len(entries) > len(swatch):
-            log(f"8-bit areas: {len(entries)} colours merged into {len(swatch)}")
+        if ident:
+            # the kept model's 8-bit CLUT stays as it is (its texels too: its page layout is kept);
+            # the others' colours take the indices it does not use, else the closest colour
+            own = (list(src[ident[0]].cluts.get(ident[1], [0] * 256)) + [0] * 256)[:256]
+            palette = list(own)
+            lut[ident] = np.arange(256, dtype=np.uint16)
+            taken = set(used.get(ident, set())) | {0}
+            free = [i for i in range(1, 256) if i not in taken]
+            where = {own[i]: i for i in sorted(taken) if own[i]}
+            rgb = lambda c: np.array([c & 31, (c >> 5) & 31, (c >> 10) & 31], float)
+            merged = 0
+            for key, i, colour in entries:
+                if colour not in where:
+                    if free:
+                        k = free.pop(0)
+                        palette[k] = colour
+                        where[colour] = k
+                    else:
+                        cands = [k for k in where.values()]
+                        k = min(cands, key=lambda k: float(((rgb(palette[k]) - rgb(colour)) ** 2).sum()))
+                        where[colour] = k
+                        merged += 1
+                lut.setdefault(key, np.zeros(256, np.uint16))[i] = where[colour]
+            if merged:
+                log(f"8-bit areas: {merged} colours of the other fighters merged into the kept palette")
+        else:
+            groups8 = {}                               # colour -> merged group of entries
+            for e in entries:
+                groups8.setdefault(e[2], []).append(e)
+            swatch = [[(c & 31), (c >> 5) & 31, (c >> 10) & 31, len(m), c & 0x8000] for c, m in groups8.items()]
+            members = [list(m) for m in groups8.values()]
+            while len(swatch) > 255:                   # Ward merges of the closest colours
+                arr = np.array([[c[0], c[1], c[2]] for c in swatch], float)
+                n = np.array([c[3] for c in swatch], float)
+                d = ((arr[:, None, :] - arr[None, :, :]) ** 2).sum(2) * (n[:, None] * n[None, :]) / (n[:, None] + n[None, :])
+                np.fill_diagonal(d, np.inf)
+                i, j = np.unravel_index(np.argmin(d), d.shape)
+                ni, nj = n[i], n[j]
+                swatch[i] = [(swatch[i][k] * ni + swatch[j][k] * nj) / (ni + nj) for k in range(3)] + [ni + nj, swatch[i][4]]
+                members[i] += members[j]
+                del swatch[j], members[j]
+            for k, (c, m) in enumerate(zip(swatch, members), start=1):
+                r, g, b_ = (int(round(v)) for v in c[:3])
+                colour = c[4] | r | g << 5 | b_ << 10
+                palette[k] = colour or 0x8000            # black, not see-through
+                for key, i, _ in m:
+                    lut.setdefault(key, np.zeros(256, np.uint16))[i] = k
+            if len(swatch) and len(entries) > len(swatch):
+                log(f"8-bit areas: {len(entries)} colours merged into {len(swatch)}")
         for c in clusters:                             # wide areas: 4-bit source -> 8-bit texels
             if not c["wide"]:
                 continue
@@ -321,7 +398,7 @@ def build(root: Path, base: int, parts: dict, log=print):
             dx, dy = c["dst"][0] // 4, c["dst"][1]
             band[dy:dy + words.shape[0], dx:dx + words.shape[1]] = words
         for c in clusters:                             # renumber the copied 8-bit texels
-            if not c["mat"] & 0x8000:
+            if not c["mat"] & 0x8000 or (c["model"], c["mat"] & 0x7EFF) == ident:
                 continue
             key = (c["model"], c["mat"] & 0x7EFF)
             x0, x1 = c["dst"][0] // 4, c["dst"][0] // 4 + (c["hi"][0] - c["lo"][0]) // 4
@@ -434,7 +511,10 @@ def main():
     try:
         stock, new, tx, report = build(a.root, a.base, parts)
     except MI.Budget as error:
-        raise SystemExit(f"ERROR: {error}")
+        text = str(error)
+        if "GPU packets" in text:               # the writer's budget, said for a player
+            text = "the chosen parts have more polygons than the game draws for one fighter: take a simpler part"
+        raise SystemExit(f"ERROR: {text}")
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_bytes(X.own_model_file(a.base, stock, new, tx))
     rep = {k: v for k, v in report.items() if k not in ("rows", "texture")}

@@ -69,3 +69,13 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   255). Xiaoyu 2 head/body/right leg + Lei 2 arms on Nina (was refused: 33 tables): 7 tables
   converted, offline render clean, live: HUD text clean, 672 colours in 3 CLUT runs (exactly the
   stock space), 0 words differ. What still refuses: a mix whose textures exceed one page.
+
+## Page layout (2026-10-16)
+
+- Each model in turn (most texels first) keeps its own page layout: its areas stay where they
+  are, may overlap where they are the same texels, and its main 8-bit CLUT stays as it is (no
+  renumbering; other fighters' 8-bit colours take its unused indices, else the closest colour).
+  The rest is packed into the free space; if no model can keep its layout, everything is packed
+  anew. Now built: a whole Xiaoyu (live: on Nina's moves, HUD clean, 496 colours in 2 runs) and a
+  whole Julia on Nina; still refused: Law's body on Nina (two full pages) and Law's arms + legs
+  (too many polygons: "more polygons than the game draws for one fighter").
