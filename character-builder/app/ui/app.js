@@ -280,9 +280,30 @@ function renderStage() {
 
 function markDirty() { state.dirty = true; renderSteps(); }
 
+// the licence register of the fighter's own assets (server clean_credits)
+function creditsBody() {
+  const out = {};
+  for (const input of document.querySelectorAll("#credits [data-credit]"))
+    (out[input.dataset.credit] ||= {})[input.dataset.field] = input.value.trim();
+  return out;
+}
+
+async function exportFighter() {
+  if (!state.current.id) return;
+  if (state.dirty) { toast("Save your changes first."); return; }
+  try {
+    const r = await api("/api/export/check", { id: state.current.id });
+    if (r.warnings.length && !confirm(r.warnings.join("\n") + "\n\nShare a package only with assets you may share. Export anyway?")) return;
+  } catch (e) { toast(e.message); return; }
+  location.href = `/api/export/${state.current.id}`;
+}
+
 function fillForm() {
   $("name").value = state.current.name;
   $("author").value = state.current.author || "";
+  const credits = state.current.credits || {};
+  for (const input of document.querySelectorAll("#credits [data-credit]"))
+    input.value = (credits[input.dataset.credit] || {})[input.dataset.field] || (input.dataset.field === "licence" ? "unknown" : "");
   $("export").hidden = $("delete").hidden = !state.current.id;
   $("form-error").textContent = "";
   renderDonors();
@@ -505,7 +526,7 @@ async function save(event) {
   if (variantProblem) { error.textContent = variantProblem; return; }
   error.textContent = "";
   const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
-    costumes: T3Costumes.serialize(), ...T3Arena.body() };
+    costumes: T3Costumes.serialize(), ...T3Arena.body(), credits: creditsBody() };
   if (state.portraitChanged && state.source) {
     body.portrait_ps1 = $("portrait-canvas").toDataURL("image/png");
     body.portrait_source = sourcePNG();
@@ -550,7 +571,7 @@ async function importPackage(file) {
     await loadCharacters();
     state.dirty = false;
     selectCharacter(character);
-    if (!showWarnings(character)) toast(`${character.name} imported`);
+    if (!showWarnings(character)) toast(character.imported ? `${character.imported} fighters imported` : `${character.name} imported`);
   } catch (e) { toast(e.message); }
   $("import-file").value = "";
 }
@@ -719,7 +740,8 @@ function wire() {
   $("author").addEventListener("input", markDirty);
   $("new-character").addEventListener("click", () => selectCharacter(null));
   $("delete").addEventListener("click", removeCharacter);
-  $("export").addEventListener("click", () => { if (state.current.id) location.href = `/api/export/${state.current.id}`; });
+  $("export").addEventListener("click", exportFighter);
+  for (const input of document.querySelectorAll("#credits [data-credit]")) input.addEventListener("input", markDirty);
   $("import-file").addEventListener("change", (e) => importPackage(e.target.files[0]));
   $("portrait-file").addEventListener("change", (e) => { useFile(e.target.files[0]); e.target.value = ""; });
   $("portrait-from-model").addEventListener("click", portraitFromModel);

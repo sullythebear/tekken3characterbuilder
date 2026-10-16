@@ -9,8 +9,33 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   active frames are preserved.
 - Move records are 56 bytes (`src/tekken3_ttt1_combat.c`, `record_owner`).
 - Packs: `<n>-TTT1-combat.jmv` and `<n>-TTT1-tables.jst`.
-- Next step: document the record fields from these tools, then the "hello world" experiment
-  (change one move's damage for one custom fighter only).
+- Next step: map command list entries to records (cancel lists: input -> record), then the
+  "hello world" experiment (change one move's damage for one custom fighter only).
+
+## Native move records in RAM (tested 2026-10-16, `t3live nav` dump, Xiaoyu vs Law)
+
+- **tested** `*(0x800ADC20 + 4 * player)` is the player's moveset header:
+  - word 0: `1 | key << 8` (Xiaoyu 7, Law 1, as the moveset keys);
+  - `+4`: a cancel list;
+  - `+8`: the first move record;
+  - `+12`: the alias table, which starts right after the last record.
+  So the record count is `(+12 - +8) / 56`: Xiaoyu 594, Law 459.
+- **tested** Alias 3 (and the actor's record pointer `actor + 0x54` at rest) is record 0, the
+  standing record.
+- **tested** Record word 5, low halfword = damage. Xiaoyu has 280 records with damage, Law 262.
+  The values are the usual Tekken ones (5, 7, 10, 12, 15, 25, 30). The high halfword is the speed
+  of the airborne window (Expanded `moves.py`).
+- **code** The other words, from Expanded's converter:
+  - w0: animation;
+  - w3: cancel list;
+  - w7: sounds;
+  - w8: timed properties;
+  - w9: flags;
+  - w10: hit descriptor pointer (native).
+- **tested** The records are not on the disc as they are in RAM. 8- and 20-byte runs of them are
+  in neither the BNS records nor the raw Track 1 image, so the loader (0x80069F74) builds or
+  unpacks them (inferred). The Move Lab can only show them from a live capture for now.
+
 
 ## COMMAND LIST (tested 2026-10-16)
 

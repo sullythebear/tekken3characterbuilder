@@ -18,6 +18,8 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 |---|---|
 | Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab) |
 | Model Importer separate from Character Builder | **partly** (own tab "3D model") |
+| Licence register per fighter (own model, portrait image, recording) + export warning | **done** (Fighter page "Credits and licences", in packages and restore points; Export warns when a carried asset's licence is not known; tested in the browser) |
+| Backup of all fighters (.t3backup, read back by Import package) | **done** (download tested: 4 fighters, 7.2 MB; import round trip unit-tested; the import takes up to ~24 MB) |
 | Project versions / restore points per fighter | **done** (settings before each save, last 20, Restore on the Fighter page; restoring is itself undoable; 3D model: its own Undo) |
 
 ## Modules
@@ -29,7 +31,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark), **saved portraits: keep, use again, delete (12 per fighter; tested on KITTEST), carried in .t3char packages** | — |
 | Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |
 | Stage Lab | home stage + music per fighter (patch 17); **stage colour looks (night, sunset, dusk, ice, inferno, black and white) with texture preview (patch 19)** | **own colour + strength** done; stage geometry is research (`knowledge/stages.md`) |
-| Move Lab | whole movesets (donor); **the style's COMMAND LIST read from the disc, read-only tab** | move records (damage, frames) per move; then the one-value change experiment |
+| Move Lab | whole movesets (donor); **the style's COMMAND LIST read from the disc, read-only tab** | **research:** native move records found in RAM (header 0x800ADC20, 56-byte records, damage = word 5 low; `knowledge/moves.md`), not raw on the disc; next: map command list entries to records |
 
 ## Release
 

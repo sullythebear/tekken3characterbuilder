@@ -47,7 +47,8 @@
     </section>
     <div class="menu-actions">
       <button class="menu-item" id="new-character" type="button">New fighter</button>
-      <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.zip" hidden></label>
+      <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.t3backup,.zip" hidden></label>
+      <a class="menu-item" id="backup-all" href="/api/backup" title="Every fighter as a package in one .t3backup file; Import package reads it back">Back up all fighters</a>
     </div>
   </nav>
 
@@ -106,6 +107,24 @@
         <label for="author">Created by <span class="optional">(optional)</span></label>
         <input id="author" name="author" maxlength="32" autocomplete="nickname">
       </div>
+      <details class="field credits" id="credits">
+        <summary>Credits and licences <span class="optional">(your own assets)</span></summary>
+        <p class="hint">Where your 3D model, portrait image and recording come from. Packages carry this; Export warns when an asset in the package has no known licence.</p>
+        <div class="credits-grid">
+            <label>3D model source</label>
+            <input data-credit="model" data-field="source" maxlength="200" placeholder="Where it comes from (site, file, link)">
+            <input data-credit="model" data-field="author" maxlength="60" placeholder="Author">
+            <select data-credit="model" data-field="licence"><option value="unknown">Not known</option><option value="own">My own work</option><option value="cc0">CC0 (public domain)</option><option value="cc-by">CC BY (credit the author)</option><option value="cc-by-sa">CC BY-SA</option><option value="permission">The author's permission</option></select>
+            <label>Portrait image</label>
+            <input data-credit="portrait" data-field="source" maxlength="200" placeholder="Where it comes from (site, file, link)">
+            <input data-credit="portrait" data-field="author" maxlength="60" placeholder="Author">
+            <select data-credit="portrait" data-field="licence"><option value="unknown">Not known</option><option value="own">My own work</option><option value="cc0">CC0 (public domain)</option><option value="cc-by">CC BY (credit the author)</option><option value="cc-by-sa">CC BY-SA</option><option value="permission">The author's permission</option></select>
+            <label>Name call recording</label>
+            <input data-credit="sound" data-field="source" maxlength="200" placeholder="Where it comes from (site, file, link)">
+            <input data-credit="sound" data-field="author" maxlength="60" placeholder="Author">
+            <select data-credit="sound" data-field="licence"><option value="unknown">Not known</option><option value="own">My own work</option><option value="cc0">CC0 (public domain)</option><option value="cc-by">CC BY (credit the author)</option><option value="cc-by-sa">CC BY-SA</option><option value="permission">The author's permission</option></select>
+        </div>
+      </details>
       <div class="field" id="history-field" hidden>
         <label for="history">Restore point <span class="optional">(settings before each save, last 20)</span></label>
         <div class="model-import-row">

@@ -38,6 +38,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Body shape: `kitbash.SHAPES` / `clean_shape` / `shape_scale` (applied in `build.place`, local axes: head all,
   arms/legs/body Y and Z; hands and feet kept), CLI `--shape JSON`; server `KIT_SHAPES`, `clean_kit_shape`,
   `run_kitbash(shape=)`, `own_model.shape`; UI `.kit-shape` sliders in `builder.js shape()`.
+- Licence register: `clean_credits` (field `credits` in character.json, `CREDIT_ASSETS`, `LICENCES`),
+  `licence_warnings` (`/api/export/check`, UI `exportFighter`), UI `#credits` + `creditsBody()`.
+- Backup: `backup_all` (GET `/api/backup`, every package in a .t3backup zip), `backup_packages` (the
+  `/api/import` route imports each package of a backup).
 - Saved portraits (server): `portrait_variants`, `keep_portrait`, `use_portrait` (keeps the current one first, then
   copies the variant back and syncs), `drop_portrait`; files in `characters/<id>/portraits/<stamp>/`, at most
   `PORTRAIT_VARIANTS` = 12; routes `/api/portraits`, `/keep`, `/use`, `/drop`; UI `app.js loadPortraits`.

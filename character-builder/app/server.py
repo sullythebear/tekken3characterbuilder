@@ -590,7 +590,55 @@ def validate_character(data: dict) -> dict:
     if mode not in name_call.MODES:
         raise ValueError("Choose how the announcer calls the name.")
     clean["name_call"] = mode
+    credits = clean_credits(data.get("credits"))
+    if credits:
+        clean["credits"] = credits
     return clean
+
+
+# the licence register: where the player's own assets come from (ASSET_LICENSES.md categories)
+CREDIT_ASSETS = ("model", "portrait", "sound")
+LICENCES = {"own": "My own work", "cc0": "CC0 (public domain)", "cc-by": "CC BY (credit the author)",
+            "cc-by-sa": "CC BY-SA", "permission": "The author's permission", "unknown": "Not known"}
+
+
+def clean_credits(value) -> dict:
+    """{asset: {source, author, licence}} for the fighter's own model, portrait image and sound;
+    empty entries are left out."""
+    out = {}
+    for asset in CREDIT_ASSETS:
+        entry = value.get(asset) if isinstance(value, dict) else None
+        if not isinstance(entry, dict):
+            continue
+        source = "".join(ch for ch in str(entry.get("source", "")) if ch.isprintable() and ch not in "<>\"").strip()[:200]
+        author = "".join(ch for ch in str(entry.get("author", "")) if ch.isprintable() and ch not in "<>\"").strip()[:60]
+        licence = entry.get("licence") if entry.get("licence") in LICENCES else "unknown"
+        if source or author or licence != "unknown":
+            out[asset] = {"source": source, "author": author, "licence": licence}
+    return out
+
+
+def licence_warnings(cid: str) -> list[str]:
+    """Own assets in the fighter's package whose licence is not filled in (export check)."""
+    folder = DATA / safe_id(cid)
+    data = get_character(folder.name)
+    credits = data.get("credits") or {}
+    present = {"model": any((folder / f"source{e}").is_file() for e in MODEL_SOURCES),
+               "portrait": (folder / "portrait.png").is_file(),
+               "sound": data.get("name_call") == "own" and (folder / "namecall.wav").is_file()}
+    names = {"model": "the 3D model source", "portrait": "the portrait image", "sound": "the name call recording"}
+    return [f"The licence of {names[a]} is not known." for a in CREDIT_ASSETS
+            if present[a] and (credits.get(a) or {}).get("licence", "unknown") == "unknown"]
+
+
+def backup_all() -> tuple[str, bytes]:
+    """Every fighter as its .t3char package, in one .t3backup zip (Import package reads it)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as z:
+        for c in character_list():
+            name, data = export_character(c["id"])
+            z.writestr(name, data)
+    return f"fighters-{datetime.now():%Y%m%d-%H%M}.t3backup", buffer.getvalue()
 
 
 COSTUME_MAX = 8
@@ -1524,7 +1572,7 @@ def save_character(data: dict) -> dict:
 
 
 RESTORE_POINTS = 20
-RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "stage_look", "costumes")
+RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "stage_look", "costumes", "credits")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:
@@ -1698,6 +1746,22 @@ def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str, se
     return []
 
 
+def backup_packages(payload: str) -> list[bytes] | None:
+    """The .t3char packages of a .t3backup (a zip holding only packages), or None."""
+    raw = base64.b64decode(payload, validate=True)
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        return None
+    with z:
+        names = [i.filename for i in z.infolist() if not i.is_dir()]
+        if not names or not all(n.endswith(".t3char") and "/" not in n for n in names):
+            return None
+        if len(names) > 200 or any(i.file_size > MAX_IMPORT for i in z.infolist()):
+            raise ValueError("This backup holds too many or too large packages.")
+        return [z.read(n) for n in names]
+
+
 def import_character(payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
@@ -1832,6 +1896,10 @@ class Handler(BaseHTTPRequestHandler):
                 if target.is_file():
                     return self._send(200, target.read_bytes(), "image/png")
             return self._error("Not found.", 404)
+        if path == "/api/backup":
+            filename, data = backup_all()
+            return self._send(200, data, "application/zip",
+                              {"Content-Disposition": f'attachment; filename="{filename}"'})
         if path.startswith("/api/export/"):
             try:
                 filename, data = export_character(path.rsplit("/", 1)[1])
@@ -1952,6 +2020,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/history":
                 return self._json({"points": restore_points(str(data.get("id", "")))})
+            if path == "/api/export/check":
+                return self._json({"warnings": licence_warnings(str(data.get("id", "")))})
             if path == "/api/portraits":
                 return self._json({"variants": portrait_variants(str(data.get("id", "")))})
             if path == "/api/portraits/keep":
@@ -1996,6 +2066,20 @@ class Handler(BaseHTTPRequestHandler):
                 saved = remove_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/import":
+                packages = backup_packages(str(data.get("file", "")))
+                if packages is not None:                # a .t3backup: every fighter in it
+                    done, warnings = [], []
+                    for package in packages:
+                        try:
+                            one = import_character(base64.b64encode(package).decode())
+                            done.append(one)
+                            warnings += one.pop("model_warnings", [])
+                        except ValueError as error:
+                            warnings.append(str(error))
+                    warnings += sync_customs()
+                    if not done:
+                        raise ValueError("No fighter in this backup could be imported.")
+                    return self._json({**done[0], "imported": len(done), "warnings": warnings})
                 imported = import_character(str(data.get("file", "")))
                 model_warnings = imported.pop("model_warnings", [])
                 return self._json({**imported, "warnings": model_warnings + sync_customs(changed=imported["id"])})

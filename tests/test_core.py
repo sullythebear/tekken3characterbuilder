@@ -240,6 +240,33 @@ class RestorePointTests(CharacterTests):
 
 
 
+
+class CreditsAndBackupTests(CharacterTests):
+    def test_credits_kept_and_cleaned(self):
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "credits": {
+            "model": {"source": "Mixamo <b>", "author": "Me", "licence": "own"},
+            "portrait": {"source": "", "author": "", "licence": "bogus"}, "tail": {"licence": "cc0"}}})
+        self.assertEqual(c["credits"], {"model": {"source": "Mixamo b", "author": "Me", "licence": "own"}})
+
+    def test_licence_warning_for_own_sound(self):
+        wav = "data:audio/wav;base64," + base64.b64encode(name_call.wav_bytes(name_call.own(name_call.read_wav(tone())))).decode()
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "name_call": "own", "name_call_wav": wav})
+        self.assertEqual(len(server.licence_warnings(c["id"])), 1)
+        server.save_character({"id": c["id"], "name": "A", "donor": 1, "costumes": [], "name_call": "own",
+                               "credits": {"sound": {"licence": "own"}}})
+        self.assertEqual(server.licence_warnings(c["id"]), [])
+
+    def test_backup_round_trip(self):
+        import base64
+        server.save_character({"name": "A", "donor": 1, "costumes": []})
+        server.save_character({"name": "B", "donor": 2, "costumes": []})
+        _, data = server.backup_all()
+        packages = server.backup_packages(base64.b64encode(data).decode())
+        self.assertEqual(len(packages), 2)
+        _, single = server.export_character(server.character_list()[0]["id"])
+        self.assertIsNone(server.backup_packages(base64.b64encode(single).decode()))
+
+
 class BodyShapeTests(unittest.TestCase):
     def test_clean_shape(self):
         self.assertEqual(server.clean_kit_shape({"head": 1.2, "arms": 1, "legs": 5, "tail": 2}),

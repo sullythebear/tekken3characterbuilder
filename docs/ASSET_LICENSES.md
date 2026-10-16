@@ -12,6 +12,10 @@ committed or packaged (`CLAUDE.md`).
    redistributes it (`.t3char` carries the player's own source model, their responsibility).
 4. **Unsuitable**: non-commercial/no-derivatives licences, unclear origin, game rips.
 
+The app has a per-fighter register too (Fighter page, "Credits and licences": source, author,
+licence of the own 3D model, portrait image and name call recording). Packages carry it and
+Export warns when an asset in the package has no known licence.
+
 ## Register
 
 | Asset | Source | Author | Licence | Category | Technical fit | Checked |
