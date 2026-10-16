@@ -14,8 +14,8 @@ Important technical choices and why. Newest last.
 - **D4 (2026-10-16) Automatic name call = Windows' classic SAPI voice.** System.Speech's desktop
   voices (here "Microsoft Zira Desktop") are rule/unit-based speech synthesis built into
   Windows, offline, no AI model and no cloud. It stays the easy default; the player can use an
-  own recording or silence instead. If the project owner counts it as AI voice generation, the
-  default becomes "Silent" (one line in `name_call.MODES` / `validate_character`).
+  own recording or silence instead. **Changed 2026-10-16 by the owner: Silent is the default**;
+  the Windows voice stays available as a choice.
 - **D5 (2026-10-16) Character Builder parts.** Two sources: (a) Namco's own parts read from the
   player's disc at runtime (`kitbash.py`, never shipped, same rule as donors); (b) shippable
   third-party parts only with a licence that allows redistribution (`ASSET_LICENSES.md`).

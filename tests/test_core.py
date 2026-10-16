@@ -118,7 +118,7 @@ class CharacterTests(unittest.TestCase):
 
     def test_validate(self):
         c = server.validate_character({"name": "medea", "donor": 5, "stage": "17", "music": None})
-        self.assertEqual((c["name"], c["donor"], c["stage"], c["name_call"]), ("MEDEA", 5, 17, "auto"))
+        self.assertEqual((c["name"], c["donor"], c["stage"], c["name_call"]), ("MEDEA", 5, 17, "off"))
         self.assertNotIn("music", c)
         for bad in ({"name": "FQ", "donor": 1}, {"name": "A", "donor": 21}, {"name": "A", "donor": 1, "stage": 30},
                     {"name": "A", "donor": 1, "name_call": "robot"}):

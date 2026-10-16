@@ -28,7 +28,7 @@
     styleLabels();
     $("stage").value = state.current.stage ?? "";
     $("music").value = state.current.music ?? "";
-    $("name-call").value = state.current.name_call || "auto";
+    $("name-call").value = state.current.name_call || "off";
     $("stage-look").value = state.current.stage_look || "";
     $("stage-tint").value = state.current.stage_tint || "#ff8040";
     $("stage-strength").value = state.current.stage_strength ?? 60;

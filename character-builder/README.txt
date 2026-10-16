@@ -83,8 +83,8 @@ angle, framing, light and background.
 Voice Lab
 ---------
 The announcer calls your fighter's name in Practice, as Tekken 3 does for its
-own fighters: a computer voice (Windows' own, automatic), your own recording
-or sound file (optionally with an announcer effect), or silent.
+own fighters. Silent unless you choose: your own recording or sound file
+(optionally with an announcer effect), or Windows' computer voice.
 
 Stage Lab
 ---------

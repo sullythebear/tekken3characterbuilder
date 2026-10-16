@@ -158,7 +158,7 @@ def pack_name(key: str) -> str:
 def fighter_sound(folder: Path, fighter: dict) -> list[int] | None:
     """The name call a fighter's choice gives (None: silent). The automatic one is cached in
     namecall-auto.wav for the name in namecall-auto.txt."""
-    mode = fighter.get("name_call", "auto")
+    mode = fighter.get("name_call", "off")       # silent unless chosen (owner, 2026-10-16)
     if mode == "own" and (folder / "namecall.wav").is_file():
         return read_wav((folder / "namecall.wav").read_bytes())
     if mode != "auto":

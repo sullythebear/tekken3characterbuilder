@@ -586,7 +586,7 @@ def validate_character(data: dict) -> dict:
         if look == "custom":                  # its colour and strength
             args, _ = stage_look_args(look, data.get("stage_tint"), data.get("stage_strength"))
             clean["stage_tint"], clean["stage_strength"] = "#" + args[3], int(args[5])
-    mode = data.get("name_call", "auto")    # the announcer's call: automatic voice, own sound, none
+    mode = data.get("name_call", "off")     # the announcer's call: silent (default, owner 2026-10-16), automatic voice, own sound
     if mode not in name_call.MODES:
         raise ValueError("Choose how the announcer calls the name.")
     clean["name_call"] = mode
@@ -1424,7 +1424,7 @@ def save_character(data: dict) -> dict:
     if recording:
         (folder / "namecall.wav").write_bytes(recording)
     if record["name_call"] == "own" and not (folder / "namecall.wav").is_file():
-        record["name_call"] = "auto"                    # nothing recorded yet
+        record["name_call"] = "off"                     # nothing recorded yet
     for key, filename in (("portrait_source", "portrait.png"), ("portrait_ps1", "portrait-ps1.png"),
                           ("portrait_full", "portrait-full.png")):
         png = decode_png(data.get(key))
