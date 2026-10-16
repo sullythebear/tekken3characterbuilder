@@ -38,8 +38,9 @@ Use these instead of doing the steps by hand. Default game folder: the Expanded 
 - `python tools/t3cb.py patch` – installs the patch, uninstalls and checks every patched file
   equals its original byte for byte, installs again. Prints e.g.
   `patch T3CB-PATCH-11: installed=True, uninstall restores 4/4 files byte for byte`.
-- `python tools/t3cb.py build` – `cmake --build build-release --target psx-runtime` with the
-  toolchain on PATH; prints `build OK (...)` or only the error lines.
+- `python tools/t3cb.py build [--debug]` – `cmake --build build-release --target psx-runtime` with the
+  toolchain on PATH (`--debug`: build-opt-dbg, which t3live runs); prints `build OK (...)` or only
+  the error lines.
 - `python tools/t3cb.py report` – summary of `logs/test-report.md`: date, patch, build, run time,
   the custom-fighter lines that matter (model installed, texture uploaded, last model check),
   error count.

@@ -11,8 +11,7 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   the donor, and `guest_player()` excludes them from the TTT1 import pipeline.
 - Pages cycle 0 → 1 → 2 with R2 (back with L2); tiles of the shown guest page are uploaded
   into the Tag tile slots. The CHARACTER SELECT card reads CUSTOM on page 2.
-- Known limits: silent announcer name call,
-  Team Battle icons may show the wrong tile.
+- Known limits: see the Team Battle entries below.
 - **Tested:** the CUSTOM page appears (R2/L2), the CHARACTER SELECT card reads CUSTOM, the
   custom portrait, select tiles and name plate show, the VS screen shows the custom name and
   portrait, and the HUD name above the life bar is the custom name plate. The fighter uses the
@@ -137,9 +136,23 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
 - **code** Start costume: works since patch 9 when the style has a third costume model or a variant
   sits on costume 3 (`third_costume`, `lend_third_costume_bits`); the old "no Start costume" note
   was stale.
-- **code** Announcer: `__wrap_func_800757A8` (tekken3_ttt1_sfx.c) plays a guest's name from its TTT1
-  pack; custom fighters have none, so they stay silent. Kept on purpose (2026-10-16): the native
-  call would say the donor's name ("Nina Williams" for MEDEA).
+- **tested** (2026-10-16) Name call: `__wrap_func_800757A8` (tekken3_ttt1_sfx.c) plays a guest's
+  name from `<Key>-TTT1-sfx.jus` (sound 1025; the key's data prefix, e.g. `Cbtommy-TTT1`); no patch
+  needed. The builder writes a pack with only that sound: automatic (Windows System.Speech, only
+  voice here Zira, SSML pitch x-low, then 18 % lower, echo, soft compression to TTT1's level:
+  peak ~11400, RMS ~4300 measured on Alex/Anna/Bruce packs), own sound, or none. T3 calls names
+  only in Practice (Arcade, a full 3-round fight: no call for anyone); live Practice with Tommy:
+  "Tommy sounds: 1 TTT1 sounds", "Tommy: P1 announced name", in state 8 (the sfx mixer runs only
+  in state 8). Headless runs have no audio: heard by the user still open.
+- **tested** (T3CB-PATCH-17, 2026-10-16) Own stage and music: customs.txt `<key> <donor> [stage
+  fighter] [music fighter]` (old 2-column lines and older patches still work). Descriptor byte 10
+  (arena) comes from `arena_owner`, byte 11 (music) from `music_owner`, also in
+  `__wrap_func_8004F3B0`. Stage values (descriptor +10/+11 read live): Paul/Bryan 0, Kuma/Law 1,
+  Yoshimitsu/Mokujin 2, Xiaoyu 3, Hwoarang 4, Lei 5, Ogre/True Ogre 6, Jin 8, Nina/Anna/Gun Jack 9,
+  Eddy 10, King 11, Julia/Heihachi 12, Gon 13, Dr. B 14 (Crow 15, unused 7); music 7 (Paul)..27,
+  one per fighter. In Arcade the CPU opponent's fighter decides the stage (stage 1: chosen before
+  `TEKKEN3_CPU_STAGE1` swaps the opponent, so the hook now also sets the custom fighter's stage
+  and music). Live: CPU Tommy (`cbtommy 3 17 19`) -> stage 0x0d music 0x19, Gon's beach.
 - **code, not live tested** (T3CB-PATCH-16) Team Battle icons: custom fighters reuse the Tag tiles'
   VRAM slots (`tile_slot`), only one guest page's tiles are up (`tile_set`), so a team mixing a TTT1
   guest and a custom fighter showed one with the other's tile. Now a guest of the page not in VRAM
