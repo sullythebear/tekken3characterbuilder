@@ -170,4 +170,6 @@ now uses a skeleton when the FBX has one (`rig_from_skeleton`: Mixamo names via
    Russo One, roster as a select grid with 1P cursor, silver tabs, chrome and fire buttons,
    status lamps instead of PS symbols, costume names without button names), "What makes a model
    work well?" help on the 3D model tab; narrow screens without sideways scroll. Checked in the
-   browser pane (desktop and 375 px, no console errors). Not released yet: the user decides.
+   browser pane (desktop and 375 px, no console errors). Released 2026-10-16 (user: "Yes je mag het
+   uitbrengen"): tag v0.3.8 pushed; zip = `git archive HEAD:character-builder` (29 files, no game
+   data); the GitHub release page needs the user's login (gh CLI not installed).
