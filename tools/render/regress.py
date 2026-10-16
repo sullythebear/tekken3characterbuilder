@@ -58,7 +58,8 @@ def build(cid, info, src_file):
         return inner(root, model, src, log, degrade)
     TB.quantise_groups, DI._build = q, b
     try:
-        stock, new, tx, rep = DI.build(GAME, info["model"], src_file, log=lambda *a: None, parts=info.get("parts"))
+        stock, new, tx, rep = DI.build(GAME, info["model"], src_file, log=lambda *a: None, parts=info.get("parts"),
+                                         settings=info.get("settings"))
     finally:
         TB.quantise_groups, DI._build = quant, inner
     return X.own_model_file(info["model"], stock, new, tx), cap["rgb"], cap["owner"], cap.get("degrade", False)

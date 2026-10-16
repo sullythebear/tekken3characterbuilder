@@ -578,10 +578,12 @@ def inspect(path: Path) -> dict:
     return info
 
 
-def build(root: Path, model: int, path: Path, log=print, parts=None):
+def build(root: Path, model: int, path: Path, log=print, parts=None, settings=None):
     """Imports a model file over a donor model; a high-poly file is reduced first (reduce.py),
     smaller and smaller until it fits the donor's slot. parts: choices for the parts that stick
-    out (protrusions.py; default: folded down)."""
+    out (protrusions.py; default: folded down). settings (reduced models only): {"head": 4, 2 or
+    1 times the detail on the head, "detail": 100, 80 or 60 % of the most the slot holds}."""
+    settings = settings or {}
     src = load(Path(path))
     PR.apply(src, parts, log=log)
     if len(src["T"]) <= REDUCE_ABOVE:
@@ -592,8 +594,8 @@ def build(root: Path, model: int, path: Path, log=print, parts=None):
     # and ~25.5 bytes of model per triangle; then 7 % fewer per failed try
     rid = X.FIRST_MODEL_RECORD + 4 * model
     slot = len(X.records(root, [rid])[rid])
-    target = int(min(MI.MAX_PACKET_BYTES / 35.5, slot / 25.5) * 0.97)
-    head = 4.0
+    target = int(min(MI.MAX_PACKET_BYTES / 35.5, slot / 25.5) * 0.97 * settings.get("detail", 100) / 100)
+    head = float(settings.get("head", 4))
     for k in range(8):
         low = RD.reduce(src, target, log=log, head_detail=head)
         try:
@@ -1060,6 +1062,7 @@ def main():
     ap.add_argument("--check", action="store_true", help="print what inspect() finds as JSON")
     ap.add_argument("--parts", default="{}", help="JSON {part id: {mode: fold|keep|remove, angle}}")
     ap.add_argument("--preview", type=Path, help="write a PNG of the model with the parts applied")
+    ap.add_argument("--settings", default="{}", help='JSON {"head": 4|2|1, "detail": 100|80|60} (reduced models)')
     a = ap.parse_args()
     X.setup(a.root)
     if a.check:
@@ -1078,7 +1081,7 @@ def main():
     info = inspect(a.model_file)
     if not info["rigged"]:
         raise SystemExit("ERROR " + " ".join(info["problems"]))
-    stock, new, tx, report = build(a.root, a.model, a.model_file, parts=parts)
+    stock, new, tx, report = build(a.root, a.model, a.model_file, parts=parts, settings=json.loads(a.settings))
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_bytes(X.own_model_file(a.model, stock, new, tx))
     print(json.dumps({k: v for k, v in report.items() if k not in ("rows", "texture")}, default=str))

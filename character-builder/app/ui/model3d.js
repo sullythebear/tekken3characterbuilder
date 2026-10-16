@@ -22,6 +22,8 @@ const T3Model = (() => {
     const box = $("model-check");
     box.hidden = !info;
     $("model-import-row").hidden = !info || !info.ok;
+    // the detail settings act on big models only (reduced to PS1 size: direct_import.REDUCE_ABOVE)
+    $("model-settings").hidden = $("model-settings-hint").hidden = !info || !info.ok || !info.reduce;
     if (!info) return;
     $("model-file-name").textContent = info.file || "";
     const facts = $("model-facts");
@@ -207,7 +209,8 @@ const T3Model = (() => {
       : "Importing: fitting the model to the style's skeleton, texture and joints (a few seconds)…";
     try {
       const id = state.current.id;
-      await api("/api/model/import", { id, costume: Number($("model-costume").value), parts: choices });
+      await api("/api/model/import", { id, costume: Number($("model-costume").value), parts: choices,
+        settings: { head: Number($("model-head").value), detail: Number($("model-detail").value) } });
       // the import runs in the background: its log lines name the step it is at
       let job;
       for (;;) {

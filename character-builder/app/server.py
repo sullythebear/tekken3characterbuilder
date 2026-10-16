@@ -985,7 +985,19 @@ def source_preview(cid: str) -> dict:
     return {"png": base64.b64encode(out.read_bytes()).decode()}
 
 
-def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
+def clean_import_settings(value) -> dict:
+    """Model Importer settings for big models (reduced): {"head": 4|2|1, "detail": 100|80|60};
+    the defaults are left out."""
+    out = {}
+    if isinstance(value, dict):
+        if value.get("head") in (2, 1, "2", "1"):
+            out["head"] = int(value["head"])
+        if value.get("detail") in (80, 60, "80", "60"):
+            out["detail"] = int(value["detail"])
+    return out
+
+
+def import_model(cid: str, costume: int, parts=None, on_line=None, settings=None) -> dict:
     """The checked upload -> characters/<id>/model.bin over the donor's costume model."""
     parts = clean_parts(parts)
     root = project_root()
@@ -1004,8 +1016,10 @@ def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
     if not 0 <= costume < len(models):
         raise ValueError("This donor has no such costume.")
     out = folder / "model-new.bin"
+    settings = clean_import_settings(settings)
     problem, text = run_import_tool(root, [str(upload), "--model", str(models[costume]), "--out", str(out),
-                                           "--parts", json.dumps(parts)], on_line=on_line)
+                                           "--parts", json.dumps(parts), "--settings", json.dumps(settings)],
+                                    on_line=on_line)
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         raise ValueError(problem or "The model import failed.")
@@ -1030,7 +1044,7 @@ def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
     data["own_model"] = {"file": info.get("file", upload.name), "costume": costume, "model": models[costume],
                          "triangles": int(made[-1]) if made else info.get("triangles"),
                          "source_triangles": info.get("triangles"), "textured": info.get("textured"),
-                         "parts": parts, "imported": datetime.now().isoformat(timespec="seconds")}
+                         "parts": parts, "settings": settings, "imported": datetime.now().isoformat(timespec="seconds")}
     (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     return get_character(folder.name)
 
@@ -1101,7 +1115,8 @@ def refit_model(cid: str) -> list[str]:
     out = folder / "model-new.bin"
     with model_lock:
         problem, _ = run_import_tool(project_root(), [str(source), "--model", str(models[costume]), "--out", str(out),
-                                                      "--parts", json.dumps(clean_parts(own.get("parts")))])
+                                                      "--parts", json.dumps(clean_parts(own.get("parts"))),
+                                                      "--settings", json.dumps(clean_import_settings(own.get("settings")))])
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         return [f"The own model could not be fitted to the new fighting style: {problem}"]
@@ -1320,7 +1335,7 @@ def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=Non
 IMPORT_JOBS: dict = {}
 
 
-def start_import(cid: str, costume: int, parts) -> dict:
+def start_import(cid: str, costume: int, parts, settings=None) -> dict:
     cid = safe_id(cid)
     job = IMPORT_JOBS.get(cid)
     if job and not job["done"]:
@@ -1330,7 +1345,8 @@ def start_import(cid: str, costume: int, parts) -> dict:
     def run():
         try:
             with model_lock:
-                saved = import_model(cid, costume, parts, on_line=lambda l: job["lines"].append(l[:200]))
+                saved = import_model(cid, costume, parts, on_line=lambda l: job["lines"].append(l[:200]),
+                                     settings=settings)
             job["result"] = {**saved, "warnings": sync_customs(changed=saved["id"])}
         except Exception as error:                   # shown on the page, as a request error would be
             job["error"] = str(error) or "The model import failed."
@@ -1545,7 +1561,7 @@ def export_character(cid: str) -> tuple[str, bytes]:
     return f"{folder.name}.t3char", buffer.getvalue()
 
 
-def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str) -> list[str]:
+def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str, settings=None) -> list[str]:
     """An own model built from a source file already next to the character (an imported package):
     model.bin over the style's costume, own_model in character.json. -> warnings."""
     root = project_root()
@@ -1561,7 +1577,8 @@ def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str) ->
     out = folder / "model-new.bin"
     with model_lock:
         problem, text = run_import_tool(root, [str(source), "--model", str(models[costume]), "--out", str(out),
-                                               "--parts", json.dumps(clean_parts(parts))])
+                                               "--parts", json.dumps(clean_parts(parts)),
+                                               "--settings", json.dumps(clean_import_settings(settings))])
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         return [f"The package's 3D model could not be built: {problem or 'the import failed.'}"]
@@ -1569,7 +1586,7 @@ def fit_source(cid: str, source: Path, costume: int, parts: dict, label: str) ->
     made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
     data["own_model"] = {"file": label, "costume": costume, "model": models[costume],
                          "triangles": int(made[-1]) if made else None, "textured": True,
-                         "parts": clean_parts(parts), "imported": datetime.now().isoformat(timespec="seconds")}
+                         "parts": clean_parts(parts), "settings": clean_import_settings(settings), "imported": datetime.now().isoformat(timespec="seconds")}
     (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     return []
 
@@ -1633,7 +1650,7 @@ def import_character(payload: str) -> dict:
     (folder / name).write_bytes(files[name])
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
     warnings = fit_source(saved["id"], folder / name, int(own.get("costume", 0) or 0), own.get("parts") or {},
-                          str(own.get("file") or name)[:80])
+                          str(own.get("file") or name)[:80], own.get("settings"))
     return {**get_character(saved["id"]), "model_warnings": warnings}
 
 
@@ -1809,7 +1826,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/check":
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":
-                return self._json(start_import(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts")))
+                return self._json(start_import(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"),
+                                               data.get("settings")))
             if path == "/api/model/progress":
                 return self._json(import_progress(str(data.get("id", ""))))
             if path == "/api/model/undo":

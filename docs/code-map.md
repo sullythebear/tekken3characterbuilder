@@ -70,7 +70,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   parts already hanging down are skipped), `apply(src, choices)` (fold = turned about the attach
   point to hang N degrees from down, keeping its heading, eased over the first fifth; angle None
   = steepest that clears the body; keep; remove), `preview` (side + back PNG, parts tinted).
-  Used by `direct_import.inspect` (`parts`), `build(parts=)`, CLI `--parts JSON`, `--preview PNG`;
+  Used by `direct_import.inspect` (`parts`), `build(parts=, settings=)`, CLI `--parts JSON`, `--settings JSON`
+  (`head` 4/2/1 face detail, `detail` 100/80/60 % triangle budget; server `clean_import_settings`, stored in
+  `own_model.settings`, UI `#model-settings` shown for reduced models), `--preview PNG`;
   server `/api/model/preview`, choices stored in `own_model.parts` (refit uses them); UI in
   `ui/model3d.js` (`showParts`, `partRow`, debounced preview).
 - `app/reduce.py` – high-poly rigged model -> PS1 size: `reduce(src, target)` (`_shell` with

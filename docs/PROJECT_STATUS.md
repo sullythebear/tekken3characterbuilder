@@ -62,7 +62,7 @@ Updated: 2026-10-16. Builder 0.5.1 released (tag v0.5.1): kitbash HUD text fix o
 Module order (owner, 2026-10-16): Character Builder, Model Importer, Portrait Lab, Voice Lab,
 Stage Lab, Move Lab.
 
-1. Model Importer: conversion settings in the UI (texture detail, polygon budget where the
-   importer has them), checks of geometry/materials/rigging shown before import.
+1. Model Importer: checks of geometry/materials/rigging shown before import (conversion
+   settings Face detail / Body detail: done, tested on Medea).
 2. Portrait Lab: several saved portrait variants per fighter.
 3. Character Builder: body shapes (proportions) if the skeleton allows it.

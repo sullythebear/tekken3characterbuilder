@@ -189,6 +189,15 @@
                 <ul class="model-part-list" id="model-part-list"></ul>
               </div>
             </div>
+            <div class="arena-lists" id="model-settings" hidden>
+              <label>Face detail
+                <select id="model-head"><option value="4">High (default)</option><option value="2">Medium</option><option value="1">Same as the body</option></select>
+              </label>
+              <label>Body detail
+                <select id="model-detail"><option value="100">As much as fits (default)</option><option value="80">80 %</option><option value="60">60 %</option></select>
+              </label>
+            </div>
+            <p class="hint" id="model-settings-hint" hidden>Detail settings apply to big models, which are reduced to PS1 size. Less face detail leaves more for the body; less body detail gives a simpler, more PS1-like model.</p>
             <div class="model-import-row" id="model-import-row" hidden>
               <label for="model-costume">Costume</label>
               <select id="model-costume"></select>
