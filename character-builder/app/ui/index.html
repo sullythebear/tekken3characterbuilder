@@ -120,6 +120,12 @@
           <legend>Body parts</legend>
           <p class="hint">Mix body parts of Tekken 3's own fighters on your style's skeleton. Only fighters of a similar build are offered (height within 7 %). Check the result in the 3D preview; Undo is on the Model Importer page. The parts are read from your own Tekken 3 disc; packages carry only your choices.</p>
           <div class="arena-lists" id="kit-parts"></div>
+          <div class="arena-lists kit-colours">
+            <label>Hue <input type="range" id="kit-hue" min="-180" max="180" value="0"></label>
+            <label>Saturation <input type="range" id="kit-sat" min="0" max="200" value="100"></label>
+            <label>Lightness <input type="range" id="kit-light" min="-40" max="40" value="0"></label>
+            <label class="check"><input type="checkbox" id="kit-skin" checked> Keep skin tones</label>
+          </div>
           <div class="model-import-row">
             <label for="kit-costume">Replaces</label>
             <select id="kit-costume"></select>

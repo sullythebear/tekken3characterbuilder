@@ -255,5 +255,14 @@ class StageLabTests(unittest.TestCase):
             server.validate_character({"name": "A", "donor": 1, "stage_look": "disco"})
 
 
+class KitColourTests(unittest.TestCase):
+    def test_clean(self):
+        self.assertIsNone(server.clean_kit_colours(None))
+        self.assertIsNone(server.clean_kit_colours([0, 100, 0, True]))          # the parts' own colours
+        self.assertEqual(server.clean_kit_colours([500, -5, 99, 0]), [180, 0, 40, False])
+        with self.assertRaises(ValueError):
+            server.clean_kit_colours(["red", 1, 2, 3])
+
+
 if __name__ == "__main__":
     unittest.main()

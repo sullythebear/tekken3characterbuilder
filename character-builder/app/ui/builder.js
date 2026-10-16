@@ -46,7 +46,9 @@
     costume.textContent = "";
     for (const m of models.filter((m) => m.donor === state.current.donor))
       costume.add(new Option(`Costume ${m.costume + 1}`, String(m.costume)));
-    costume.value = String(own.kit ? own.costume || 0 : 0);
+    costume.value = String(own.file === "Character Builder" ? own.costume || 0 : 0);
+    const c = own.colours || [0, 100, 0, true];
+    [$("kit-hue").value, $("kit-sat").value, $("kit-light").value, $("kit-skin").checked] = c;
     matchBuild();
   }
 
@@ -60,6 +62,12 @@
       }
       if (select.selectedOptions[0]?.disabled) select.value = "";
     }
+  }
+
+  // the body's own colours (hue, saturation, lightness), or null for the parts' own
+  function colours() {
+    const c = [Number($("kit-hue").value), Number($("kit-sat").value), Number($("kit-light").value), $("kit-skin").checked];
+    return c[0] === 0 && c[1] === 100 && c[2] === 0 ? null : c;
   }
 
   function chosen() {
@@ -91,11 +99,12 @@
 
   async function preview() {
     const parts = chosen(), note = $("kit-progress"), run = ++previewRun;
-    if (!state.current.id || !Object.keys(parts).length) return;
+    if (!state.current.id || (!Object.keys(parts).length && !colours())) return;
     note.hidden = false;
     note.textContent = "Preview: building the mix…";
     try {
-      const json = await api("/api/kit/preview", { id: state.current.id, costume: Number($("kit-costume").value), parts });
+      const json = await api("/api/kit/preview", { id: state.current.id, costume: Number($("kit-costume").value), parts,
+        colours: colours() });
       if (run !== previewRun) return;
       showView(true);
       T3Costumes.preview(json, "Preview of the chosen parts: not built yet. Build puts it in the game.");
@@ -109,14 +118,15 @@
     if (busy) return;
     if (state.dirty) { toast("Save the fighter first."); return; }
     const parts = chosen();
-    if (!Object.keys(parts).length) { toast("Choose at least one body part from another fighter."); return; }
+    if (!Object.keys(parts).length && !colours()) { toast("Choose a body part from another fighter, or colours."); return; }
     busy = true;
     const button = $("kit-build"), note = $("kit-progress");
     button.disabled = true;
     note.hidden = false;
     note.textContent = "Building the fighter from the chosen parts…";
     try {
-      const saved = await api("/api/kit/build", { id: state.current.id, costume: Number($("kit-costume").value), parts });
+      const saved = await api("/api/kit/build", { id: state.current.id, costume: Number($("kit-costume").value), parts,
+        colours: colours() });
       state.current = copyFighter(saved);
       await loadCharacters();
       fillForm();
@@ -134,6 +144,7 @@
     $("kit-build").addEventListener("click", build);
     $("kit-random").addEventListener("click", randomize);
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
+    for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);
   }
 
   window.T3Builder = { init, fill };

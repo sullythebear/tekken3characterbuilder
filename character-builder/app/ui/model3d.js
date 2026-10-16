@@ -135,7 +135,7 @@ const T3Model = (() => {
     const own = saved && c.own_model;
     $("own-model").hidden = !(saved && c.has_model);
     $("model-undo").hidden = !(saved && c.model_undo);
-    $("model-before").hidden = !(saved && c.has_model && c.own_model && !c.own_model.kit);
+    $("model-before").hidden = !(saved && c.has_model && c.own_model && c.own_model.file !== "Character Builder");
     $("model-before-img").hidden = true;
     if (own) {
       const m = c.own_model;

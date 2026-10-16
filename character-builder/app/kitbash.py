@@ -77,7 +77,27 @@ class Source:
         return float(np.linalg.norm(row(self.m, c)[3:6])) if c else None
 
 
-def build(root: Path, base: int, parts: dict, log=print):
+def recolour(colour: int, hue: float, sat: float, light: float, keep_skin: bool = True) -> int:
+    """A PS1 colour shifted in HSL (hue in degrees, saturation in %, lightness in % points), as the
+    builder's "Whole costume" tint; skin tones kept (warm, light or pale; tested on Nina, Julia)."""
+    import colorsys
+    if not colour or colour == 0x8000:
+        return colour
+    r, g, b = (((colour >> k) & 31) / 31 for k in (0, 5, 10))
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    # skin: red strongest, orange to pink, not grey (light skin reads as highly saturated in HLS:
+    # Nina's 30,22,16 is s 0.88)
+    if keep_skin and r >= max(g, b) and (h <= 0.14 or h >= 0.92) and s >= 0.05 and 0.15 <= l <= 0.95:
+        return colour
+    h = (h + hue / 360) % 1
+    s = min(1.0, max(0.0, s * sat / 100))
+    l = min(1.0, max(0.0, l + light / 100))
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    out = (colour & 0x8000) | round(r * 31) | round(g * 31) << 5 | round(b * 31) << 10
+    return out if out & 0x7FFF else 0x8000 | (colour & 0x8000)   # black, not see-through
+
+
+def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None):
     """parts: {part name: model}; missing parts come from the base. -> (stock base model bytes,
     new model bytes, texture dict for own_model_file, report)."""
     import anim_model as A
@@ -317,7 +337,7 @@ def build(root: Path, base: int, parts: dict, log=print):
     eight_keys = sorted({(c["model"], c["mat"] & 0x7EFF) for c in clusters if c["mat"] & 0x8000 or c["wide"]})
     lut = {}
     if eight_keys:
-        used, colours = {}, []
+        used = {}
         for c in clusters:
             if not c["mat"] & 0x8000:
                 continue
@@ -474,6 +494,8 @@ def build(root: Path, base: int, parts: dict, log=print):
                 face_uv[i] = [(int(u), int(v)) for u, v in (cols(faces[i]) + off)]
     for i, f in enumerate(faces):
         f["chart"] = chart_of[new_mat[(f["model"], f["smat"])]]
+    if tint and tuple(tint[:3]) != (0, 100, 0):              # the mix's own colours (hue, saturation, lightness)
+        runs = [(cid, [recolour(c, *tint) for c in pal]) for cid, pal in runs]
     texture = {"uv": face_uv, "band": band, "runs": runs, "mats": {chart_of[m_]: m_ for m_ in mats},
                "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0,
                "rgb": np.zeros((256, 256, 3), np.uint8)}
@@ -501,6 +523,8 @@ def main():
     ap.add_argument("--part", action="append", default=[], help="name=model, names: " + ", ".join(PARTS))
     ap.add_argument("--out", type=Path)
     ap.add_argument("--heights", nargs="*", type=int, help="print {model: standing height} as JSON")
+    ap.add_argument("--colours", type=lambda v: (lambda h, s, l, k: (float(h), float(s), float(l), k == "1"))(*v.split(",")),
+                    help="hue,saturation,lightness,keep skin (1/0): e.g. 120,100,0,1")
     a = ap.parse_args()
     X.setup(a.root)
     if a.heights is not None:
@@ -516,7 +540,7 @@ def main():
         parts[n] = int(v)
     import model_import as MI
     try:
-        stock, new, tx, report = build(a.root, a.base, parts)
+        stock, new, tx, report = build(a.root, a.base, parts, tint=a.colours)
     except MI.Budget as error:
         text = str(error)
         if "GPU packets" in text:               # the writer's budget, said for a player

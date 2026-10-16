@@ -86,3 +86,13 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   on Nina: offline render and live clean. `feet` (rows 7, 10) was tried and dropped: models split
   leg and foot differently (Nina's shin row runs into her boot), other fighters' feet floated
   under her shins.
+
+## The body's own colours (2026-10-16)
+
+- Hue / saturation / lightness sliders and "Keep skin tones" under Body parts; kitbash
+  `--colours=h,s,l,keep` recolours every CLUT of the build (`kitbash.recolour`; skin = red the
+  strongest, orange to pink, not grey: light skin reads as highly saturated in HLS, Nina's
+  30,22,16 is s 0.88). Stored as `own_model.colours`, carried by packages, part of the preview
+  cache key. Works without other parts too: the style's own body in new colours, which reaches
+  the game (colour variants do not reach a costume with an own model). Live: KITTEST hue -60,
+  blue outfit, skin kept, HUD clean.
