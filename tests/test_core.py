@@ -217,5 +217,26 @@ class MoveLabTests(unittest.TestCase):
         self.assertEqual(M.text(bytes([0x0A]) + b" @#,"), "During (*) ,")
 
 
+class RestorePointTests(CharacterTests):
+    def test_restore_and_undo(self):
+        first = server.save_character({"name": "MEDEA", "donor": 5, "costumes": []})
+        server.save_character({"id": first["id"], "name": "MEDEA", "donor": 3, "stage": 17, "costumes": []})
+        points = server.restore_points(first["id"])
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0]["donor"], 5)
+        back = server.restore_character(first["id"], points[0]["id"])
+        self.assertEqual((back["donor"], back.get("stage")), (5, None))
+        points = server.restore_points(first["id"])               # the restore itself can be undone
+        self.assertEqual(points[0]["donor"], 3)
+        with self.assertRaises(ValueError):
+            server.restore_character(first["id"], "../../etc")
+
+    def test_keeps_twenty(self):
+        c = server.save_character({"name": "A", "donor": 1, "costumes": []})
+        for i in range(25):
+            server.save_character({"id": c["id"], "name": "A", "donor": i % 21, "costumes": []})
+        self.assertEqual(len(server.restore_points(c["id"])), server.RESTORE_POINTS)
+
+
 if __name__ == "__main__":
     unittest.main()

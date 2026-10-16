@@ -18,7 +18,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 |---|---|
 | Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab) |
 | Model Importer separate from Character Builder | **partly** (own tab "3D model") |
-| Project versions / restore points per fighter | **open** (only Undo of the last import) |
+| Project versions / restore points per fighter | **done** (settings before each save, last 20, Restore on the Fighter page; restoring is itself undoable; 3D model: its own Undo) |
 
 ## Modules
 

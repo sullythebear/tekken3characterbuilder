@@ -289,9 +289,41 @@ function fillForm() {
   renderStage();
   T3Arena.fill();
   T3Builder.fill();
+  loadHistory();
   if (!$("page-moves").hidden) T3MoveLab.show();
   if (window.T3Model) T3Model.refresh();
   showPortraitFromModel();
+}
+
+// restore points: the fighter's settings before each save (server keeps the last 20)
+async function loadHistory() {
+  const field = $("history-field"), select = $("history");
+  if (!state.current.id) { field.hidden = true; return; }
+  try {
+    const r = await api("/api/history", { id: state.current.id });
+    select.textContent = "";
+    for (const p of r.points) {
+      const when = p.saved ? p.saved.replace("T", " ") : p.id;
+      const style = DONORS[p.donor] ? DONORS[p.donor].name : "?";
+      select.add(new Option(`${when} · ${p.name} (${style})`, p.id));
+    }
+    field.hidden = !r.points.length;
+  } catch { field.hidden = true; }
+}
+
+async function restorePoint() {
+  const point = $("history").value;
+  if (!point || !state.current.id) return;
+  if (state.dirty && !confirm("You have unsaved changes. Restore anyway?")) return;
+  try {
+    const saved = await api("/api/history/restore", { id: state.current.id, point });
+    state.dirty = false;
+    state.current = copyFighter(saved);
+    await loadCharacters();
+    fillForm();
+    T3Costumes.refresh(true);
+    if (!showWarnings(saved)) toast("Restored: the replaced settings are a restore point too");
+  } catch (e) { toast(e.message); }
 }
 
 function showPortraitFromModel() {
@@ -614,6 +646,7 @@ function wire() {
   $("character-form").addEventListener("submit", save);
   T3Arena.init();
   T3Builder.init();
+  $("history-restore").addEventListener("click", restorePoint);
   $("name").addEventListener("input", (e) => {
     const cleaned = e.target.value.toUpperCase().replace(NAME_BLOCKED, "");
     if (cleaned !== e.target.value) e.target.value = cleaned;

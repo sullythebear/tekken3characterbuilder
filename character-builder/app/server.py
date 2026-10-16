@@ -1395,8 +1395,52 @@ def save_character(data: dict) -> dict:
         png = decode_png(data.get(key))
         if png:
             (folder / filename).write_bytes(png)
+    if old:                                           # the version this save replaces: a restore point
+        keep_restore_point(folder, old)
     info.write_text(json.dumps(record, indent=2), encoding="utf-8")
     return get_character(folder.name)
+
+
+RESTORE_POINTS = 20
+RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "stage_look", "costumes")
+
+
+def keep_restore_point(folder: Path, record: dict) -> None:
+    """characters/<id>/history/<time>.json: a fighter's settings before a save (the last 20).
+    Settings only: the 3D model has its own Undo, files such as the portrait are not kept."""
+    history = folder / "history"
+    history.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    (history / f"{stamp}.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    for old in sorted(history.glob("*.json"))[:-RESTORE_POINTS]:
+        old.unlink()
+
+
+def restore_points(cid: str) -> list[dict]:
+    """The fighter's restore points, newest first: {id, saved, name, donor}."""
+    history = DATA / safe_id(cid) / "history"
+    out = []
+    for path in sorted(history.glob("*.json"), reverse=True) if history.is_dir() else []:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        out.append({"id": path.stem, "saved": data.get("updated", ""), "name": data.get("name", ""),
+                    "donor": data.get("donor")})
+    return out
+
+
+def restore_character(cid: str, point: str) -> dict:
+    """Saves the settings of a restore point as the fighter's current ones (the current ones
+    become a restore point themselves, so a restore can be undone)."""
+    folder = DATA / safe_id(cid)
+    if not re.fullmatch(r"[0-9-]{8,40}", point or ""):
+        raise ValueError("Unknown restore point.")
+    path = folder / "history" / f"{point}.json"
+    if not path.is_file():
+        raise ValueError("Unknown restore point.")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return save_character({"id": folder.name, **{k: data[k] for k in RESTORE_FIELDS if k in data}})
 
 
 def delete_character(cid: str) -> None:
@@ -1690,6 +1734,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(import_progress(str(data.get("id", ""))))
             if path == "/api/model/undo":
                 saved = undo_model(str(data.get("id", "")))
+                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/history":
+                return self._json({"points": restore_points(str(data.get("id", "")))})
+            if path == "/api/history/restore":
+                saved = restore_character(str(data.get("id", "")), str(data.get("point", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/stage/preview":
                 return self._json(stage_preview(data))

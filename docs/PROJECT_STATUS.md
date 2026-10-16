@@ -33,10 +33,21 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
   tab (browser pane: King 20 moves).
 - Regression `t3cb regress --all`: 11 models, all byte-identical (after the CLUT-run split).
 
+- Stage Lab: stage colour looks (patch 19: night, sunset, dusk, ice, inferno, black and white)
+  with a texture preview; tested in game (night, sunset on Gon's beach) and in the browser pane.
+- Restore points per fighter (last 20 saves, Restore on the Fighter page): unit tests, browser pane.
+- Unit tests: 23 (some run twice through test-class inheritance).
+
+## For the owner to check
+
+- Hear the name call (Practice) and see the new tabs in the real app window.
+- The test folder has my test fighter KITTEST on the Custom page (kitbash body, sunset stage);
+  remove it in the builder if you do not want it. Tommy is back to its own settings.
+- D4: the automatic name call uses Windows' classic voice (not AI); say so if it should go.
+
 ## Next
 
-1. Character Builder parts (kitbash UI).
-
-`t3live nav` done (Practice route verified).
-
-Module tabs done (browser pane: all six pages switch, values kept).
+1. Release 0.5.0 candidate (patches 17-19, Studio tabs) once the owner tested it.
+2. Move Lab: move records per move (damage, frames) next to the command list.
+3. Character Builder: colour presets for costumes; kitbash for other bases checked in game.
+4. Stage Lab: own tint colour (picker) besides the presets.
