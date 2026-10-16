@@ -486,6 +486,11 @@ def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = 
     if texture:
         band = texture["band"]
         runs = texture.get("runs") or [(0, texture["palette"])]
+        # the game takes at most 256 colours per run (patch 11's check): a longer run (several
+        # 16-colour CLUTs side by side) is split; a CLUT id steps 16 colours per unit of x
+        runs = [(cid + k // 16, pal[k:k + 256]) for cid, pal in runs for k in range(0, len(pal), 256)]
+        if len(runs) > 8:
+            raise ValueError(f"The texture needs {len(runs)} colour runs; the game takes at most 8.")
         if len(runs) == 1:
             out += b"T3TX" + struct.pack("<4H", band.shape[1], band.shape[0], runs[0][0], len(runs[0][1]))
             out += b"".join(struct.pack("<H", c) for c in runs[0][1])
@@ -497,10 +502,25 @@ def own_model_file(model: int, stock: bytes, new: bytes, texture: dict | None = 
     return out
 
 
-def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756)) -> bytes:
-    """PNG for the select-screen portrait from an own model: head and shoulders, turned a little
-    as Tekken 3's portraits, the model's own PS1 texture, soft light from the front left, on a
-    dark backdrop with a warm glow (the builder then crops and converts it as any image)."""
+# Portrait Lab presets (the builder offers these names; the defaults are the first of each)
+PORTRAIT_ANGLES = {"turned": 0.3, "front": 0.0, "other": -0.3, "profile": 1.2}
+PORTRAIT_FRAMES = {"shoulders": 0.36, "close": 0.24, "chest": 0.5}
+PORTRAIT_LIGHTS = {"left": ([-0.45, 0.5, 0.75], 0.62, 0.48), "front": ([0, 0.2, 1], 0.7, 0.4),
+                   "dramatic": ([0.8, 0.6, 0.3], 0.35, 0.8)}
+PORTRAIT_BACKDROPS = {"warm": ((48, 50, 64), (110, 52, 18)), "cool": ((30, 40, 62), (20, 60, 120)),
+                      "red": ((50, 14, 16), (160, 30, 20)), "dark": ((22, 22, 26), (24, 24, 28))}
+
+
+def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756), look: dict | None = None) -> bytes:
+    """PNG for the select-screen portrait from an own model: by default head and shoulders, turned a
+    little as Tekken 3's portraits, the model's own PS1 texture, soft light from the front left, on
+    a dark backdrop with a warm glow (the builder then crops and converts it as any image).
+    look: {"angle", "frame", "light", "backdrop"} names from the PORTRAIT_* presets."""
+    look = look or {}
+    yaw = PORTRAIT_ANGLES.get(look.get("angle"), yaw)
+    frame = PORTRAIT_FRAMES.get(look.get("frame"), 0.36)
+    light_dir, ambient, direct = PORTRAIT_LIGHTS.get(look.get("light"), PORTRAIT_LIGHTS["left"])
+    base, glow = PORTRAIT_BACKDROPS.get(look.get("backdrop"), PORTRAIT_BACKDROPS["warm"])
     import io
     import numpy as np
     from PIL import Image
@@ -524,7 +544,7 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756)) -> b
     Hm = max(float(np.ptp(Q[:, 1])), 1e-6)
     W, H = size
     y0 = top + 0.03 * Hm
-    sc = H / (0.36 * Hm)
+    sc = H / (frame * Hm)
     xc = Q[Q[:, 1] > top - 0.12 * Hm, 0].mean()
     X = (Q[:, 0] - xc) * sc + W / 2
     Y = (y0 - Q[:, 1]) * sc
@@ -538,13 +558,13 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756)) -> b
     vn /= np.linalg.norm(vn, axis=1, keepdims=True) + 1e-12
     if np.mean(vn[weld][:, 2]) < 0:                      # the winding's sign: normals face the viewer
         vn = -vn
-    light = np.array([-0.45, 0.5, 0.75])
+    light = np.array(light_dir, float)
     light /= np.linalg.norm(light)
-    shade = 0.62 + 0.48 * np.clip(vn[weld] @ light, 0, 1)
+    shade = ambient + direct * np.clip(vn[weld] @ light, 0, 1)
     # backdrop: charcoal with a warm glow behind the shoulders
     yy, xx = np.mgrid[0:H, 0:W]
     d = np.hypot((xx - W / 2) / W, (yy - 0.75 * H) / H)
-    img = np.stack([48 + 110 * np.clip(0.7 - d, 0, 1), 50 + 52 * np.clip(0.7 - d, 0, 1), 64 + 18 * np.clip(0.7 - d, 0, 1)], 2)
+    img = np.stack([base[k] + glow[k] * np.clip(0.7 - d, 0, 1) for k in range(3)], 2)
     zb = np.full((H, W), -np.inf)
     for i, t in enumerate(T):
         xy = np.stack([X[t], Y[t]], 1)
@@ -591,6 +611,7 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756)) -> b
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait"))
+    parser.add_argument("--look", help='ownportrait: JSON {"angle", "frame", "light", "backdrop"}')
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
@@ -611,7 +632,7 @@ def main() -> None:
     if args.command == "ownportrait":
         if args.file is None or args.out is None:
             fail("ownportrait needs --file and --out.")
-        args.out.write_bytes(own_portrait(args.root, args.file))
+        args.out.write_bytes(own_portrait(args.root, args.file, look=json.loads(args.look) if args.look else None))
         print(f"OK {args.out}")
         return
     if args.command == "ownmodel":

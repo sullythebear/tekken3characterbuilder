@@ -16,12 +16,17 @@ import numpy as np
 
 import model_export as X
 
-PARTS = {"head": (19, 20), "torso": (1, 2), "pelvis": (3, 4),
+# Parts are groups of rows. Row 20 (neck, shoulders, sometimes chest or the back of the head)
+# belongs with the head: a head without it lost its back on other models (tested 2026-10-16).
+PARTS = {"head": (19, 20), "body": (1, 2, 3, 4),
          "arm_l": (11, 12, 13, 14), "arm_r": (15, 16, 17, 18),
          "leg_l": (5, 6, 7), "leg_r": (8, 9, 10)}
 SECOND = {2: 1, 4: 3, 20: 19}
 CHILD = {5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
 BAND_WORDS = 128
+# Parts only fit models of a similar build: within 7 % of the base's height (Julia, Law, Lei,
+# Xiaoyu parts on Nina clean; Heihachi, 8 % taller, left gaps at the waist and the ankles).
+FIT = 0.07
 
 
 class Source:
@@ -54,6 +59,12 @@ class Source:
             rows = min(img.height, 256 - img.y)
             self.band[img.y: img.y + rows, img.x: img.x + width] = px[:rows, :width]
 
+    def height(self) -> float:
+        """Standing height (vertical extent of all own vertices)."""
+        ys = [(self.W[SECOND.get(r, r)][0] @ np.array(sl[1], float) + self.W[SECOND.get(r, r)][1])[1]
+              for r, slots in self.bind.items() for sl in slots if sl is not None and sl[0] == r]
+        return float(max(ys) - min(ys))
+
     def bone(self, r):
         """Length of the bone from row r to its child (the child's offset)."""
         from fmt import row
@@ -72,6 +83,11 @@ def build(root: Path, base: int, parts: dict, log=print):
         if mdl not in src:
             src[mdl] = Source(root, mdl)
     B = src[base]
+    for name, mdl in parts.items():
+        ratio = src[mdl].height() / B.height()
+        if abs(ratio - 1) > FIT:
+            raise MI.Budget(f"the {name} of model {mdl} does not fit: its fighter is {ratio * 100 - 100:+.0f} % "
+                            f"of the base's height (at most {FIT * 100:.0f} %)")
     row_model = {}
     for name, rows in PARTS.items():
         for r in rows:
@@ -201,7 +217,7 @@ def build(root: Path, base: int, parts: dict, log=print):
             if spot:
                 break
         if spot is None:
-            raise MI.Budget("the parts' texels do not fit in one texture page")
+            raise MI.Budget("the chosen parts' textures do not fit in one texture page: take parts from fewer different fighters")
         occ[spot[1]:spot[1] + h_, spot[0]:spot[0] + w_] = True
         c["dst"] = placed[sk] = spot
     band = np.zeros((256, 64), dtype=np.uint16)
@@ -211,22 +227,22 @@ def build(root: Path, base: int, parts: dict, log=print):
         x1, y1 = c["hi"][0] // 4, c["hi"][1]
         dx, dy = c["dst"][0] // 4, c["dst"][1]
         band[dy:dy + y1 - y0 + 1, dx:dx + x1 - x0 + 1] = sm.band[y0:y1 + 1, x0:x1 + 1]
-    # 4. CLUTs: an 8-bit CLUT per model (the first at id 0), 4-bit CLUTs from id 64 on
+    # 4. CLUTs: an 8-bit CLUT per source CLUT (a model's skin and clothes can have their own),
+    # ids 0, 16, 32, 48 (row 0) then 128.. (row 2); 4-bit CLUTs from id 64 on (row 1)
     new_mat, runs8, pal4 = {}, [], {}
     next4 = 64
-    eight_models = sorted({m_ for (m_, mat) in groups if mat & 0x8000})
-    if len(eight_models) > 1:
-        log(f"8-bit areas of {len(eight_models)} models: the extra ones get CLUTs at ids 16, 32")
-    for j, mdl in enumerate(eight_models):
-        cid = 16 * j
+    eight = sorted({(m_, mat & 0x7eff) for (m_, mat) in groups if mat & 0x8000})
+    slots8 = [0, 16, 32, 48, 128, 144, 160, 176]
+    if len(eight) > len(slots8):
+        raise MI.Budget(f"{len(eight)} 8-bit colour tables; at most {len(slots8)}")
+    if len(eight) > 1:
+        log(f"8-bit areas with {len(eight)} colour tables: CLUT ids {slots8[:len(eight)]}")
+    for j, (mdl, clut) in enumerate(eight):
+        cid = slots8[j]
+        pal = src[mdl].cluts.get(clut, [0] * 256)
+        runs8.append((cid, list(pal[:256]) + [0] * (256 - len(pal[:256]))))
         for (m_, mat) in groups:
-            if m_ == mdl and mat & 0x8000:
-                new_mat[(m_, mat)] = 0x8000 | cid
-                pal = src[m_].cluts.get(mat & 0x7eff, [0] * 256)
-                runs8.append((cid, list(pal[:256]) + [0] * (256 - len(pal[:256]))))
-                break
-        for (m_, mat) in groups:                 # all of this model's 8-bit materials share it
-            if m_ == mdl and mat & 0x8000:
+            if m_ == mdl and mat & 0x8000 and mat & 0x7eff == clut:
                 new_mat[(m_, mat)] = 0x8000 | cid
     for (m_, mat) in sorted(groups):
         if mat & 0x8000:
@@ -274,18 +290,28 @@ def build(root: Path, base: int, parts: dict, log=print):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, required=True)
-    ap.add_argument("--base", type=int, required=True)
+    ap.add_argument("--base", type=int)
     ap.add_argument("--part", action="append", default=[], help="name=model, names: " + ", ".join(PARTS))
-    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--out", type=Path)
+    ap.add_argument("--heights", nargs="*", type=int, help="print {model: standing height} as JSON")
     a = ap.parse_args()
     X.setup(a.root)
+    if a.heights is not None:
+        print(json.dumps({m: round(Source(a.root, m).height(), 1) for m in a.heights}))
+        return
+    if a.base is None or a.out is None:
+        raise SystemExit("ERROR: --base and --out are needed to build")
     parts = {}
     for p in a.part:
         n, v = p.split("=")
         if n not in PARTS:
             raise SystemExit(f"unknown part {n}")
         parts[n] = int(v)
-    stock, new, tx, report = build(a.root, a.base, parts)
+    import model_import as MI
+    try:
+        stock, new, tx, report = build(a.root, a.base, parts)
+    except MI.Budget as error:
+        raise SystemExit(f"ERROR: {error}")
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_bytes(X.own_model_file(a.base, stock, new, tx))
     rep = {k: v for k, v in report.items() if k not in ("rows", "texture")}

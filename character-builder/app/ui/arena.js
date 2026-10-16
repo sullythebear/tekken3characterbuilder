@@ -6,7 +6,7 @@
     [5, "Nina / Anna / Gun Jack"], [6, "Hwoarang"], [7, "Xiaoyu"], [8, "Eddy"], [9, "Jin"],
     [10, "Julia / Heihachi"], [14, "Ogre / True Ogre"], [17, "Gon"], [19, "Dr. B"]];
   const RECORD_SECONDS = 3;
-  let recordingWav = null, recorder = null, audio = null;
+  let recordingWav = null, rawWav = null, recorder = null, audio = null;
 
   function fillLists() {
     const stage = $("stage"), music = $("music");
@@ -24,7 +24,7 @@
   }
 
   function fill() {
-    recordingWav = null;
+    recordingWav = rawWav = null;
     styleLabels();
     $("stage").value = state.current.stage ?? "";
     $("music").value = state.current.music ?? "";
@@ -92,9 +92,16 @@
   }
 
   async function useSound(blob) {
+    try { rawWav = await toWav(blob); await processSound(); }
+    catch (e) { toast(e.message || "That sound could not be read."); }
+  }
+
+  // the server trims and levels it (and with the effect, makes it the announcer's): what plays
+  // here is what the game plays
+  async function processSound() {
+    if (!rawWav) return;
     try {
-      // the server trims and levels it: what plays here is what the game plays
-      const r = await api("/api/namecall/preview", { mode: "own", wav: await toWav(blob) });
+      const r = await api("/api/namecall/preview", { mode: "own", wav: rawWav, effect: $("name-effect").checked });
       recordingWav = r.wav;
       $("name-call").value = "own";
       markDirty();
@@ -129,6 +136,7 @@
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });
     $("name-play").addEventListener("click", preview);
     $("name-record").addEventListener("click", record);
+    $("name-effect").addEventListener("change", processSound);
     $("name-file").addEventListener("change", (e) => { if (e.target.files[0]) useSound(e.target.files[0]); e.target.value = ""; });
   }
 

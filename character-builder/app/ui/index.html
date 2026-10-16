@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/ui/style.css">
 <script src="/ui/costumes.js" defer></script>
 <script src="/ui/arena.js" defer></script>
+<script src="/ui/builder.js" defer></script>
 <script src="/ui/app.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
 </head>
@@ -106,6 +107,18 @@
       </div>
 
       <div class="editor-page" id="page-colours" role="tabpanel" aria-labelledby="tab-colours" hidden>
+        <fieldset class="field" id="kit-section" hidden>
+          <legend>Body parts</legend>
+          <p class="hint">Mix body parts of Tekken 3's own fighters on your style's skeleton. Only fighters of a similar build are offered (height within 7 %). Check the result in the 3D preview; Undo is on the Model Importer page. The parts are read from your own Tekken 3 disc; packages carry only your choices.</p>
+          <div class="arena-lists" id="kit-parts"></div>
+          <div class="model-import-row">
+            <label for="kit-costume">Replaces</label>
+            <select id="kit-costume"></select>
+            <button class="btn btn-ghost" type="button" id="kit-random">Randomize</button>
+            <button class="btn btn-primary" type="button" id="kit-build">Build</button>
+          </div>
+          <p class="hint" id="kit-progress" hidden></p>
+        </fieldset>
         <fieldset class="field">
           <legend>Costumes and colours</legend>
           <p class="hint">Recolour the donor's costumes in the 3D preview. Each colour variant can replace a costume or become an extra costume in the game; variants are saved with your fighter.</p>
@@ -175,6 +188,12 @@
             <label class="btn btn-ghost file-btn">Choose image<input type="file" id="portrait-file" accept="image/*" hidden></label>
             <button class="btn btn-ghost" type="button" id="portrait-from-model" hidden title="Head and shoulders of the fighter's own 3D model, turned a little">Make from 3D model</button>
           </div>
+          <div class="arena-lists" id="portrait-look" hidden>
+            <label>Angle <select id="look-angle"><option value="turned">Turned a little</option><option value="front">Front</option><option value="other">Turned the other way</option><option value="profile">Profile</option></select></label>
+            <label>Framing <select id="look-frame"><option value="shoulders">Head and shoulders</option><option value="close">Close-up</option><option value="chest">To the chest</option></select></label>
+            <label>Light <select id="look-light"><option value="left">From the front left</option><option value="front">Flat from the front</option><option value="dramatic">Dramatic from the side</option></select></label>
+            <label>Background <select id="look-backdrop"><option value="warm">Warm glow</option><option value="cool">Cool blue</option><option value="red">Red</option><option value="dark">Dark</option></select></label>
+          </div>
           <div class="sliders" id="portrait-controls" hidden>
             <label>Zoom <input type="range" id="zoom" min="100" max="300" value="100"></label>
             <label>Horizontal <input type="range" id="pan-x" min="-100" max="100" value="0"></label>
@@ -201,6 +220,7 @@
             <span class="portrait-buttons" id="name-own" hidden>
               <button class="btn btn-ghost" type="button" id="name-record">Record</button>
               <label class="btn btn-ghost file-btn">Choose sound<input type="file" id="name-file" accept="audio/*" hidden></label>
+              <label class="check"><input type="checkbox" id="name-effect"> Announcer effect (deeper, with echo)</label>
             </span>
           </div>
           <p class="hint" id="name-hint"></p>

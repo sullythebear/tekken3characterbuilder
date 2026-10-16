@@ -10,6 +10,7 @@
 | Portrait on the select screen | **tested** | no (saved for later) |
 | Costume colour variants | **tested** (patch 9) | no |
 | Own 3D model | **tested** (patches 10-14) | no |
+| Body parts from Tekken 3's fighters | **tested** (similar build only, see `plans/kitbash.md`) | no |
 | Home stage and music | **tested** (patch 17) | no |
 | Name call | **tested** in log, Practice only (as Tekken 3 itself) | no |
 | CPU opponents | **tested** (patch 15) | no |

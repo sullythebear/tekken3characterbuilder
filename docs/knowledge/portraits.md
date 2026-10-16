@@ -10,3 +10,12 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   (index 0 transparent). The builder's packs pass the runtime's checks (**code**, validated offline).
 - Name plate: 4bpp, max 76 px wide, letters cut from the fighter-name bitmaps on the disc
   (`disc/SLUS_004.02`). There is no F or Q; Z, V, `-`, `.` and 2 are drawn.
+
+## Portrait Lab presets (2026-10-16, tested offline and in the browser pane)
+
+- `model_export.own_portrait(..., look=)`: `PORTRAIT_ANGLES` (yaw), `PORTRAIT_FRAMES` (share of
+  the figure's height shown), `PORTRAIT_LIGHTS` (direction, ambient, direct), `PORTRAIT_BACKDROPS`
+  (base colour, glow). CLI `ownportrait --look '{"angle":"front",...}'`; server validates names
+  (`PORTRAIT_LOOK`); UI selects in the Portrait Lab tab, shown when the fighter has an own model.
+- Verified: Medea in three looks (default; front/close/dramatic/red; profile/chest/flat/cool),
+  KITTEST front/red from the UI. The close-up can touch the top of tall hair.

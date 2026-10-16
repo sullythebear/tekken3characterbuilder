@@ -209,7 +209,7 @@ def nav(game: Path, steps: list[str], env: dict | None = None):
     """Runs a step script after boot; output in live/nav. Steps:
     <button>[:frames]   press (cross square triangle circle up down left right start r2 l2), then wait
     route:<name>        a ROUTES entry (arcade, team, practice)
-    wait:N  shot:NAME  vram:NAME (NAME.vram)  ram:ADDR:LEN  film:FRAMES:EVERY (shots named by state)
+    wait:N  shot:NAME  vram:NAME (NAME.vram)  dump:NAME (RAM, NAME.ram)  ram:ADDR:LEN  film:FRAMES:EVERY (shots named by state)
     log:TEXT[:SECONDS]  waits until the game log has TEXT, prints the state then
     fight               waits until a fight's fighters show (state 8, phase >= 6)"""
     g = Game(game, False, env)
@@ -229,6 +229,11 @@ def nav(game: Path, steps: list[str], env: dict | None = None):
                 g.shot(out / f"{arg}.png")
             elif name == "vram":
                 (out / f"{arg}.vram").write_bytes(vram_dump(g))
+            elif name == "dump":                      # the whole 2 MB of RAM, NAME.ram
+                ram = bytearray()
+                for at in range(0x80000000, 0x80200000, 0x4000):
+                    ram += bytes.fromhex(g.q(cmd="read_ram", addr=f"{at:08x}", len=0x4000)["hex"])
+                (out / f"{arg}.ram").write_bytes(ram)
             elif name == "ram":
                 at, n = arg.split(":")
                 print(at, g.q(cmd="read_ram", addr=at, len=int(n))["hex"])

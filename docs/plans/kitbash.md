@@ -2,7 +2,24 @@
 
 Chosen 2026-10-03 after the FBX import could not reach Namco's look automatically (user).
 
-## Status
+## Status (2026-10-16: in the builder, Builder tab "Body parts")
+
+- **tested** in game (t3live, Nina base, 0 words differ, clean textures): Julia head + Jin 1
+  torso; Xiaoyu 2 head/body + Lei 2 arms + Xiaoyu 2 right leg. Offline renders clean: Xiaoyu head,
+  Julia head + Law body, Lei head, Law body, Lei arms, Xiaoyu legs on Nina.
+- Parts are `head` (rows 19, 20), `body` (1-4), `arm_l/r`, `leg_l/r`. Row 20 must stay with the
+  head: models put the back of the head or the chest in it (Heihachi), so splitting there tore heads.
+- **Fit gate**: only models within 7 % of the base's standing height (`kitbash.FIT`, `--heights`,
+  cached in `cache/kit-heights.json`). Heihachi (+8 %) on Nina: gaps at the waist and ankles,
+  floating feet; refused with a message. 28 of 49 models fit Nina 1.
+- 8-bit CLUTs: one per source CLUT (was one per model: Heihachi's torso took his head's colours).
+- Texture budget: parts of many fighters may not fit one page (Bryan 1 arm + leg on Nina): refused
+  with "take parts from fewer different fighters"; the randomizer uses one or two fighters.
+  Random builds: 5 of 6 built.
+- `model_export.own_model_file` splits CLUT runs over 256 colours (the game refused the file).
+- Packages carry `own_model.kit`; import rebuilds the model (`build_kit`, no disc data shipped).
+
+## Earlier status
 
 - `character-builder/app/kitbash.py` (venv): `build(root, base, parts)` with parts head, torso,
   pelvis, arm_l, arm_r, leg_l, leg_r -> any of the 48 models; base = the donor's model

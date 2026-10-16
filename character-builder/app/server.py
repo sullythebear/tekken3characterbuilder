@@ -409,7 +409,7 @@ def safe_id(value: str) -> str:
     return value
 
 
-def decode_wav(data_url: str | None, process: bool = False) -> bytes | None:
+def decode_wav(data_url: str | None, process: bool = False, effect: bool = False) -> bytes | None:
     """A name call sound (a WAV data URL) as 44100 Hz mono WAV of at most 3 s. process: a new
     recording or file, trimmed and brought to the game's level (done once, when it is chosen;
     saving and packages keep it as it is)."""
@@ -422,7 +422,10 @@ def decode_wav(data_url: str | None, process: bool = False) -> bytes | None:
     if len(raw) > MAX_UPLOAD:
         raise ValueError("The name call sound is too long.")
     samples = name_call.read_wav(raw)
-    samples = name_call.own(samples) if process else samples[:int(name_call.MAX_SECONDS * name_call.RATE)]
+    if process:                               # effect: the automatic voice's announcer sound
+        samples = name_call.announcer(samples) if effect else name_call.own(samples)
+    else:
+        samples = samples[:int(name_call.MAX_SECONDS * name_call.RATE)]
     return name_call.wav_bytes(samples)
 
 
@@ -435,7 +438,7 @@ def name_call_preview(data: dict) -> dict:
             raise ValueError("Enter the fighter's name first.")
         wav = name_call.wav_bytes(name_call.announcer(name_call.speak(name)))
     elif data.get("wav"):
-        wav = decode_wav(data.get("wav"), process=True)
+        wav = decode_wav(data.get("wav"), process=True, effect=bool(data.get("effect")))
     else:
         path = DATA / safe_id(str(data.get("id", ""))) / "namecall.wav"
         if not path.is_file():
@@ -917,8 +920,15 @@ def import_model(cid: str, costume: int, parts=None, on_line=None) -> dict:
     return get_character(folder.name)
 
 
-def own_portrait(cid: str) -> dict:
-    """A select-screen portrait made from the fighter's own 3D model (PNG, base64)."""
+PORTRAIT_LOOK = {"angle": ("turned", "front", "other", "profile"), "frame": ("shoulders", "close", "chest"),
+                 "light": ("left", "front", "dramatic"), "backdrop": ("warm", "cool", "red", "dark")}
+
+
+def own_portrait(cid: str, look=None) -> dict:
+    """A select-screen portrait made from the fighter's own 3D model (PNG, base64). look: Portrait
+    Lab presets {angle, frame, light, backdrop} (model_export.PORTRAIT_*)."""
+    look = look if isinstance(look, dict) else {}
+    clean = {k: look[k] for k, names in PORTRAIT_LOOK.items() if look.get(k) in names}
     root = project_root()
     source = DATA / safe_id(cid) / "model.bin"
     if not root or not source.is_file():
@@ -926,7 +936,8 @@ def own_portrait(cid: str) -> dict:
     out = CACHE / f"portrait-{safe_id(cid)}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     with model_lock:
-        problem, _ = run_model_tool(root, ["ownportrait", "--file", str(source), "--out", str(out)])
+        problem, _ = run_model_tool(root, ["ownportrait", "--file", str(source), "--out", str(out),
+                                           "--look", json.dumps(clean)])
     if problem or not out.is_file():
         raise ValueError(problem or "The portrait could not be made.")
     png = base64.b64encode(out.read_bytes()).decode()
@@ -1005,6 +1016,120 @@ def undo_model(cid: str) -> dict:
     data = json.loads(info.read_text(encoding="utf-8"))
     data["own_model"] = before
     info.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return get_character(folder.name)
+
+
+# --------------------------------------------------- character builder --
+
+KIT_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r")   # kitbash.PARTS
+
+
+def kit_models() -> list[int]:
+    """The fighter models a body part can come from: every costume model of the 21 styles."""
+    donors = donor_models()
+    if not donors.get("available"):
+        raise ValueError(donors.get("reason", "The fighters' models are not available."))
+    return sorted({m for models in donors["donors"].values() for m in models})
+
+
+KIT_FIT = 0.07                                   # kitbash.FIT: parts of a similar build only
+
+
+def kit_heights() -> dict:
+    """{model: standing height} of every kit model, measured once (kitbash.py --heights), cached."""
+    path = CACHE / "kit-heights.json"
+    if not path.is_file():
+        root = project_root()
+        try:
+            done = subprocess.run([venv_python(root), str(APP / "kitbash.py"), "--root", str(root), "--heights",
+                                   *map(str, kit_models())], capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", timeout=300, creationflags=NO_WINDOW, cwd=str(APP))
+            heights = json.loads(done.stdout.strip().splitlines()[-1])
+        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+            raise ValueError("The fighters' sizes could not be measured.") from None
+        CACHE.mkdir(exist_ok=True)
+        path.write_text(json.dumps(heights), encoding="utf-8")
+    return {int(k): v for k, v in json.loads(path.read_text(encoding="utf-8")).items()}
+
+
+def clean_kit(parts) -> dict:
+    """{part: model} for the body parts taken from another fighter (the rest stays the style's)."""
+    if not isinstance(parts, dict):
+        return {}
+    allowed = set(kit_models())
+    out = {}
+    for name in KIT_PARTS:
+        value = parts.get(name)
+        if value in (None, "", -1):
+            continue
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"Unknown model for {name}.") from None
+        if value not in allowed:
+            raise ValueError(f"Unknown model for {name}.")
+        out[name] = value
+    return out
+
+
+def run_kitbash(root: Path, base: int, kit: dict, out: Path) -> tuple[str | None, str]:
+    """kitbash.py: the style's model with body parts of other fighters -> own model file."""
+    args = [venv_python(root), str(APP / "kitbash.py"), "--root", str(root), "--base", str(base), "--out", str(out)]
+    for name, model in kit.items():
+        args += ["--part", f"{name}={model}"]
+    try:
+        done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=300, creationflags=NO_WINDOW, cwd=str(APP))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"The character builder could not run: {error}", ""
+    if done.returncode:
+        lines = (done.stdout + done.stderr).strip().splitlines()
+        last = lines[-1] if lines else "The character builder failed."
+        return (last[7:] if last.startswith("ERROR: ") else last), ""
+    return None, done.stdout
+
+
+def build_kit(cid: str, costume: int, parts, keep_undo: bool = True) -> dict:
+    """A model built from Tekken 3's own fighters' body parts (read from the player's disc) over
+    the style's costume: characters/<id>/model.bin, own_model {"kit": {...}}. Like an import, the
+    model it replaces can be restored with Undo."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("The character builder needs Tekken 3 Expanded.")
+    kit = clean_kit(parts)
+    if not kit:
+        raise ValueError("Choose at least one body part from another fighter.")
+    folder = DATA / safe_id(cid)
+    character = get_character(folder.name)
+    models = donor_models()["donors"].get(str(character["donor"]), [])
+    if not 0 <= costume < len(models):
+        raise ValueError("This style has no such costume.")
+    out = folder / "model-new.bin"
+    with model_lock:
+        problem, text = run_kitbash(root, models[costume], kit, out)
+    if problem or not out.is_file():
+        out.unlink(missing_ok=True)
+        raise ValueError(problem or "The character builder failed.")
+    data = json.loads((folder / "character.json").read_text(encoding="utf-8"))
+    if keep_undo:                                     # as import_model: the old model for Undo
+        for old in folder.glob("source-prev.*"):
+            old.unlink()
+        (folder / "model-prev.bin").unlink(missing_ok=True)
+        before = data.get("own_model")
+        if (folder / "model.bin").is_file():
+            (folder / "model.bin").replace(folder / "model-prev.bin")
+            for old in folder.glob("source.*"):
+                old.replace(folder / f"source-prev{old.suffix}")
+        kept = before if (folder / "model-prev.bin").is_file() else None
+        (folder / "model-prev.json").write_text(json.dumps({"own_model": kept}), encoding="utf-8")
+    for old in folder.glob("source.*"):               # a built model has no source file
+        old.unlink()
+    out.replace(folder / "model.bin")
+    made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
+    data["own_model"] = {"file": "Character Builder", "kit": kit, "costume": costume, "model": models[costume],
+                         "triangles": int(made[-1]) if made else None, "textured": True,
+                         "imported": datetime.now().isoformat(timespec="seconds")}
+    (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     return get_character(folder.name)
 
 
@@ -1267,6 +1392,13 @@ def import_character(payload: str) -> dict:
             record[key] = "data:image/png;base64," + base64.b64encode(files[name]).decode()
     saved = save_character(record)
     name = next((n for n in ("source.fbx", "source.glb", "source.vrm") if n in files), None)
+    own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
+    if not name and own.get("kit"):                 # a Character Builder model: rebuilt from the choices
+        try:
+            built = build_kit(saved["id"], int(own.get("costume", 0) or 0), own["kit"], keep_undo=False)
+            return {**built, "model_warnings": []}
+        except ValueError as error:
+            return {**saved, "model_warnings": [f"The package's body parts could not be built: {error}"]}
     if not name:
         return saved
     folder = DATA / saved["id"]
@@ -1455,10 +1587,21 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/undo":
                 saved = undo_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/kit/models":
+                donors = donor_models()
+                if not donors.get("available"):
+                    raise ValueError(donors.get("reason", "The fighters' models are not available."))
+                heights = kit_heights()
+                return self._json({"models": [{"model": m, "donor": int(d), "costume": c, "height": heights.get(m)}
+                                              for d, ms in donors["donors"].items() for c, m in enumerate(ms)],
+                                   "parts": list(KIT_PARTS), "fit": KIT_FIT})
+            if path == "/api/kit/build":
+                saved = build_kit(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"))
+                return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/namecall/preview":
                 return self._json(name_call_preview(data))
             if path == "/api/model/portrait":
-                return self._json(own_portrait(str(data.get("id", ""))))
+                return self._json(own_portrait(str(data.get("id", "")), data.get("look")))
             if path == "/api/model/preview":
                 return self._json(model_preview(str(data.get("id", "")), data.get("parts")))
             if path == "/api/model/remove":

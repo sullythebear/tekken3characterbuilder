@@ -21,6 +21,18 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 - The name call has not been heard by a person (headless runs have no audio).
 - Commits after `ce31517` are local only (no push without the owner's permission, D6).
 
+## Since then
+
+- Character Builder body parts (kitbash in the UI, fit gate, packages rebuild them): tested in
+  game and in the browser pane, see `plans/kitbash.md`.
+- Portrait Lab presets (angle, framing, light, background): tested offline and in the UI.
+- Voice Lab: announcer effect for own recordings (unit test; browser pane: processed, playback
+  blocked only by the automated browser's autoplay rule).
+- `t3live nav dump:NAME` (whole RAM). Move Lab research started: the COMMAND LIST buffer
+  (0x800A3628) holds names and inputs with word tokens (bytes 0x01-0x1F, 0xA0-0xBF, 0xFB/0xFC);
+  the word table was not found as ASCII in RAM yet.
+- Regression `t3cb regress --all`: 11 models, all byte-identical (after the CLUT-run split).
+
 ## Next
 
 1. Character Builder parts (kitbash UI).

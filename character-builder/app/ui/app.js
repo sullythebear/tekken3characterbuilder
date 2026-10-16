@@ -237,7 +237,8 @@ async function portraitFromModel() {
   const label = button.textContent;
   button.textContent = "Rendering…";
   try {
-    const res = await api("/api/model/portrait", { id: state.current.id });
+    const look = Object.fromEntries(["angle", "frame", "light", "backdrop"].map((k) => [k, $(`look-${k}`).value]));
+    const res = await api("/api/model/portrait", { id: state.current.id, look });
     const bytes = Uint8Array.from(atob(res.png), (c) => c.charCodeAt(0));
     await useFile(new File([bytes], "portrait.png", { type: "image/png" }));
     toast("Portrait made from the 3D model: adjust it, then save");
@@ -287,12 +288,13 @@ function fillForm() {
   renderDonors();
   renderStage();
   T3Arena.fill();
+  T3Builder.fill();
   if (window.T3Model) T3Model.refresh();
   showPortraitFromModel();
 }
 
 function showPortraitFromModel() {
-  $("portrait-from-model").hidden = !(state.current.id && state.current.has_model);
+  $("portrait-from-model").hidden = $("portrait-look").hidden = !(state.current.id && state.current.has_model);
 }
 
 async function selectCharacter(character) {
@@ -610,6 +612,7 @@ async function pollBuild() {
 function wire() {
   $("character-form").addEventListener("submit", save);
   T3Arena.init();
+  T3Builder.init();
   $("name").addEventListener("input", (e) => {
     const cleaned = e.target.value.toUpperCase().replace(NAME_BLOCKED, "");
     if (cleaned !== e.target.value) e.target.value = cleaned;

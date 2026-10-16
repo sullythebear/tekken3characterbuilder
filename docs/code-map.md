@@ -91,6 +91,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app.js` – pages, character form, donors (`renderDonors`), portrait (`drawPortrait`,
   `quantizePS1`), roster, steps/gauges, project panel.
 - `model3d.js` – the 3D model page (upload, check/lock, import, remove).
+- `builder.js` – Character Builder body parts (`T3Builder`: lists filtered by build, randomize, build via `/api/kit/build`).
 - `arena.js` – stage, music and name call (`T3Arena`: lists, preview, record via MediaRecorder,
   `toWav` decodes any sound to 44100 Hz mono WAV in the browser).
 - `costumes.js` – WebGL preview (shows the own model on its costume) (`createViewer`), `parseModel`, clothing pieces (`texelUse`,

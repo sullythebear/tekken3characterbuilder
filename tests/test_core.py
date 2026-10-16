@@ -168,5 +168,26 @@ class PatchDataTests(unittest.TestCase):
                 self.assertIsInstance(count, int); self.assertGreaterEqual(count, 1)
 
 
+class CharacterBuilderTests(unittest.TestCase):
+    def test_parts_match_kitbash(self):
+        import ast
+        tree = ast.parse((APP / "kitbash.py").read_text(encoding="utf-8"))
+        parts = next(n.value for n in tree.body if isinstance(n, ast.Assign) and n.targets[0].id == "PARTS")
+        names = [k.value for k in parts.keys]
+        self.assertEqual(tuple(names), server.KIT_PARTS)
+        fit = next(n.value.value for n in tree.body if isinstance(n, ast.Assign) and n.targets[0].id == "FIT")
+        self.assertEqual(fit, server.KIT_FIT)
+
+
+class VoiceLabTests(unittest.TestCase):
+    def test_effect_is_deeper_and_longer(self):
+        url = "data:audio/wav;base64," + base64.b64encode(tone()).decode()
+        plain = name_call.read_wav(server.decode_wav(url, process=True))
+        effect = name_call.read_wav(server.decode_wav(url, process=True, effect=True))
+        self.assertGreater(len(effect), len(plain) * 1.15)      # 18 % lower and an echo tail
+        kept = name_call.read_wav(server.decode_wav(url))        # saving keeps it as it is
+        self.assertAlmostEqual(len(kept) / 44100, 0.9, delta=0.01)
+
+
 if __name__ == "__main__":
     unittest.main()

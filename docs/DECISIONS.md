@@ -25,3 +25,6 @@ Important technical choices and why. Newest last.
 - **D7 (2026-10-16) Team Battle tiles (patch 18).** Custom tiles at VRAM (384,256), page 0x96,
   palettes cut to 128 colours in C so two share a row; measured free at the selector and the
   FIGHT screen. Alternative (dynamic slots in the Tag area) was more code for no gain.
+- **D8 (2026-10-16) Kitbash fit gate instead of free choice.** Parts are offered only from
+  fighters within 7 % of the base's height; the server refuses the rest. Arbitrary mixes left gaps
+  and torn heads; a geometric re-segmentation would be research with an open outcome.

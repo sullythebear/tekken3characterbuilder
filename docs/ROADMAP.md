@@ -24,10 +24,10 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 | Module | Now | Next |
 |---|---|---|
-| Character Builder | style (donor), name, colour variants, costumes | parts from the player's disc (`kitbash.py` UI), presets, randomizer |
+| Character Builder | style (donor), name, colour variants, costumes, **body parts from the disc's fighters (similar build, randomizer)** | material/colour presets, package round trip of a kit fighter in game, kit for Recompiled? (no: own models are Expanded only) |
 | Model Importer | FBX/GLB/VRM import, parts choices, progress, undo, regression | before/after preview side by side, conversion settings exposed |
-| Portrait Lab | image upload + crop, portrait from the 3D model | camera/light/background presets, several variants |
-| Voice Lab | name call: automatic, own sound (record/file), silent | trim/volume controls, variants per costume? (research) |
+| Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark) | several saved variants per fighter |
+| Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |
 | Stage Lab | home stage + music per fighter (patch 17) | **research**: stage file format before any editor |
 | Move Lab | whole movesets (donor) | **research**: move list of a donor read-only, then one-value change |
 
