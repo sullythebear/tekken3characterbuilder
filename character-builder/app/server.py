@@ -18,7 +18,7 @@ import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 import name_call  # noqa: E402
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"

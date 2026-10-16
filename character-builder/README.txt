@@ -1,4 +1,4 @@
-DIZZY CHARACTER CREATOR 0.4.0
+DIZZY CHARACTER CREATOR 0.5.0
 =============================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
@@ -48,28 +48,65 @@ Costumes and colours
 With Tekken 3 Expanded, "3D model" (above the portrait) shows your fighter's
 costumes in 3D, read from your own disc the first time (kept in the "cache"
 folder). Drag to turn, scroll to zoom, double-click to reset.
-On the "Colours" tab (next to "Fighter"), "+ Colour variant" makes a
+On the "Builder" tab, "+ Colour variant" makes a
 recoloured copy of a costume. Under "Clothing" every piece of clothing and
 accessory is listed (click one, or click it on the model): give it a colour,
 or open it to change its colours one by one. "Whole costume" shifts all
-colours at once, "Schemes" colours the biggest pieces in one go. Under "In the
+colours at once, "Schemes" colours the biggest pieces in one go ("Surprise me":
+a random matching scheme). Under "In the
 game" choose where it goes: it can replace one of the style's costumes, or,
 for styles with two costumes, be costume 3 (press Start on the select
 screen). Save, Update/Build if the creator asks, then restart the game.
 
-Own 3D models
--------------
-With Tekken 3 Expanded, the "3D model" tab gives a fighter its own model:
+Body parts (Builder tab)
+------------------------
+With Tekken 3 Expanded, "Body parts" builds a body from Tekken 3's own
+fighters: head, body, arms and legs, each from any fighter of a similar build
+(read from your own disc; packages carry only your choices). "Randomize"
+picks for you; "Build" puts it on the chosen costume. Undo is on the Model
+Importer tab. A costume with an own model keeps that model's colours.
+
+Own 3D models (Model Importer tab)
+---------------------------------
+With Tekken 3 Expanded, the "Model Importer" tab gives a fighter its own model:
 choose a rigged .fbx (FBX Binary) or .glb file in T-pose or A-pose. Models
 without a skeleton are locked. Big models are reduced to PS1 size with a new
 texture (1 to 3 minutes). Hair, tails or horns that stick out are folded
 down; change that per part before you import. "What makes a model work
 well?" on that tab lists the details.
 
+Portrait Lab
+------------
+Choose an image, or (with an own 3D model) "Make from 3D model" with an
+angle, framing, light and background.
+
+Voice Lab
+---------
+The announcer calls your fighter's name in Practice, as Tekken 3 does for its
+own fighters: a computer voice (Windows' own, automatic), your own recording
+or sound file (optionally with an announcer effect), or silent.
+
+Stage Lab
+---------
+Your fighter's home stage and theme (where it is met in Arcade), and the
+stage's colours: night, sunset, dusk, ice, inferno, black and white, or your
+own colour. New stage shapes are not possible.
+
+Move Lab
+--------
+The moves of your fighter's style, as Tekken 3's COMMAND LIST shows them
+(read from your disc). Changing single moves is not possible yet.
+
+Restore points
+--------------
+Every save keeps the settings it replaced (the last 20). "Restore point" on
+the Fighter tab brings one back; the replaced settings become a restore
+point too.
+
 Test
 ----
 "Test" (next to Play) builds the game if needed, starts it, and when you
-close the game writes logs	est-report.md: versions, build result, the
+close the game writes logs/test-report.md: versions, build result, the
 Custom page list and the game's Custom/TTT1 log lines. It also appears in
 the creator under "Test report", with a Copy button.
 
