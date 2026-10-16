@@ -238,5 +238,22 @@ class RestorePointTests(CharacterTests):
         self.assertEqual(len(server.restore_points(c["id"])), server.RESTORE_POINTS)
 
 
+class StageLabTests(unittest.TestCase):
+    def test_custom_look_args(self):
+        args, label = server.stage_look_args("custom", "#30FF60", 70)
+        self.assertEqual(args, ["--look", "custom", "--tint", "30ff60", "--strength", "70"])
+        self.assertEqual(label, "custom-30ff60-70")
+        self.assertEqual(server.stage_look_args("night", None, None), (["--look", "night"], "night"))
+        with self.assertRaises(ValueError):
+            server.stage_look_args("custom", "red; rm", 50)
+
+    def test_validate_keeps_tint(self):
+        c = server.validate_character({"name": "A", "donor": 1, "stage_look": "custom", "stage_tint": "#00ff00",
+                                       "stage_strength": 250})
+        self.assertEqual((c["stage_look"], c["stage_tint"], c["stage_strength"]), ("custom", "#00ff00", 100))
+        with self.assertRaises(ValueError):
+            server.validate_character({"name": "A", "donor": 1, "stage_look": "disco"})
+
+
 if __name__ == "__main__":
     unittest.main()

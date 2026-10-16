@@ -30,6 +30,9 @@
     $("music").value = state.current.music ?? "";
     $("name-call").value = state.current.name_call || "auto";
     $("stage-look").value = state.current.stage_look || "";
+    $("stage-tint").value = state.current.stage_tint || "#ff8040";
+    $("stage-strength").value = state.current.stage_strength ?? 60;
+    $("stage-tint-row").hidden = $("stage-look").value !== "custom";
     showMode();
     sheet();
   }
@@ -48,7 +51,9 @@
   async function sheet() {
     const img = $("stage-sheet");
     if (state.current.donor === null || $("page-stage").hidden) return;
-    const want = { donor: state.current.donor, stage: $("stage").value, look: $("stage-look").value };
+    $("stage-tint-row").hidden = $("stage-look").value !== "custom";
+    const want = { donor: state.current.donor, stage: $("stage").value, look: $("stage-look").value,
+      tint: $("stage-tint").value, strength: Number($("stage-strength").value) };
     const key = JSON.stringify(want);
     if (key === sheetFor) return;
     sheetFor = key;
@@ -63,7 +68,8 @@
   function body() {
     const value = (id) => ($(id).value === "" ? null : Number($(id).value));
     const b = { stage: value("stage"), music: value("music"), name_call: $("name-call").value,
-      stage_look: $("stage-look").value || null };
+      stage_look: $("stage-look").value || null, stage_tint: $("stage-tint").value,
+      stage_strength: Number($("stage-strength").value) };
     if (recordingWav) b.name_call_wav = recordingWav;
     return b;
   }
@@ -153,7 +159,8 @@
   function init() {
     fillLists();
     for (const id of ["stage", "music", "stage-look"]) $(id).addEventListener("change", markDirty);
-    for (const id of ["stage", "stage-look"]) $(id).addEventListener("change", sheet);
+    for (const id of ["stage", "stage-look", "stage-tint", "stage-strength"]) $(id).addEventListener("change", sheet);
+    for (const id of ["stage-tint", "stage-strength"]) $(id).addEventListener("change", markDirty);
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });
     $("name-play").addEventListener("click", preview);
     $("name-record").addEventListener("click", record);

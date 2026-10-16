@@ -25,9 +25,18 @@ LOOKS = {"night": ((0.42, 0.5, 0.85), 0.25), "sunset": ((1.15, 0.78, 0.55), 0.0)
          "ice": ((0.75, 0.95, 1.2), 0.35), "inferno": ((1.25, 0.6, 0.4), 0.2)}
 
 
-def recolour(colours: np.ndarray, look: str) -> np.ndarray:
-    """PS1 colours (u16) through a look; 0 (see-through) and the STP bit are kept."""
-    mul, grey = LOOKS[look]
+def custom_look(tint: str, strength: int) -> tuple:
+    """A look from a colour (RRGGBB) and a strength (0..100): the colours lean towards it."""
+    s = max(0, min(100, int(strength))) / 100
+    rgb = [int(tint[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    avg = max(sum(rgb) / 3, 0.05)
+    return tuple((1 - s) + s * min(c / avg, 2.0) * (0.55 + 0.45 * avg) for c in rgb), 0.35 * s
+
+
+def recolour(colours: np.ndarray, look) -> np.ndarray:
+    """PS1 colours (u16) through a look (a LOOKS name or a custom_look tuple); 0 (see-through)
+    and the STP bit are kept."""
+    mul, grey = LOOKS[look] if isinstance(look, str) else look
     r = (colours & 31).astype(float); g = ((colours >> 5) & 31).astype(float); b = ((colours >> 10) & 31).astype(float)
     lum = 0.299 * r + 0.587 * g + 0.114 * b
     r, g, b = (lum + (c - lum) * (1 - grey) for c in (r, g, b))
@@ -100,13 +109,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--arena", type=int, required=True)
-    ap.add_argument("--look", choices=sorted(LOOKS))
+    ap.add_argument("--look", choices=sorted(LOOKS) + ["custom"])
+    ap.add_argument("--tint", default="ff8040", help="custom look: RRGGBB")
+    ap.add_argument("--strength", type=int, default=60, help="custom look: 0..100")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--preview", type=Path)
     a = ap.parse_args()
     if not 0 <= a.arena < STAGES:
         raise SystemExit("ERROR: no such stage")
     X.setup(a.root)
+    if a.look == "custom":
+        if not (len(a.tint) == 6 and all(c in "0123456789abcdefABCDEF" for c in a.tint)):
+            raise SystemExit("ERROR: --tint is RRGGBB")
+        a.look = custom_look(a.tint, a.strength)
     if a.out:
         if not a.look:
             raise SystemExit("ERROR: --out needs --look")

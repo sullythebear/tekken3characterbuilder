@@ -50,4 +50,3 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 1. Release 0.5.0 candidate (patches 17-19, Studio tabs) once the owner tested it.
 2. Move Lab: move records per move (damage, frames) next to the command list.
 3. Character Builder: colour presets for costumes; kitbash for other bases checked in game.
-4. Stage Lab: own tint colour (picker) besides the presets.

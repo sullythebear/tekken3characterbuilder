@@ -451,7 +451,18 @@ def name_call_preview(data: dict) -> dict:
 # 2026-10-16) and the colour looks of stage_look.py
 STAGE_ARENA = {0: 0, 1: 1, 2: 5, 3: 11, 4: 2, 5: 9, 6: 4, 7: 3, 8: 10, 9: 8, 10: 12, 11: 1, 12: 0, 13: 12,
                14: 6, 15: 2, 16: 9, 17: 13, 18: 9, 19: 14, 20: 6}
-STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno")
+STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno", "custom")
+
+
+def stage_look_args(look: str, tint, strength) -> tuple[list[str], str]:
+    """stage_look.py arguments for a look and its cache name ("custom": tint and strength)."""
+    if look != "custom":
+        return ["--look", look], look
+    tint = str(tint or "ff8040").lstrip("#").lower()
+    if not re.fullmatch(r"[0-9a-f]{6}", tint):
+        raise ValueError("The stage tint must be a colour such as #ff8040.")
+    strength = max(0, min(100, int(strength if strength is not None else 60)))
+    return ["--look", "custom", "--tint", tint, "--strength", str(strength)], f"custom-{tint}-{strength}"
 
 
 def run_stage_tool(root: Path, args: list[str]) -> str | None:
@@ -480,10 +491,11 @@ def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
     data = None
     if look:
         arena = stage_arena(fighter)
-        cached = CACHE / f"stage-{arena}-{look}.bin"
+        args, label = stage_look_args(look, fighter.get("stage_tint"), fighter.get("stage_strength"))
+        cached = CACHE / f"stage-{arena}-{label}.bin"
         if not cached.is_file():
             CACHE.mkdir(exist_ok=True)
-            problem = run_stage_tool(root, ["--arena", str(arena), "--look", look, "--out", str(cached)])
+            problem = run_stage_tool(root, ["--arena", str(arena), *args, "--out", str(cached)])
             if problem:
                 return f"Stage colours: {problem}"
         data = cached.read_bytes()
@@ -513,10 +525,11 @@ def stage_preview(data: dict) -> dict:
     look = data.get("look") or None
     if look and look not in STAGE_LOOKS:
         raise ValueError("That stage colour does not exist.")
-    out = CACHE / f"stage-{arena}-{look or 'original'}.png"
+    args, label = stage_look_args(look, data.get("tint"), data.get("strength")) if look else ([], "original")
+    out = CACHE / f"stage-{arena}-{label}.png"
     if not out.is_file():
         CACHE.mkdir(exist_ok=True)
-        problem = run_stage_tool(root, ["--arena", str(arena), *(["--look", look] if look else []), "--preview", str(out)])
+        problem = run_stage_tool(root, ["--arena", str(arena), *args, "--preview", str(out)])
         if problem:
             raise ValueError(problem)
     return {"png": base64.b64encode(out.read_bytes()).decode()}
@@ -570,6 +583,9 @@ def validate_character(data: dict) -> dict:
         if look not in STAGE_LOOKS:
             raise ValueError("That stage colour does not exist.")
         clean["stage_look"] = look
+        if look == "custom":                  # its colour and strength
+            args, _ = stage_look_args(look, data.get("stage_tint"), data.get("stage_strength"))
+            clean["stage_tint"], clean["stage_strength"] = "#" + args[3], int(args[5])
     mode = data.get("name_call", "auto")    # the announcer's call: automatic voice, own sound, none
     if mode not in name_call.MODES:
         raise ValueError("Choose how the announcer calls the name.")
