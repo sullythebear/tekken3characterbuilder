@@ -454,6 +454,13 @@ ROSTER = [
 ("    if((edges&(PAD_R2|PAD_L2)) && stock_saved)switch_page();",
  "    if((edges&PAD_R2) && stock_saved)switch_page(1);\n    else if((edges&PAD_L2) && stock_saved)switch_page(-1);", 1),
 ("            if(closed_on_tag && !page)switch_page();", "            if(closed_on_tag && !page)switch_page(closed_on_tag);", 1),
+# --- Team Battle icons: custom fighters share the Tag tiles' VRAM slots, so a mixed team showed
+# one of them with the other page's tile; the generic icon is drawn instead ---
+("            psx_mod_write_word(slot,21*4);\n            psx_mod_write_word(0x8002152c+21*8,uv);\n",
+ "            /* T3CB-PATCH-16: the other guest page's tiles are not in VRAM: the generic icon,\n"
+ "             * not another fighter's tile */\n"
+ "            if(tpage==TILE_PAGE && tiles_active && guest_page((unsigned)k)!=tile_set){uv=stock_icon_uv;tpage=stock_icon_page;}\n"
+ "            psx_mod_write_word(slot,21*4);\n            psx_mod_write_word(0x8002152c+21*8,uv);\n", 1),
 # --- CPU opponents: custom fighters are drawn as the TTT1 guests are (Arcade, Time Attack,
 # Survival, Team Battle, Tekken Ball: Expanded's loops over roster_count stay as they are) ---
 ("    if(nb && boss_one_in && !draw(boss_one_in)) {",

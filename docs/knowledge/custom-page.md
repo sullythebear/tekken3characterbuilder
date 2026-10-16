@@ -11,7 +11,7 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   the donor, and `guest_player()` excludes them from the TTT1 import pipeline.
 - Pages cycle 0 → 1 → 2 with R2 (back with L2); tiles of the shown guest page are uploaded
   into the Tag tile slots. The CHARACTER SELECT card reads CUSTOM on page 2.
-- Known limits: no Start costume, silent announcer name call,
+- Known limits: silent announcer name call,
   Team Battle icons may show the wrong tile.
 - **Tested:** the CUSTOM page appears (R2/L2), the CHARACTER SELECT card reads CUSTOM, the
   custom portrait, select tiles and name plate show, the VS screen shows the custom name and
@@ -133,3 +133,15 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   "Medea own model installed at 801F0DE8 (P2 ...)", P2 texture uploaded, 4 model checks 0 words
   differ, VS name plate MEDEA, screenshot shows both own models. "Medea model: missing
   ...TTT1-arcade-P1.3dm / rejected" is the TTT1 import trying a guest file first (also for P1).
+
+- **code** Start costume: works since patch 9 when the style has a third costume model or a variant
+  sits on costume 3 (`third_costume`, `lend_third_costume_bits`); the old "no Start costume" note
+  was stale.
+- **code** Announcer: `__wrap_func_800757A8` (tekken3_ttt1_sfx.c) plays a guest's name from its TTT1
+  pack; custom fighters have none, so they stay silent. Kept on purpose (2026-10-16): the native
+  call would say the donor's name ("Nina Williams" for MEDEA).
+- **code, not live tested** (T3CB-PATCH-16) Team Battle icons: custom fighters reuse the Tag tiles'
+  VRAM slots (`tile_slot`), only one guest page's tiles are up (`tile_set`), so a team mixing a TTT1
+  guest and a custom fighter showed one with the other's tile. Now a guest of the page not in VRAM
+  gets the generic icon (`stock_icon_uv/page`). Builds; a normal fight passes (t3live has no Team
+  Battle route). Proper fix (both pages' tiles in VRAM) needs free VRAM: open.
