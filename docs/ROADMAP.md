@@ -33,5 +33,4 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 ## Release
 
-0.5.0 candidate (local, README and `release/RELEASE-NOTES-0.5.0.md` ready): patches 17-19 and the
-Studio modules. Needs the owner's in-game test and approval before tagging (`knowledge/testing.md` "Releases").
+v0.5.0 released 2026-10-16 (patches 17-19, Studio modules, name call Silent by default) (`knowledge/testing.md` "Releases").

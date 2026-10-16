@@ -1,6 +1,6 @@
 # Project status
 
-Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio foundation are local.
+Updated: 2026-10-16. Builder 0.5.0 released (tag v0.5.0, pushed): Studio modules, patches 17-19.
 
 ## Done this session
 
@@ -19,7 +19,6 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 ## Known open points
 
 - The name call has not been heard by a person (headless runs have no audio).
-- Commits after `ce31517` are local only (no push without the owner's permission, D6).
 
 ## Since then
 
@@ -47,10 +46,9 @@ Updated: 2026-10-16. Builder 0.4.0 released; patches 17-18 and the Studio founda
 - Hear the name call (Practice) and see the new tabs in the real app window.
 - The test folder has my test fighter KITTEST on the Custom page (kitbash body, sunset stage);
   remove it in the builder if you do not want it. Tommy is back to its own settings.
-- D4: the automatic name call uses Windows' classic voice (not AI); say so if it should go.
+- Name call: Silent by default (owner, 2026-10-16); auto-made packs of Tommy, Test, Medea removed.
 
 ## Next
 
-1. Release 0.5.0 candidate (patches 17-19, Studio tabs) once the owner tested it.
-2. Move Lab: move records per move (damage, frames) next to the command list.
-3. Character Builder: colour presets for costumes; kitbash for other bases checked in game.
+1. Move Lab: move records per move (damage, frames) next to the command list.
+2. Character Builder: colour presets for costumes; kitbash for other bases checked in game.
