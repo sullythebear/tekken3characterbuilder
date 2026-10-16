@@ -20,7 +20,12 @@ import model_export as X
 # belongs with the head: a head without it lost its back on other models (tested 2026-10-16).
 PARTS = {"head": (19, 20), "body": (1, 2, 3, 4),
          "arm_l": (11, 12, 13, 14), "arm_r": (15, 16, 17, 18),
-         "leg_l": (5, 6, 7), "leg_r": (8, 9, 10)}
+         "leg_l": (5, 6, 7), "leg_r": (8, 9, 10),
+         # a finer part, put over the arms: both hands (gloves). Feet are not one: models split
+         # leg and foot differently (Nina's shin row runs into her boot), so other fighters' feet
+         # floated under it (tested 2026-10-16)
+         "hands": (14, 18)}
+FINE = ("hands",)
 SECOND = {2: 1, 4: 3, 20: 19}
 CHILD = {5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
 BAND_WORDS = 128
@@ -90,6 +95,8 @@ def build(root: Path, base: int, parts: dict, log=print):
                             f"of the base's height (at most {FIT * 100:.0f} %)")
     row_model = {}
     for name, rows in PARTS.items():
+        if name in FINE and name not in parts:
+            continue                           # a finer part only when chosen
         for r in rows:
             row_model[r] = parts.get(name, base)
     frame_of = lambda r: SECOND.get(r, r)

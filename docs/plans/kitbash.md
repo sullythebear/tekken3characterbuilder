@@ -79,3 +79,10 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   anew. Now built: a whole Xiaoyu (live: on Nina's moves, HUD clean, 496 colours in 2 runs) and a
   whole Julia on Nina; still refused: Law's body on Nina (two full pages) and Law's arms + legs
   (too many polygons: "more polygons than the game draws for one fighter").
+
+## Hands (gloves) as a part (2026-10-16)
+
+- `hands` = rows 14 and 18, put over the arms only when chosen (old kits unchanged). Lei's hands
+  on Nina: offline render and live clean. `feet` (rows 7, 10) was tried and dropped: models split
+  leg and foot differently (Nina's shin row runs into her boot), other fighters' feet floated
+  under her shins.

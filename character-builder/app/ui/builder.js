@@ -2,7 +2,7 @@
 // disc). Uses app.js's state, api, toast, DONORS, showView, loadCharacters, fillForm.
 (() => {
   const PART_NAMES = { head: "Head", body: "Body", arm_l: "Left arm", arm_r: "Right arm",
-    leg_l: "Left leg", leg_r: "Right leg" };
+    leg_l: "Left leg", leg_r: "Right leg", hands: "Hands (gloves)" };
   let models = null, fit = 0.07, busy = false, previewTimer = null, previewRun = 0;
 
   const label = (m) => `${DONORS[m.donor].name} ${m.costume + 1}`;

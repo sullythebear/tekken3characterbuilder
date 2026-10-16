@@ -1160,7 +1160,7 @@ def command_list(donor) -> dict:
 
 # --------------------------------------------------- character builder --
 
-KIT_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r")   # kitbash.PARTS
+KIT_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r", "hands")   # kitbash.PARTS
 
 
 def kit_models() -> list[int]:
