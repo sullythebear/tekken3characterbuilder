@@ -48,7 +48,21 @@ Updated: 2026-10-16. Builder 0.5.1 released (tag v0.5.1): kitbash HUD text fix o
   remove it in the builder if you do not want it. Tommy is back to its own settings.
 - Name call: Silent by default (owner, 2026-10-16); auto-made packs of Tommy, Test, Medea removed.
 
+## Character Builder round (2026-10-16, after 0.5.1, local)
+
+- Live 3D preview of a mix before Build (cache only); mixes of three fighters (4-bit CLUTs over
+  the room become 8-bit); whole skins (a model keeps its page layout and 8-bit CLUT); hands
+  (gloves) as a part; feet tried and dropped (documented); the body's own colours with presets
+  (works in game, unlike colour variants on an own model); randomizer with colours.
+- Tested: offline renders, browser pane, live fights (KITTEST: HUD clean in every build).
+- Unit tests: 26 pass.
+
 ## Next
 
-1. Move Lab: move records per move (damage, frames) next to the command list.
-2. Character Builder: colour presets for costumes; kitbash for other bases checked in game.
+Module order (owner, 2026-10-16): Character Builder, Model Importer, Portrait Lab, Voice Lab,
+Stage Lab, Move Lab.
+
+1. Model Importer: conversion settings in the UI (texture detail, polygon budget where the
+   importer has them), checks of geometry/materials/rigging shown before import.
+2. Portrait Lab: several saved portrait variants per fighter.
+3. Character Builder: body shapes (proportions) if the skeleton allows it.

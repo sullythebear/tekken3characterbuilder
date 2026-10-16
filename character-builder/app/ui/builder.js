@@ -5,6 +5,9 @@
     leg_l: "Left leg", leg_r: "Right leg", hands: "Hands (gloves)" };
   let models = null, fit = 0.07, busy = false, previewTimer = null, previewRun = 0;
 
+  // colour presets: [hue, saturation, lightness]
+  const PRESETS = [["Original", 0, 100, 0], ["Darker", 0, 90, -15], ["Lighter", 0, 90, 12], ["Muted", 0, 40, 0],
+    ["Vivid", 0, 160, 0], ["Opposite", 180, 100, 0]];
   const label = (m) => `${DONORS[m.donor].name} ${m.costume + 1}`;
 
   async function load() {
@@ -88,6 +91,8 @@
     for (const select of selects)
       select.value = Math.random() < 0.4 ? "" : sources[Math.floor(Math.random() * sources.length)];
     if (!Object.keys(chosen()).length) selects[0].value = sources[0];
+    const hue = Math.random() < 0.4 ? Math.round(Math.random() * 360 - 180) : 0;   // sometimes new colours
+    [$("kit-hue").value, $("kit-sat").value, $("kit-light").value] = [hue, 100, 0];
     schedulePreview();
   }
 
@@ -145,6 +150,12 @@
     $("kit-random").addEventListener("click", randomize);
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
     for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);
+    for (const [name, h, s, l] of PRESETS) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn btn-ghost mini"; b.textContent = name;
+      b.addEventListener("click", () => { [$("kit-hue").value, $("kit-sat").value, $("kit-light").value] = [h, s, l]; schedulePreview(); });
+      $("kit-presets").append(b);
+    }
   }
 
   window.T3Builder = { init, fill };
