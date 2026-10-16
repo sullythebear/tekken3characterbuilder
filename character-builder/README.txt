@@ -21,7 +21,8 @@ With Tekken 3 Expanded
 - Up to 12 fighters fit on the CUSTOM page.
 - Names use Tekken 3's own name font: there is no F or Q, and 2 is the only
   digit. Very long names do not fit the name plate.
-- Custom fighters are not picked as CPU opponents yet.
+- Custom fighters are CPU opponents too, as the TTT1 guests are: at stages
+  5-8 in Arcade and Time Attack, in Survival, Team Battle and Tekken Ball.
 - The creator never removes a fighter from the CUSTOM page on its own.
   Fighters the game has that are not in this creator's "characters"
   folder (for example from another copy of the creator) are listed under

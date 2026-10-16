@@ -11,6 +11,7 @@ debug server: load a save state, drive the pad, read memory, take screenshots.
       boots the game, walks Title -> Arcade -> select screen -> CUSTOM page (R2 x pages) ->
       fighter at --cell, picks it (and the Tekken 3 moveset), waits for the fight, then takes
       a screenshot every N frames while pressing a few attacks; prints the paths.
+      --cpu KEY: that roster fighter (e.g. cbmedea) is the CPU's stage 1 opponent (patch 15).
 
 Screenshots: <game>/character-builder/live/shots/. The save folder: <game>/character-builder/
 live/saves (slot 7 = the select screen with the cursor on the fighter)."""
@@ -125,7 +126,7 @@ def setup(game: Path):
 
 
 def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, cell: int = 0,
-          costume_button: str = "square", probe: bool = False):
+          costume_button: str = "square", probe: bool = False, cpu: str | None = None):
     live = game / "character-builder" / "live"
     # the renderer probe (patch 13): 64 calls (about two frames of both players) out of every
     # 1500, over the whole fight
@@ -133,6 +134,8 @@ def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, ce
            "TEKKEN3_NATIVE_PROBE_START": os.environ.get("T3LIVE_PROBE_START", "300"),
            "TEKKEN3_NATIVE_PROBE_EVERY": "1500",
            "TEKKEN3_NATIVE_PROBE_CALLS": os.environ.get("T3LIVE_PROBE_CALLS", "60000")} if probe else {}
+    if cpu:                                  # patch 15's test hook: this fighter at stage 1
+        env["TEKKEN3_CPU_STAGE1"] = cpu
     for old in live.glob("probe.bin*"):
         old.unlink()
     g = Game(game, visible, env)
@@ -190,11 +193,12 @@ def main():
     ap.add_argument("--probe", action="store_true", help="record the renderer's per-row transforms (live/probe.bin)")
     ap.add_argument("--pages", type=int, default=2, help="R2 presses on the select screen (2 = CUSTOM page)")
     ap.add_argument("--cell", type=int, default=0, help="the fighter's place on that page (right presses)")
+    ap.add_argument("--cpu", help="a roster key (customs.txt, e.g. cbmedea) for the CPU's stage 1 opponent")
     a = ap.parse_args()
     if a.command == "setup":
         setup(a.game)
     else:
-        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, probe=a.probe)
+        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, probe=a.probe, cpu=a.cpu)
 
 
 if __name__ == "__main__":

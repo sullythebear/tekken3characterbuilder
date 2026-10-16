@@ -454,14 +454,20 @@ ROSTER = [
 ("    if((edges&(PAD_R2|PAD_L2)) && stock_saved)switch_page();",
  "    if((edges&PAD_R2) && stock_saved)switch_page(1);\n    else if((edges&PAD_L2) && stock_saved)switch_page(-1);", 1),
 ("            if(closed_on_tag && !page)switch_page();", "            if(closed_on_tag && !page)switch_page(closed_on_tag);", 1),
-# --- CPU opponents stay TTT1 guests ---
-("    for(unsigned k=0;k<roster_count;k++) {\n        if(GUEST_ID+k==player)continue;",
- "    for(unsigned k=0;k<tag_count;k++) {\n        if(GUEST_ID+k==player)continue;", 1),
-("for(unsigned k=0;k<roster_count && (boss || guest);k++)", "for(unsigned k=0;k<tag_count && (boss || guest);k++)", 1),
-("        for(unsigned k=0;k<roster_count;k++) {\n            int theirs=0;",
- "        for(unsigned k=0;k<tag_count;k++) {\n            int theirs=0;", 1),
-("    for(unsigned k=0;k<roster_count;k++)if(GUEST_ID+k!=mine && !hidden_boss(k))pool[n++]=k;",
- "    for(unsigned k=0;k<tag_count;k++)if(GUEST_ID+k!=mine && !hidden_boss(k))pool[n++]=k;", 1),
+# --- CPU opponents: custom fighters are drawn as the TTT1 guests are (Arcade, Time Attack,
+# Survival, Team Battle, Tekken Ball: Expanded's loops over roster_count stay as they are) ---
+("    if(nb && boss_one_in && !draw(boss_one_in)) {",
+ "    /* T3CB-PATCH-15: custom fighters are among the guests the CPU draws. Test hook:\n"
+ "     * TEKKEN3_CPU_STAGE1=<key> makes that fighter the stage 1 opponent */\n"
+ "    {\n"
+ "        const char *one=getenv(\"TEKKEN3_CPU_STAGE1\");\n"
+ "        for(unsigned k=0;one && k<roster_count;k++)if(!strcmp(roster[k].key,one) && GUEST_ID+k!=player) {\n"
+ "            list[0]=(unsigned char)(GUEST_ID+k);                   /* stage 1 is loading: the CPU's choice too */\n"
+ "            psx_mod_write_half(0x800add5c+(human^1)*2,(uint16_t)(GUEST_ID+k));\n"
+ "            fprintf(stderr,\"TTT1 characters: %s is the CPU's stage 1 opponent (test)\\n\",roster[k].name);\n"
+ "        }\n"
+ "    }\n"
+ "    if(nb && boss_one_in && !draw(boss_one_in)) {", 1),
 ]
 
 MOD = [

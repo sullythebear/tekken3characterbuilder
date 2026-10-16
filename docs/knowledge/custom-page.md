@@ -11,7 +11,7 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   the donor, and `guest_player()` excludes them from the TTT1 import pipeline.
 - Pages cycle 0 → 1 → 2 with R2 (back with L2); tiles of the shown guest page are uploaded
   into the Tag tile slots. The CHARACTER SELECT card reads CUSTOM on page 2.
-- Known limits: not picked as CPU opponents, no Start costume, silent announcer name call,
+- Known limits: no Start costume, silent announcer name call,
   Team Battle icons may show the wrong tile.
 - **Tested:** the CUSTOM page appears (R2/L2), the CHARACTER SELECT card reads CUSTOM, the
   custom portrait, select tiles and name plate show, the VS screen shows the custom name and
@@ -124,3 +124,12 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   fighter drops only that one; the tool refuses a list without `--drop`. In the UI (browser):
   the section shows, "Remove from game" asks for confirmation (declined: nothing changed), and
   "Add to library" moved Peumel into the library with its portrait and Nina as donor.
+- **tested** (T3CB-PATCH-15, live 2026-10-16) Custom fighters are CPU opponents: our patch used
+  to narrow Expanded's guest pools to `tag_count`; now its loops over `roster_count` stay
+  (Arcade/Time Attack stages 5-8, Survival, Team Battle members, Tekken Ball). A natural draw put
+  Medea at stage 7. Test hook `TEKKEN3_CPU_STAGE1=<key>` (t3live `--cpu cbmedea`) makes a fighter
+  the stage 1 opponent: rewriting the list alone is too late for stage 1 (already loading, Law
+  came), so it also writes the CPU's choice (0x800ADD5C + 2 * CPU). Tommy (P1) vs CPU Medea:
+  "Medea own model installed at 801F0DE8 (P2 ...)", P2 texture uploaded, 4 model checks 0 words
+  differ, VS name plate MEDEA, screenshot shows both own models. "Medea model: missing
+  ...TTT1-arcade-P1.3dm / rejected" is the TTT1 import trying a guest file first (also for P1).
