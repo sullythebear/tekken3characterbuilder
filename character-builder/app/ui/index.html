@@ -236,7 +236,25 @@
             <label>Stage <select id="stage"></select></label>
             <label>Music <select id="music"></select></label>
           </div>
-          <p class="hint">Where your fighter is met in Arcade, and its theme. Tekken 3's own stages: building new stages is not possible yet (the stage format is still being researched).</p>
+          <p class="hint">Where your fighter is met in Arcade, and its theme.</p>
+        </fieldset>
+        <fieldset class="field">
+          <legend>Stage colours</legend>
+          <div class="arena-lists">
+            <label>Colours
+              <select id="stage-look">
+                <option value="">Original</option>
+                <option value="night">Night</option>
+                <option value="sunset">Sunset</option>
+                <option value="dusk">Dusk</option>
+                <option value="ice">Ice</option>
+                <option value="inferno">Inferno</option>
+                <option value="mono">Black and white</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">Recolours your home stage when your fighter is in the fight (Tekken 3 Expanded). Below: the stage's textures in these colours. New stage shapes are not possible: the stage format is not known well enough.</p>
+          <img class="stage-sheet" id="stage-sheet" alt="The stage's textures in the chosen colours" hidden>
         </fieldset>
       </div>
 

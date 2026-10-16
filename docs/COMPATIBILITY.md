@@ -12,6 +12,7 @@
 | Own 3D model | **tested** (patches 10-14) | no |
 | Body parts from Tekken 3's fighters | **tested** (similar build only, see `plans/kitbash.md`) | no |
 | Home stage and music | **tested** (patch 17) | no |
+| Stage colour looks | **tested** (patch 19, night and sunset on Gon's stage) | no |
 | Name call | **tested** in log, Practice only (as Tekken 3 itself) | no |
 | Move Lab: style's command list | **tested** (read from the disc) | **code** (same disc data; Recompiled not tried) |
 | CPU opponents | **tested** (patch 15) | no |

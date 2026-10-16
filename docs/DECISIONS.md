@@ -28,3 +28,6 @@ Important technical choices and why. Newest last.
 - **D8 (2026-10-16) Kitbash fit gate instead of free choice.** Parts are offered only from
   fighters within 7 % of the base's height; the server refuses the rest. Arbitrary mixes left gaps
   and torn heads; a geometric re-segmentation would be research with an open outcome.
+- **D9 (2026-10-16) Stage Lab = colour looks of existing stages.** CLUT rows from the disc,
+  recoloured by the builder, written by the patch only over the stage's own colours. New stage
+  geometry needs the model and collision formats, which are not known: documented, not built.

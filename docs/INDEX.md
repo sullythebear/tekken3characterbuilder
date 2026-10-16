@@ -29,7 +29,8 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 - `t3-model-style.md` – how Namco's fighter models are built (budget, quads, gouraud records,
   joints, textures, face) and how the importer applies it.
 - `portraits.md` – portrait and name plate `.jui`.
-- `moves.md` – move format.
+- `moves.md` – move format, COMMAND LIST.
+- `stages.md` – stage records, CLUTs, colour looks (patch 19).
 - `testing.md` – Test button, report, helper scripts in `tools/`, regression check of the model import (`t3cb.py regress`).
 - `lessons.md` – mistakes not to repeat.
 

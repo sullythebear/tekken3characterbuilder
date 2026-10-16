@@ -281,7 +281,7 @@ def main():
     ap.add_argument("--pages", type=int, default=2, help="R2 presses on the select screen (2 = CUSTOM page)")
     ap.add_argument("--cell", type=int, default=0, help="the fighter's place on that page (right presses)")
     ap.add_argument("--cpu", help="a roster key (customs.txt, e.g. cbmedea) for the CPU's stage 1 opponent")
-    a = ap.parse_args()
+    a = ap.parse_intermixed_args()
     if a.command == "setup":
         setup(a.game)
     elif a.command == "nav":

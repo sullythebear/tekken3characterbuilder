@@ -29,7 +29,9 @@
     $("stage").value = state.current.stage ?? "";
     $("music").value = state.current.music ?? "";
     $("name-call").value = state.current.name_call || "auto";
+    $("stage-look").value = state.current.stage_look || "";
     showMode();
+    sheet();
   }
 
   function showMode() {
@@ -41,9 +43,27 @@
       : "The announcer calls the name in Practice, as Tekken 3 does for its own fighters.";
   }
 
+  // the stage's textures in the chosen colours (Stage Lab preview)
+  let sheetFor = "";
+  async function sheet() {
+    const img = $("stage-sheet");
+    if (state.current.donor === null || $("page-stage").hidden) return;
+    const want = { donor: state.current.donor, stage: $("stage").value, look: $("stage-look").value };
+    const key = JSON.stringify(want);
+    if (key === sheetFor) return;
+    sheetFor = key;
+    try {
+      const r = await api("/api/stage/preview", want);
+      if (sheetFor !== key) return;
+      img.src = "data:image/png;base64," + r.png;
+      img.hidden = false;
+    } catch (e) { img.hidden = true; sheetFor = ""; toast(e.message); }
+  }
+
   function body() {
     const value = (id) => ($(id).value === "" ? null : Number($(id).value));
-    const b = { stage: value("stage"), music: value("music"), name_call: $("name-call").value };
+    const b = { stage: value("stage"), music: value("music"), name_call: $("name-call").value,
+      stage_look: $("stage-look").value || null };
     if (recordingWav) b.name_call_wav = recordingWav;
     return b;
   }
@@ -132,7 +152,8 @@
 
   function init() {
     fillLists();
-    for (const id of ["stage", "music"]) $(id).addEventListener("change", markDirty);
+    for (const id of ["stage", "music", "stage-look"]) $(id).addEventListener("change", markDirty);
+    for (const id of ["stage", "stage-look"]) $(id).addEventListener("change", sheet);
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });
     $("name-play").addEventListener("click", preview);
     $("name-record").addEventListener("click", record);
@@ -140,5 +161,5 @@
     $("name-file").addEventListener("change", (e) => { if (e.target.files[0]) useSound(e.target.files[0]); e.target.value = ""; });
   }
 
-  window.T3Arena = { init, fill, body, styleLabels, saved: () => { recordingWav = null; } };
+  window.T3Arena = { init, fill, body, styleLabels, sheet, saved: () => { recordingWav = null; } };
 })();

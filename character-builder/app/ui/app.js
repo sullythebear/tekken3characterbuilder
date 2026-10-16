@@ -107,7 +107,7 @@ function renderDonors() {
       based.textContent = `based on ${donor.name}`;
       button.append(style, based);
       button.title = donorLabel(donor.id);
-      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Costumes.refresh(); if (!$("page-moves").hidden) T3MoveLab.show(); });
+      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Arena.sheet(); T3Costumes.refresh(); if (!$("page-moves").hidden) T3MoveLab.show(); });
       cards.append(button);
     }
     section.append(title, cards);
@@ -737,6 +737,7 @@ function showPage(page) {
   if (page === "colours" && $("model-view").hidden) showView(true);
   if (page === "portrait" && !$("model-view").hidden) showView(false);
   if (page === "moves") T3MoveLab.show();
+  if (page === "stage") T3Arena.sheet();
   if (page === "model" && window.T3Model) T3Model.refresh();
 }
 for (const name of PAGES) $(`tab-${name}`).addEventListener("click", () => showPage(name));

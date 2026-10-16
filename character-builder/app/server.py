@@ -447,6 +447,81 @@ def name_call_preview(data: dict) -> dict:
     return {"wav": "data:audio/wav;base64," + base64.b64encode(wav).decode()}
 
 
+# Stage Lab (patch 19): the arena of each fighter's stage (descriptor byte 10, read live
+# 2026-10-16) and the colour looks of stage_look.py
+STAGE_ARENA = {0: 0, 1: 1, 2: 5, 3: 11, 4: 2, 5: 9, 6: 4, 7: 3, 8: 10, 9: 8, 10: 12, 11: 1, 12: 0, 13: 12,
+               14: 6, 15: 2, 16: 9, 17: 13, 18: 9, 19: 14, 20: 6}
+STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno")
+
+
+def run_stage_tool(root: Path, args: list[str]) -> str | None:
+    try:
+        done = subprocess.run([venv_python(root), str(APP / "stage_look.py"), "--root", str(root), *args],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=180, creationflags=NO_WINDOW, cwd=str(APP))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"The Stage Lab could not run: {error}"
+    if done.returncode:
+        lines = (done.stdout + done.stderr).strip().splitlines()
+        last = lines[-1] if lines else "The Stage Lab failed."
+        return last[7:] if last.startswith("ERROR: ") else last
+    return None
+
+
+def stage_arena(fighter: dict) -> int:
+    owner = fighter.get("stage")
+    return STAGE_ARENA[fighter["donor"] if owner is None else owner]
+
+
+def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-stage.bin: the home stage's colour variant (or none), cached per stage and look."""
+    name = f"{custom_page.file_prefix(key)}-stage.bin"
+    look = fighter.get("stage_look")
+    data = None
+    if look:
+        arena = stage_arena(fighter)
+        cached = CACHE / f"stage-{arena}-{look}.bin"
+        if not cached.is_file():
+            CACHE.mkdir(exist_ok=True)
+            problem = run_stage_tool(root, ["--arena", str(arena), "--look", look, "--out", str(cached)])
+            if problem:
+                return f"Stage colours: {problem}"
+        data = cached.read_bytes()
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if data:
+                (target / name).write_bytes(data)
+            else:
+                (target / name).unlink(missing_ok=True)
+    except OSError as error:
+        return f"Stage colours: {error}"
+    return None
+
+
+def stage_preview(data: dict) -> dict:
+    """PNG (base64) of a stage's largest textures, with a look or as the game colours them."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("The Stage Lab needs Tekken 3 Expanded.")
+    try:
+        arena = stage_arena({"donor": int(data.get("donor")), "stage": None if data.get("stage") in (None, "") else int(data.get("stage"))})
+    except (TypeError, ValueError, KeyError):
+        raise ValueError("Choose a fighting style first.") from None
+    look = data.get("look") or None
+    if look and look not in STAGE_LOOKS:
+        raise ValueError("That stage colour does not exist.")
+    out = CACHE / f"stage-{arena}-{look or 'original'}.png"
+    if not out.is_file():
+        CACHE.mkdir(exist_ok=True)
+        problem = run_stage_tool(root, ["--arena", str(arena), *(["--look", look] if look else []), "--preview", str(out)])
+        if problem:
+            raise ValueError(problem)
+    return {"png": base64.b64encode(out.read_bytes()).decode()}
+
+
 def write_name_call(root: Path, key: str, fighter: dict) -> str | None:
     """<Key>-TTT1-sfx.jus: the announcer's call of the fighter's name (or none)."""
     try:
@@ -490,6 +565,11 @@ def validate_character(data: dict) -> dict:
             if not DONOR_MIN <= value <= DONOR_MAX:
                 raise ValueError(f"That {key} does not exist.")
             clean[key] = value
+    look = data.get("stage_look")           # Stage Lab colours of the home stage (patch 19)
+    if look not in (None, ""):
+        if look not in STAGE_LOOKS:
+            raise ValueError("That stage colour does not exist.")
+        clean["stage_look"] = look
     mode = data.get("name_call", "auto")    # the announcer's call: automatic voice, own sound, none
     if mode not in name_call.MODES:
         raise ValueError("Choose how the announcer calls the name.")
@@ -658,9 +738,9 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
         problem = write_palettes(root, key, c) or write_own_model(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
-        problem = write_name_call(root, key, c)
-        if problem:
-            warnings.append(f"{c['name']}: {problem}")
+        for problem in (write_name_call(root, key, c), write_stage_look(root, key, c)):
+            if problem:
+                warnings.append(f"{c['name']}: {problem}")
     if left_out:
         warnings.append(f"The Custom page holds {CUSTOM_PAGE_MAX} fighters: {left_out} of yours are left out.")
     args = ["list", *sum((["--entry", e] for e in listed), [])]
@@ -1611,6 +1691,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/undo":
                 saved = undo_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/stage/preview":
+                return self._json(stage_preview(data))
             if path == "/api/moves":
                 return self._json(command_list(data.get("donor")))
             if path == "/api/kit/models":
