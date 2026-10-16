@@ -1655,6 +1655,11 @@ def export_character(cid: str) -> tuple[str, bytes]:
         for name in ("character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav"):
             if (folder / name).is_file():
                 z.write(folder / name, name)
+        for variant in portrait_variants(folder.name):   # saved portraits travel along
+            for name in PORTRAIT_FILES:
+                path = folder / "portraits" / variant["id"] / name
+                if path.is_file():
+                    z.write(path, f"portraits/{variant['id']}/{name}")
         # an own 3D model travels as its source file (the user's own work) with the choices in
         # character.json; model.bin holds parts of the disc's donor model and never leaves
         source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
@@ -1708,20 +1713,23 @@ def import_character(payload: str) -> dict:
         for info in z.infolist():
             if info.is_dir():
                 continue
-            if info.filename not in allowed:
+            variant = re.fullmatch(r"portraits/([0-9-]{8,40})/(portrait|portrait-ps1|portrait-full)\.png", info.filename)
+            if info.filename not in allowed and not variant:
                 raise ValueError(f"Unexpected file in package: {info.filename}. "
                                  "Packages may only contain a description, images and a 3D model source.")
             if info.file_size > (MAX_IMPORT if info.filename.startswith("source.") else MAX_UPLOAD):
                 raise ValueError("A file in the package is too large.")
             files[info.filename] = z.read(info)
+    if sum(1 for n in files if n.startswith("portraits/")) > PORTRAIT_VARIANTS * len(PORTRAIT_FILES):
+        raise ValueError("The package holds too many saved portraits.")
     if "character.json" not in files:
         raise ValueError("The package is missing character.json.")
     try:
         data = json.loads(files["character.json"].decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         raise ValueError("character.json is damaged.") from None
-    for name in ("portrait.png", "portrait-ps1.png", "portrait-full.png"):
-        if name in files and not files[name].startswith(PNG_SIGNATURE):
+    for name in files:
+        if name.endswith(".png") and not files[name].startswith(PNG_SIGNATURE):
             raise ValueError(f"{name} is not a valid PNG.")
     if "source.fbx" in files and not files["source.fbx"].startswith(b"Kaydara FBX Binary"):
         raise ValueError("source.fbx is not an FBX Binary file.")
@@ -1737,6 +1745,11 @@ def import_character(payload: str) -> dict:
         if name in files:
             record[key] = "data:image/png;base64," + base64.b64encode(files[name]).decode()
     saved = save_character(record)
+    for name, raw in files.items():                    # saved portraits (names checked above)
+        if name.startswith("portraits/"):
+            path = DATA / saved["id"] / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
     name = next((n for n in ("source.fbx", "source.glb", "source.vrm") if n in files), None)
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
     if not name and (own.get("kit") or own.get("colours") or own.get("shape")):   # a Character Builder model: rebuilt from the choices

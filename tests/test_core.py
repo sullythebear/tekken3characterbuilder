@@ -275,6 +275,16 @@ class PortraitVariantTests(CharacterTests):
         with self.assertRaises(ValueError):
             server.use_portrait(c["id"], "../..")
 
+    def test_package_carries_saved_portraits(self):
+        import base64
+        red = self.image((255, 0, 0, 255))
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "portrait_ps1": red, "portrait_source": red})
+        kept = server.keep_portrait(c["id"])
+        _, data = server.export_character(c["id"])
+        back = server.import_character(base64.b64encode(data).decode())
+        self.assertNotEqual(back["id"], c["id"])
+        self.assertEqual([v["id"] for v in server.portrait_variants(back["id"])], [kept[0]["id"]])
+
     def test_needs_a_portrait(self):
         c = server.save_character({"name": "A", "donor": 1, "costumes": []})
         with self.assertRaises(ValueError):

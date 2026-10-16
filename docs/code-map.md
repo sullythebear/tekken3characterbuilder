@@ -41,6 +41,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Saved portraits (server): `portrait_variants`, `keep_portrait`, `use_portrait` (keeps the current one first, then
   copies the variant back and syncs), `drop_portrait`; files in `characters/<id>/portraits/<stamp>/`, at most
   `PORTRAIT_VARIANTS` = 12; routes `/api/portraits`, `/keep`, `/use`, `/drop`; UI `app.js loadPortraits`.
+  Packages carry them as `portraits/<stamp>/*.png` (import checks names, PNG signature, count).
   The portrait URL stamp uses the newest of character.json and the portrait files (browser cache).
 - `app/custom_page.py` (stdlib) – reads customs.txt, labels, `.jui` portraits (`read_entries`,
   `read_label`, `read_portrait`, `file_prefix`).
