@@ -3,7 +3,7 @@
 (() => {
   const PART_NAMES = { head: "Head", body: "Body", arm_l: "Left arm", arm_r: "Right arm",
     leg_l: "Left leg", leg_r: "Right leg" };
-  let models = null, fit = 0.07, busy = false;
+  let models = null, fit = 0.07, busy = false, previewTimer = null, previewRun = 0;
 
   const label = (m) => `${DONORS[m.donor].name} ${m.costume + 1}`;
 
@@ -26,6 +26,7 @@
         option.dataset.height = m.height;
         select.add(option);
       }
+      select.addEventListener("change", schedulePreview);
       row.append(select);
       rows.append(row);
     }
@@ -79,6 +80,29 @@
     for (const select of selects)
       select.value = Math.random() < 0.4 ? "" : sources[Math.floor(Math.random() * sources.length)];
     if (!Object.keys(chosen()).length) selects[0].value = sources[0];
+    schedulePreview();
+  }
+
+  // the mix in the 3D view before it is built (cache only); a mix that does not fit says why
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(preview, 600);
+  }
+
+  async function preview() {
+    const parts = chosen(), note = $("kit-progress"), run = ++previewRun;
+    if (!state.current.id || !Object.keys(parts).length) return;
+    note.hidden = false;
+    note.textContent = "Preview: building the mix…";
+    try {
+      const json = await api("/api/kit/preview", { id: state.current.id, costume: Number($("kit-costume").value), parts });
+      if (run !== previewRun) return;
+      showView(true);
+      T3Costumes.preview(json, "Preview of the chosen parts: not built yet. Build puts it in the game.");
+      note.textContent = "Preview shown. Build puts this body in the game.";
+    } catch (e) {
+      if (run === previewRun) note.textContent = `This mix does not work: ${e.message}`;
+    }
   }
 
   async function build() {
@@ -109,7 +133,7 @@
   function init() {
     $("kit-build").addEventListener("click", build);
     $("kit-random").addEventListener("click", randomize);
-    $("kit-costume").addEventListener("change", matchBuild);
+    $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
   }
 
   window.T3Builder = { init, fill };

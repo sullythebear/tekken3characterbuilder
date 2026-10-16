@@ -1228,6 +1228,34 @@ def run_kitbash(root: Path, base: int, kit: dict, out: Path) -> tuple[str | None
     return None, done.stdout
 
 
+def kit_preview(cid: str, costume: int, parts) -> bytes:
+    """Mesh JSON of a body-part mix for the 3D view, built in the cache only: the fighter's own
+    model is not touched. Refusals (build, colours, texture page) come back as the error."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("The character builder needs Tekken 3 Expanded.")
+    kit = clean_kit(parts)
+    if not kit:
+        raise ValueError("Choose at least one body part from another fighter.")
+    character = get_character(safe_id(cid))
+    models = donor_models()["donors"].get(str(character["donor"]), [])
+    if not 0 <= costume < len(models):
+        raise ValueError("This style has no such costume.")
+    key = "-".join(f"{k}{v}" for k, v in sorted(kit.items()))
+    out = CACHE / "kit" / f"{models[costume]}-{key}.bin"
+    js = out.with_suffix(".json")
+    with model_lock:
+        if not js.is_file():
+            out.parent.mkdir(parents=True, exist_ok=True)
+            problem, _ = run_kitbash(root, models[costume], kit, out)
+            if problem or not out.is_file():
+                raise ValueError(problem or "The character builder failed.")
+            problem, _ = run_model_tool(root, ["ownjson", "--file", str(out), "--out", str(js)])
+            if problem:
+                raise ValueError(problem)
+    return js.read_bytes()
+
+
 def build_kit(cid: str, costume: int, parts, keep_undo: bool = True) -> dict:
     """A model built from Tekken 3's own fighters' body parts (read from the player's disc) over
     the style's costume: characters/<id>/model.bin, own_model {"kit": {...}}. Like an import, the
@@ -1787,6 +1815,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"models": [{"model": m, "donor": int(d), "costume": c, "height": heights.get(m)}
                                               for d, ms in donors["donors"].items() for c, m in enumerate(ms)],
                                    "parts": list(KIT_PARTS), "fit": KIT_FIT})
+            if path == "/api/kit/preview":
+                return self._send(200, kit_preview(str(data.get("id", "")), int(data.get("costume", 0)),
+                                                   data.get("parts")), "application/json")
             if path == "/api/kit/build":
                 saved = build_kit(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})

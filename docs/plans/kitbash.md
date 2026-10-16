@@ -51,3 +51,11 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
   one other fighter. Live: Xiaoyu head and legs on Nina, HUD text clean, 512 colours in 2 runs.
 - Limits seen: three fighters (Nina, Xiaoyu, Lei) need 33 small CLUTs; Law's body and a full
   Xiaoyu do not fit one texture page (also before this change).
+
+## Live preview (2026-10-16)
+
+- Changing a body part (or Randomize) builds the mix in the cache (`kit_preview`,
+  `/api/kit/preview`, `cache/kit/<base>-<parts>.bin/.json`) and shows it in the 3D view
+  (`T3Costumes.preview`, held until the fighter or its model changes); the saved model is not
+  touched. A mix that does not fit says why before Build. Browser pane: Julia head + Law body +
+  Xiaoyu legs shown; Xiaoyu 2 head/body + Lei 2 arms: "28 small colour tables, room for 26".

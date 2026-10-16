@@ -369,6 +369,7 @@ const T3Costumes = (() => {
   }
 
   async function show() {
+    if (held) { showHeld(); return; }
     const list = costumeModels(), status = $("model-status");
     if (!donorModels || !donorModels.available) { status.textContent = donorModels ? donorModels.reason : "Loading…"; return; }
     if (!list.length) { status.textContent = "Choose a fighting style to see the model."; current = null; renderPanel(); return; }
@@ -376,6 +377,7 @@ const T3Costumes = (() => {
     status.textContent = typeof n === "string" ? "Loading your own model…" : "Loading the model from your disc…";
     try {
       const model = await loadModel(n);
+      if (held) return;                                      // a preview came in meanwhile
       const now = Math.min(activeBase(), list.length - 1);
       if (modelKey(now, costumeModels()[now]) !== n) return;   // changed meanwhile
       if (!viewer) viewer = createViewer($("model-canvas"));
@@ -387,6 +389,20 @@ const T3Costumes = (() => {
       status.textContent = `Drag to turn, scroll to zoom, double-click to reset, click a part to recolour it.${shared}`;
     } catch (e) { status.textContent = e.message; }
     renderPanel();
+  }
+
+  // a model shown for a moment (Builder's body-part preview): not saved, not a costume
+  let held = null;              // { model, note }: shown until the fighter or its model changes
+  function preview(json, note) {
+    held = { model: parseModel(json), note };
+    showHeld();
+  }
+  function showHeld() {
+    if (!viewer) viewer = createViewer($("model-canvas"));
+    if (!viewer) return;
+    viewer.setModel(held.model); current = held.model;
+    repaint();
+    $("model-status").textContent = held.note;
   }
 
   function repaint() {
@@ -601,12 +617,14 @@ const T3Costumes = (() => {
     },
     // a fighter was opened, saved or its style changed
     refresh(keepSelection = false) {
+      held = null;
       if (!keepSelection) selected = { kind: "costume", index: 0 };
       current = null; pickedPart = null;
       if (!$("model-view").hidden) show(); else renderPanel();
     },
     showModel() { show(); },
     // what goes into character.json: the recipe (to keep editing) and the resulting palettes
+    preview,
     problem() { for (const v of variants()) { const p = ownModelProblem(v); if (p) return p; } return null; },
     serialize() { return variants().map((v) => ({ name: v.name, base: v.base, slot: v.slot ?? -1, cluts: v.cluts || {}, recipe: v.recipe || blankRecipe() })); },
   };
