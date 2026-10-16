@@ -77,3 +77,6 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
 
 Next test: Paul (no stances), one input per Practice reset, 240-frame wait. Script pattern:
 scratch `inputs.py`, using `t3live.Game` with `set_input` and read `actor + 0x54`.
+- **tested** Resetting with the debug server's `savestate` (op load, slot 5) before each input
+  does not work: after a load, `set_input` started no move (48 of 48 inputs stayed in record 0).
+  Use a Practice reset or a longer wait instead.
