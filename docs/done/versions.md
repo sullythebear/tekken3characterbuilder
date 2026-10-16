@@ -4,6 +4,7 @@ Details and test results of each feature are in `docs/knowledge/` (named per ent
 
 | Commit | What | Tested |
 |---|---|---|
+| v0.3.9 (tag) | 0.3.9: portrait from the 3D model, packages with own models, custom fighters as CPU opponents (patch 15) | browser pane; package round trip byte-identical; live Tommy vs CPU Medea |
 | v0.3.8 (tag) | 0.3.8: Dizzy Character Creator name and PS1/Tekken 3 style (approved mockup), model help; parts that stick out; Rogue holes; test models (Michelle, Soldier, Xbot, CesiumMan): leg webs, head-row retry, material colours, merged textures, bones by shape | regress (all green), live fights for all imports, browser pane checks; user test 2026-10-16: Rogue clean, release approved |
 | 6f53bb9 | Reduced models: charts split by material (Lab k-means), Lab palettes, faster packer; Medea 872 tris | offline decode = bake; PS1 emulation 4 sides; live fight 3 yaws; app import 75 s |
 | (this) | Flat quads only (PS1 culls quads by the first triangle), manifold voxel shell, per-face winding for reduced models, mitten hands, seam cache fallback; Medea 912 tris | offline PS1 emulation (QUADCULL/PAINTER) all sides; live fight |

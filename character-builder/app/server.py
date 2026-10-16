@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
