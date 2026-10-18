@@ -31,7 +31,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Portrait Lab | image upload + crop, portrait from the 3D model with presets: angle (turned, front, other way, profile), framing (shoulders, close-up, chest), light (front left, flat, dramatic), background (warm, cool, red, dark), **saved portraits: keep, use again, delete (12 per fighter; tested on KITTEST), carried in .t3char packages** | — |
 | Voice Lab | name call: automatic, own sound (record/file, auto trim + level, optional announcer effect), silent | only one sound per fighter: the game calls one name |
 | Stage Lab | home stage + music per fighter (patch 17); **stage colour looks (night, sunset, dusk, ice, inferno, black and white) with texture preview (patch 19)** | **own colour + strength** done; stage geometry is research (`knowledge/stages.md`) |
-| Move Lab | whole movesets (donor); **the style's COMMAND LIST read from the disc, read-only tab** | **research:** native move records found in RAM (header 0x800ADC20, 56-byte records, damage = word 5 low; `knowledge/moves.md`), not raw on the disc; next: map command list entries to records |
+| Move Lab | whole movesets (donor); **the style's COMMAND LIST read from the disc, read-only tab** | **research:** native move records found in RAM (header 0x800ADC20, 56-byte records, damage = word 5 low; `knowledge/moves.md`), not raw on the disc; basic inputs mapped to records and damage (`tools/t3moves.py` on a live dump: shared input lists, direction/button bits); next: own moves and a damage column from a capture per style |
 
 ## Release
 

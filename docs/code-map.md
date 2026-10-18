@@ -120,4 +120,4 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 ## Other
 
 - `README.txt`, `Start Dizzy Character Creator.cmd` (the app is named Dizzy Character Creator since 0.3.8; the folder stays `character-builder/`).
-- Repo `tools/`: helper scripts (see `docs/knowledge/testing.md`).
+- Repo `tools/`: helper scripts (see `docs/knowledge/testing.md`). `tools/t3moves.py`: basic moves and damage from a RAM dump (`knowledge/moves.md`).

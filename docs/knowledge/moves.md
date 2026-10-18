@@ -100,3 +100,28 @@ for 40 frames; then the direction, then direction + button for 4 frames.
   the direct pointers.
 - So the Move Lab cannot put damage next to COMMAND LIST lines yet. The records and damage values
   themselves are known (above).
+
+## Basic moves: shared input lists in the executable (2026-10-18, tested)
+
+- **tested** The basic moves of every fighter come from shared cancel lists in the executable's
+  data, at 0x8001823C .. 0x800187D0. These are 12-byte entries, with `C00D` starting each list.
+  The destination is a fixed **alias slot**, for example:
+  - 300/309 = 3, 301/310 = 4, 302..305 = f+1..f+4;
+  - 353..356 = d+1..d+4, 357..361 = df+1..4;
+  - 3334..3399 = jump attacks.
+  Each moveset's alias table points the slot at its own record.
+- **tested** The command word is direction bits plus button bits:
+  - buttons: 1 = 0x01, 2 = 0x02, 3 = 0x04, 4 = 0x08;
+  - directions: db 0x20, d 0x40, df 0x80, b 0x100, neutral 0x200, f 0x400, uf 0x800, u 0x1000,
+    ub 0x2000;
+  - no direction bit means any direction.
+  Checked against input test 2 (Xiaoyu): f+1..f+4 → records 120..123, d+1 → 137, d+3 → 140,
+  d+4 → 141, df+2 → 144, db+4 → 149, b+3+4 → 327, uf+4 → 93, u+4 → 91.
+- **tool** `python tools/t3moves.py <dump>.ram [--player 1|2]` lists each basic input with its
+  record and damage. Law: 1 = 5, 2 = 12, 3 = 18, 4 = 16.
+  - Damage 0 marks records that start strings, grabs or stances; their damage is in a later
+    record.
+  - Moves only the character has (its own lists, the `C00C` sub-lists above) are not in this tool
+    yet.
+- The app cannot show this without a live capture: the records are not raw on the disc. A Move
+  Lab "damage" column would need a capture per style (t3live, debug build).
