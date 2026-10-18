@@ -160,3 +160,12 @@ A new fighter ZETA (Judo, Paul) went through the whole app:
 
 The "Zeta model: missing ...TTT1-arcade-P1.3dm / rejected" lines are Expanded's guest-model
 lookup before the own model takes over. They show for every custom fighter.
+
+## Builder regression (`t3cb kitregress`, 2026-10-18)
+
+`python tools/t3cb.py kitregress [--approve]` builds six fixed mixes (`tools/render/kitregress.py`).
+Each covers one path of kitbash: plain, whole skin, KITTEST's mix with shape and colours, areas at
+half size, near the packet limit, coarser normals. It compares their SHA-256 with the approved
+state in `character-builder/cache/kitregress/`. Exit 1 when a mix that built before fails.
+Approved on 2026-10-18; the KITTEST mix is 23080 bytes, as installed in game. Run it after any
+kitbash or writer change.

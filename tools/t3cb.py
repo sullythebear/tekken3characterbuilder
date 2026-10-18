@@ -10,6 +10,8 @@ results only. Stdlib only (the import command runs Expanded's venv itself).
   python tools/t3cb.py setmodel FILE --character ID [--game G]            put a T3CM model file on a character
   python tools/t3cb.py regress  [--only id,id] [--approve] [--all] [--game G]  re-import every own model, check holes,
                                 speckles and fit against the approved state (tools/render/regress.py)
+  python tools/t3cb.py kitregress [--approve]  build a fixed set of Character Builder mixes and compare them
+                                with their approved results (tools/render/kitregress.py)
 
 The default game folder is the user's Expanded test copy (never the working install)."""
 from __future__ import annotations
@@ -147,9 +149,18 @@ def regress(game: Path, only: str | None, approve: bool, everything: bool = Fals
     sys.exit(subprocess.run(cmd).returncode)
 
 
+def kitregress(game: Path, approve: bool) -> None:
+    py = game / ".setup" / "venv" / "Scripts" / "python.exe"
+    if not py.is_file():
+        py = game / ".setup" / "venv" / "bin" / "python"
+    cmd = [str(py), str(REPO / "tools" / "render" / "kitregress.py"), "--game", str(game)]
+    cmd += ["--approve"] if approve else []
+    sys.exit(subprocess.run(cmd).returncode)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("deploy", "patch", "build", "report", "import", "setmodel", "regress"))
+    ap.add_argument("command", choices=("deploy", "patch", "build", "report", "import", "setmodel", "regress", "kitregress"))
     ap.add_argument("file", nargs="?", type=Path)
     ap.add_argument("--game", type=Path, default=DEFAULT_GAME)
     ap.add_argument("--character")
@@ -173,6 +184,8 @@ def main() -> None:
         import_fbx(a.game, a.file, a.character, a.model)
     elif a.command == "regress":
         regress(a.game, a.only, a.approve, a.all)
+    elif a.command == "kitregress":
+        kitregress(a.game, a.approve)
 
 
 if __name__ == "__main__":

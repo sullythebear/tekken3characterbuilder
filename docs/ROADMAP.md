@@ -10,6 +10,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Audit, status docs, decisions | **done** (`AUDIT.md`, `DECISIONS.md`) |
 | Offline unit tests (`tests/`) | **done** (13 tests, no game data) |
 | Regression of the model import (`t3cb regress`) | **done** (needs the game folder) |
+| Regression of the Character Builder (`t3cb kitregress`) | **done** (6 mixes: plain, whole skin, KITTEST, half-size areas, heavy packets, coarser normals; approved 2026-10-18) |
 | Live checks without a player (`t3live`) | **done** (`t3live fight`, `t3live nav` with Arcade/Team/Practice routes) |
 
 ## Phase 1: Studio structure
