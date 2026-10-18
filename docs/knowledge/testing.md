@@ -140,3 +140,23 @@ Only after the user approves. Bump `APP_VERSION` (server.py) and the READMEs, co
 (tracked files only: no game data; check the list), and
 `"C:\Program Files\GitHub CLI\gh.exe" release create vX.Y.Z <zip> --repo sullythebear/tekken3characterbuilder --title "Dizzy Character Creator X.Y.Z" --notes-file <notes.md> --verify-tag`
 (gh is logged in as sullythebear; from PowerShell, Git Bash does not have it on PATH).
+
+## End-to-end test of 0.6.0 (2026-10-18, browser pane + t3live)
+
+A new fighter ZETA (Judo, Paul) went through the whole app:
+1. Save.
+2. Builder: head part, Athletic shape, Build (1081 triangles).
+3. Portrait from the 3D model.
+4. Computer voice; stage look night; Move Lab 2: 12 → 30.
+5. Save, then Check library: only "portrait licence not known".
+6. Game folder: all seven files (ui, name, label, model, moves, stage, sfx) and the customs.txt
+   line.
+7. `t3live fight --cell 4`:
+   - own model installed, 0 of 5362 words differ;
+   - "Zeta has 1 changed moves (moveset 0)", "P1 Zeta changed moves in (1)";
+   - "has a stage colour variant (arena 0)";
+   - the fight showed the Athletic Paul.
+8. Delete: all seven files gone from both folders, customs.txt back to the four fighters.
+
+The "Zeta model: missing ...TTT1-arcade-P1.3dm / rejected" lines are Expanded's guest-model
+lookup before the own model takes over. They show for every custom fighter.
