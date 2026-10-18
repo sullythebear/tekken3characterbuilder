@@ -148,3 +148,19 @@ for 40 frames; then the direction, then direction + button for 4 frames.
   used.
 - The Move Lab shows this: a damage column on single-input COMMAND LIST lines, and a "Basic
   moves: damage" grid (browser-tested on Nina).
+
+### Strings (2026-10-18, tested live: Xiaoyu and Law)
+
+Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to Law through
+0x80118668.
+- **tested** Law 1 → record 99, 2 → 101, 4 → 106. Xiaoyu 1 → 104, 2 → 106. These are the shared
+  basic slots.
+- **tested** "1, 2", "2, 1", "1, 2, 1", "1, 2, 4" and "2, 1, 4" started the basic records one
+  after the other: no separate string records.
+- **tested** "3, 4" started only the 3 (the 4 came too late for its window). "1, 1" and "1+2, 1"
+  started one move.
+- So whether a string comes out depends on cancel windows that the static data alone does not
+  settle. Following the record's cancel list statically gave wrong records (Law "1, 2" → 450).
+  The Move Lab therefore shows damage only for single-input lines and the basic grid, not
+  summed strings.
+- **tested** The very first input after a fight starts is ignored (seen in every run).
