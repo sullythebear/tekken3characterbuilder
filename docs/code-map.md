@@ -38,6 +38,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Body shape: `kitbash.SHAPES` / `clean_shape` / `shape_scale` (applied in `build.place`, local axes: head all,
   arms/legs/body Y and Z; hands and feet kept), CLI `--shape JSON`; server `KIT_SHAPES`, `clean_kit_shape`,
   `run_kitbash(shape=)`, `own_model.shape`; UI `.kit-shape` sliders in `builder.js shape()`.
+- Voice Lab: `name_call.shape(samples, pitch, echo)` (`ECHOES`, `announcer` = shape -18 hall),
+  `voices()` / `speak(name, voice)` (System.Speech, `VOICE_RE`), field `name_call_voice` (auto cache key
+  name|voice), route `/api/namecall/voices`; UI `arena.js` `#name-voice`, `#name-pitch`, `#name-echo`.
 - Licence register: `clean_credits` (field `credits` in character.json, `CREDIT_ASSETS`, `LICENCES`),
   `licence_warnings` (`/api/export/check`, UI `exportFighter`), UI `#credits` + `creditsBody()`.
 - Backup: `backup_all` (GET `/api/backup`, every package in a .t3backup zip), `backup_packages` (the

@@ -25,10 +25,12 @@
 
   function fill() {
     recordingWav = rawWav = null;
+    $("name-pitch").value = "0"; $("name-echo").value = "none";
     styleLabels();
     $("stage").value = state.current.stage ?? "";
     $("music").value = state.current.music ?? "";
     $("name-call").value = state.current.name_call || "off";
+    loadVoices().then(() => { $("name-voice").value = state.current.name_call_voice || ""; });
     $("stage-look").value = state.current.stage_look || "";
     $("stage-tint").value = state.current.stage_tint || "#ff8040";
     $("stage-strength").value = state.current.stage_strength ?? 60;
@@ -37,10 +39,21 @@
     sheet();
   }
 
+  // the speech voices installed on this computer (asked once)
+  let voicesLoaded = null;
+  function loadVoices() {
+    voicesLoaded ||= api("/api/namecall/voices", {}).then((r) => {
+      for (const v of r.voices) $("name-voice").add(new Option(v.replace(/^Microsoft /, "").replace(/ Desktop$/, ""), v));
+    }).catch(() => {});
+    return voicesLoaded;
+  }
+
   function showMode() {
     const mode = $("name-call").value;
     $("name-play").disabled = mode === "off";
     $("name-own").hidden = mode !== "own";
+    $("name-voice-row").hidden = mode !== "auto";
+    $("name-shape").hidden = mode !== "own" || !rawWav;
     $("name-hint").textContent = mode === "own" && !recordingWav && !state.current.name_recording
       ? "Record your call (up to 3 seconds) or choose a sound file."
       : "The announcer calls the name in Practice, as Tekken 3 does for its own fighters.";
@@ -68,6 +81,7 @@
   function body() {
     const value = (id) => ($(id).value === "" ? null : Number($(id).value));
     const b = { stage: value("stage"), music: value("music"), name_call: $("name-call").value,
+      name_call_voice: $("name-voice").value || null,
       stage_look: $("stage-look").value || null, stage_tint: $("stage-tint").value,
       stage_strength: Number($("stage-strength").value) };
     if (recordingWav) b.name_call_wav = recordingWav;
@@ -86,7 +100,8 @@
     const button = $("name-play");
     button.disabled = true;
     try {
-      const r = await api("/api/namecall/preview", { mode, id: state.current.id, name: $("name").value });
+      const r = await api("/api/namecall/preview", { mode, id: state.current.id, name: $("name").value,
+        voice: $("name-voice").value });
       play(r.wav);
     } catch (e) { toast(e.message); } finally { button.disabled = false; }
   }
@@ -127,7 +142,8 @@
   async function processSound() {
     if (!rawWav) return;
     try {
-      const r = await api("/api/namecall/preview", { mode: "own", wav: rawWav, effect: $("name-effect").checked });
+      const r = await api("/api/namecall/preview", { mode: "own", wav: rawWav,
+        pitch: Number($("name-pitch").value), echo: $("name-echo").value });
       recordingWav = r.wav;
       $("name-call").value = "own";
       markDirty();
@@ -164,7 +180,12 @@
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });
     $("name-play").addEventListener("click", preview);
     $("name-record").addEventListener("click", record);
-    $("name-effect").addEventListener("change", processSound);
+    $("name-voice").addEventListener("change", markDirty);
+    $("name-pitch").addEventListener("input", () => { $("name-pitch").title = `${$("name-pitch").value} %`; });
+    for (const id of ["name-pitch", "name-echo"]) $(id).addEventListener("change", processSound);
+    $("name-announcer").addEventListener("click", () => {
+      $("name-pitch").value = "-18"; $("name-echo").value = "hall"; processSound();
+    });
     $("name-file").addEventListener("change", (e) => { if (e.target.files[0]) useSound(e.target.files[0]); e.target.value = ""; });
   }
 

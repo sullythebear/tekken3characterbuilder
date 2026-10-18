@@ -267,6 +267,22 @@ class CreditsAndBackupTests(CharacterTests):
         self.assertIsNone(server.backup_packages(base64.b64encode(single).decode()))
 
 
+
+class VoiceShapeTests(unittest.TestCase):
+    def test_shape(self):
+        samples = name_call.read_wav(tone())
+        plain = name_call.shape(samples)
+        self.assertEqual(plain, name_call.own(samples))
+        self.assertLess(len(name_call.shape(samples, 30)), len(plain))       # higher = shorter
+        self.assertGreater(len(name_call.shape(samples, -30, "arena")), len(plain))
+        self.assertEqual(name_call.announcer(samples), name_call.shape(samples, -18, "hall"))
+
+    def test_voice_validated(self):
+        c = server.validate_character({"name": "A", "donor": 1, "name_call": "auto", "name_call_voice": "Microsoft Zira Desktop"})
+        self.assertEqual(c["name_call_voice"], "Microsoft Zira Desktop")
+        c = server.validate_character({"name": "A", "donor": 1, "name_call_voice": "Zira; rm -rf"})
+        self.assertNotIn("name_call_voice", c)
+
 class BodyShapeTests(unittest.TestCase):
     def test_clean_shape(self):
         self.assertEqual(server.clean_kit_shape({"head": 1.2, "arms": 1, "legs": 5, "tail": 2}),

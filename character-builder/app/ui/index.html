@@ -281,8 +281,15 @@
             <span class="portrait-buttons" id="name-own" hidden>
               <button class="btn btn-ghost" type="button" id="name-record">Record</button>
               <label class="btn btn-ghost file-btn">Choose sound<input type="file" id="name-file" accept="audio/*" hidden></label>
-              <label class="check"><input type="checkbox" id="name-effect"> Announcer effect (deeper, with echo)</label>
             </span>
+          </div>
+          <div class="arena-lists" id="name-voice-row" hidden>
+            <label>Voice <select id="name-voice"><option value="">Windows default</option></select></label>
+          </div>
+          <div class="arena-lists" id="name-shape" hidden>
+            <label>Pitch <input type="range" id="name-pitch" min="-30" max="30" step="2" value="0" title="0 %"></label>
+            <label>Echo <select id="name-echo"><option value="none">None</option><option value="hall">Hall</option><option value="arena">Arena</option></select></label>
+            <button class="btn btn-ghost mini" type="button" id="name-announcer" title="18 % lower with a hall echo, like the computer voice">Announcer</button>
           </div>
           <p class="hint" id="name-hint"></p>
         </fieldset>

@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import math
 import os
+import re
 import struct
 import subprocess
 import tempfile
@@ -33,6 +34,7 @@ $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(44100,
   [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
 $s.SetOutputToWaveFile($env:T3CB_OUT, $f)
+if ($env:T3CB_VOICE) { try { $s.SelectVoice($env:T3CB_VOICE) } catch {} }
 $x = [System.Security.SecurityElement]::Escape($env:T3CB_SAY)
 $s.SpeakSsml('<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">' +
   '<prosody pitch="x-low" rate="-15%">' + $x + '!</prosody></speak>')
@@ -49,11 +51,32 @@ def spoken_name(name: str) -> str:
     return " ".join(w.capitalize() for w in name.replace("-", " ").split())
 
 
-def speak(name: str) -> list[int]:
-    """The name spoken by Windows' own voice (System.Speech), 44100 Hz mono samples."""
+VOICES = r"""
+Add-Type -AssemblyName System.Speech
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$s.GetInstalledVoices() | Where-Object { $_.Enabled } | ForEach-Object { $_.VoiceInfo.Name }
+$s.Dispose()
+"""
+VOICE_RE = re.compile(r"[A-Za-z0-9 ._()-]{1,60}")
+
+
+def voices() -> list[str]:
+    """The speech voices installed on this computer (System.Speech), e.g. Microsoft Zira Desktop."""
+    try:
+        done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", VOICES],
+                              capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return [v.strip() for v in done.stdout.splitlines() if VOICE_RE.fullmatch(v.strip())]
+
+
+def speak(name: str, voice: str | None = None) -> list[int]:
+    """The name spoken by Windows' own voice (System.Speech), 44100 Hz mono samples. voice: an
+    installed voice's name (default: the system's)."""
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "say.wav"
-        env = dict(os.environ, T3CB_SAY=spoken_name(name), T3CB_OUT=str(out))
+        env = dict(os.environ, T3CB_SAY=spoken_name(name), T3CB_OUT=str(out),
+                   T3CB_VOICE=voice if voice and VOICE_RE.fullmatch(voice) else "")
         try:
             subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", SPEAK], env=env,
                            capture_output=True, timeout=60, creationflags=NO_WINDOW)
@@ -118,15 +141,32 @@ def finish(samples: list[int]) -> list[int]:
     return [int(math.copysign(PEAK * (1 - math.exp(-COMPRESS * abs(s) / loud)) / curve, s)) for s in out]
 
 
+# echoes: (delay in seconds, gain) taps
+ECHOES = {"none": (), "hall": ((0.07, 0.32), (0.13, 0.22), (0.21, 0.13)),
+          "arena": ((0.11, 0.38), (0.23, 0.27), (0.37, 0.18), (0.52, 0.10))}
+PITCH = (-30, 30)                                 # % higher or lower (and faster or slower: tape style)
+
+
+def shape(samples: list[int], pitch: int = 0, echo: str = "none") -> list[int]:
+    """Trimmed, `pitch` % higher or lower (speed changes with it), with an echo, at the game's
+    level. Plain DSP, no generated voice."""
+    pitch = max(PITCH[0], min(PITCH[1], int(pitch)))
+    sound = trim(samples)
+    if pitch:
+        sound = resample(sound, 1 + pitch / 100)
+    taps = [(int(RATE * d), g) for d, g in ECHOES.get(echo, ())]
+    if taps:
+        out = sound + [0] * taps[-1][0]
+        for delay, gain in taps:
+            for i, s in enumerate(sound):
+                out[i + delay] += int(s * gain)
+        sound = out
+    return finish(sound)
+
+
 def announcer(samples: list[int]) -> list[int]:
     """A deeper voice in a big hall: 18 % lower (and slower), with a short echo."""
-    low = resample(trim(samples), 0.82)
-    taps = ((int(RATE * 0.07), 0.32), (int(RATE * 0.13), 0.22), (int(RATE * 0.21), 0.13))
-    out = low + [0] * taps[-1][0]
-    for delay, gain in taps:
-        for i, s in enumerate(low):
-            out[i + delay] += int(s * gain)
-    return finish(out)
+    return shape(samples, -18, "hall")
 
 
 def own(samples: list[int]) -> list[int]:
@@ -164,11 +204,13 @@ def fighter_sound(folder: Path, fighter: dict) -> list[int] | None:
     if mode != "auto":
         return None
     cache, said = folder / "namecall-auto.wav", folder / "namecall-auto.txt"
-    if cache.is_file() and said.is_file() and said.read_text(encoding="utf-8") == fighter["name"]:
+    voice = fighter.get("name_call_voice") or ""
+    want = fighter["name"] + (f"|{voice}" if voice else "")    # the name (and voice) cached
+    if cache.is_file() and said.is_file() and said.read_text(encoding="utf-8") == want:
         return read_wav(cache.read_bytes())
-    samples = announcer(speak(fighter["name"]))
+    samples = announcer(speak(fighter["name"], voice or None))
     cache.write_bytes(wav_bytes(samples))
-    said.write_text(fighter["name"], encoding="utf-8")
+    said.write_text(want, encoding="utf-8")
     return samples
 
 

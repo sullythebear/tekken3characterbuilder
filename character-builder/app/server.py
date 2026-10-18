@@ -409,7 +409,8 @@ def safe_id(value: str) -> str:
     return value
 
 
-def decode_wav(data_url: str | None, process: bool = False, effect: bool = False) -> bytes | None:
+def decode_wav(data_url: str | None, process: bool = False, effect: bool = False, pitch: int = 0,
+               echo: str = "none") -> bytes | None:
     """A name call sound (a WAV data URL) as 44100 Hz mono WAV of at most 3 s. process: a new
     recording or file, trimmed and brought to the game's level (done once, when it is chosen;
     saving and packages keep it as it is)."""
@@ -423,7 +424,7 @@ def decode_wav(data_url: str | None, process: bool = False, effect: bool = False
         raise ValueError("The name call sound is too long.")
     samples = name_call.read_wav(raw)
     if process:                               # effect: the automatic voice's announcer sound
-        samples = name_call.announcer(samples) if effect else name_call.own(samples)
+        samples = name_call.announcer(samples) if effect else name_call.shape(samples, pitch, echo)
     else:
         samples = samples[:int(name_call.MAX_SECONDS * name_call.RATE)]
     return name_call.wav_bytes(samples)
@@ -436,9 +437,15 @@ def name_call_preview(data: dict) -> dict:
         name = str(data.get("name", "")).upper().strip()
         if not NAME_RE.fullmatch(name):
             raise ValueError("Enter the fighter's name first.")
-        wav = name_call.wav_bytes(name_call.announcer(name_call.speak(name)))
+        voice = str(data.get("voice") or "")
+        wav = name_call.wav_bytes(name_call.announcer(name_call.speak(name, voice or None)))
     elif data.get("wav"):
-        wav = decode_wav(data.get("wav"), process=True, effect=bool(data.get("effect")))
+        try:
+            pitch = int(data.get("pitch") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid pitch.") from None
+        echo = data.get("echo") if data.get("echo") in name_call.ECHOES else "none"
+        wav = decode_wav(data.get("wav"), process=True, effect=bool(data.get("effect")), pitch=pitch, echo=echo)
     else:
         path = DATA / safe_id(str(data.get("id", ""))) / "namecall.wav"
         if not path.is_file():
@@ -590,6 +597,9 @@ def validate_character(data: dict) -> dict:
     if mode not in name_call.MODES:
         raise ValueError("Choose how the announcer calls the name.")
     clean["name_call"] = mode
+    voice = str(data.get("name_call_voice") or "").strip()
+    if voice and name_call.VOICE_RE.fullmatch(voice):   # an installed Windows voice (auto mode)
+        clean["name_call_voice"] = voice
     credits = clean_credits(data.get("credits"))
     if credits:
         clean["credits"] = credits
@@ -1572,7 +1582,8 @@ def save_character(data: dict) -> dict:
 
 
 RESTORE_POINTS = 20
-RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "stage_look", "costumes", "credits")
+RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
+                  "costumes", "credits")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:
@@ -2020,6 +2031,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/history":
                 return self._json({"points": restore_points(str(data.get("id", "")))})
+            if path == "/api/namecall/voices":
+                return self._json({"voices": name_call.voices()})
             if path == "/api/export/check":
                 return self._json({"warnings": licence_warnings(str(data.get("id", "")))})
             if path == "/api/portraits":
