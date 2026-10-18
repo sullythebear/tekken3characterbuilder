@@ -66,7 +66,8 @@
           input.textContent = m.command;
           input.className = "move-input";
           damage.className = "move-damage";
-          damage.textContent = m.damage ? `${m.damage} dmg` : "";
+          const own = (state.current.move_damage || {})[(m.command || "").replace(/ /g, "")];
+          damage.textContent = !m.damage ? "" : own !== undefined && own !== m.damage ? `${own} dmg (Tekken 3: ${m.damage})` : `${m.damage} dmg`;
           row.append(name, input, damage);
         }
         list.append(row);
