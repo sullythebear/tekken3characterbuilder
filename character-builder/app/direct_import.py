@@ -23,6 +23,33 @@ import protrusions as PR
 PAIRS = MI.PAIRS
 
 
+# a texture image the player chose beside the model file (CLI --texture): PNG bytes for every
+# material that has no texture of its own (models often ship their texture as a separate file)
+EXTERNAL_TEXTURE: bytes | None = None
+
+
+def set_external_texture(path: Path | None) -> None:
+    """Reads any image Pillow knows, at most 1024 px, as the external texture (None: none)."""
+    global EXTERNAL_TEXTURE
+    if path is None:
+        EXTERNAL_TEXTURE = None
+        return
+    from PIL import Image
+    im = Image.open(path).convert("RGBA")
+    im.thumbnail((1024, 1024))
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    EXTERNAL_TEXTURE = buf.getvalue()
+
+
+def _external_texture(src: dict) -> None:
+    if EXTERNAL_TEXTURE is None:
+        return
+    for mi in sorted(set(np.asarray(src["MAT"]).tolist())):
+        if mi not in src["textures"]:
+            src["textures"][mi] = EXTERNAL_TEXTURE
+
+
 def load(path: Path) -> dict:
     out = _load(path)
     if out.get("bones"):
@@ -249,6 +276,7 @@ def _load(path: Path) -> dict:
         g = glb.read(path)
         out = {"P": g["positions"], "T": g["triangles"], "UV": g["uv"], "MAT": g["materials"],
                "textures": g["textures"]}
+        _external_texture(out)
         if "bones" in g:
             w = g["weights"]
             out["bones"], out["weights"] = g["bones"], w
@@ -267,6 +295,7 @@ def _load(path: Path) -> dict:
     UV[:, 1] = 1 - UV[:, 1]
     out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
            "textures": {k: v for k, (n, v) in c["textures"].items()}}
+    _external_texture(out)
     _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:
         # a real rig (e.g. from Mixamo): joints and the strongest bone of every vertex
@@ -570,7 +599,7 @@ def inspect(path: Path) -> dict:
                              "reduces it to PS1 size and bakes a new 256 x 256 texture (1 to 3 minutes).")
         info["reduce"] = True
     if not info["textured"]:
-        info["problems"].append("The model has no embedded texture: it will be drawn without one.")
+        info["problems"].append("The model has no embedded texture: choose its texture image (if it came as a separate file), or it is drawn without one.")
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     info["checks"] = checks(src, info, weighted)
     return info
@@ -1118,8 +1147,10 @@ def main():
     ap.add_argument("--check", action="store_true", help="print what inspect() finds as JSON")
     ap.add_argument("--parts", default="{}", help="JSON {part id: {mode: fold|keep|remove, angle}}")
     ap.add_argument("--preview", type=Path, help="write a PNG of the model with the parts applied")
+    ap.add_argument("--texture", type=Path, help="an image for the materials without a texture of their own")
     ap.add_argument("--settings", default="{}", help='JSON {"head": 4|2|1, "detail": 100|80|60} (reduced models)')
     a = ap.parse_args()
+    set_external_texture(a.texture)
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))

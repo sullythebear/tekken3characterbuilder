@@ -420,6 +420,9 @@ def quantise_groups(rgb, owner, groups: int, own=(), lab_=False):
     (the face) get a palette of their own, as Namco's faces do. lab_: colour distances in Lab.
     -> (indices 0..15 per texel, PS1 palette of groups x 16 colours, group of every chart)."""
     nchart = int(owner.max()) + 1
+    if nchart <= 0:                              # no chart at all (a model without a texture): one plain palette
+        flat = rgb.reshape(-1, 3).mean(0) if rgb.size else np.full(3, 128.0)
+        return np.zeros(owner.shape, np.uint8), [ps1_colour(*flat)] * 16, np.zeros(0, dtype=int)
     own = [c for c in own if c < nchart][:max(0, groups - 1)]
     if own:
         rest = [c for c in range(nchart) if c not in own]

@@ -184,3 +184,15 @@ Run on all 12 test models and Tommy, Medea and Test:
   its own, so a repeating triangle can look smeared (inferred from the code).
 - The pose warning (arms not spread, width/height < 0.5) did not trigger on any test model.
   The importer is tested only with T-pose and A-pose models.
+
+## Separate texture image (2026-10-18, tested)
+
+Many free models ship their texture as an image file beside the FBX or GLB. The Model Importer
+now has "Choose texture image" (.png or .jpg). The image goes on every material without a
+texture of its own, before the colour swatches, so the model's UVs stay as they are.
+- Tested: Tommy's FBX with its embedded texture taken out, plus the same image given as the
+  file, built a model byte-identical to the normal import (20172 bytes).
+- Fixed on the way: a model without any texture crashed in `quantise_groups` (no UV charts). It
+  now gets one plain palette.
+- Browser: an upload with an image through `/api/model/texture` shows "Texture image: chosen".
+- Packages carry `texture-source.*`. Undo and Remove handle it.

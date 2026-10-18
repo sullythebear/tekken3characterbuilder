@@ -38,6 +38,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Body shape: `kitbash.SHAPES` / `clean_shape` / `shape_scale` (applied in `build.place`, local axes: head all,
   arms/legs/body Y and Z; hands and feet kept), CLI `--shape JSON`; server `KIT_SHAPES`, `clean_kit_shape`,
   `run_kitbash(shape=)`, `own_model.shape`; UI `.kit-shape` sliders in `builder.js shape()`.
+- External texture: `direct_import.set_external_texture` / `_external_texture` (CLI `--texture`); server
+  `texture-upload.*` / `texture-source.*` / `texture-prev.*` (`model_texture`, `move_texture`, `upload_texture`,
+  `/api/model/texture`; `run_import_tool` adds `--texture` by itself), packages carry `texture-source.*`.
+  `texture_bake.quantise_groups`: a model without any texture no longer crashes (one plain palette).
 - Patch 20 (changed damage): `expanded_patch_data` custom_moves / moves_put / custom_moves_tick; builder
   `command_list.moves_file` + `server.write_moves` (field `move_damage`), UI editable `#basic-list` inputs,
   `T3MoveLab.body()`.

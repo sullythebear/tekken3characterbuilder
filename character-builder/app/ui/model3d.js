@@ -26,6 +26,9 @@ const T3Model = (() => {
     $("model-settings").hidden = $("model-settings-hint").hidden = !info || !info.ok || !info.reduce;
     if (!info) return;
     $("model-file-name").textContent = info.file || "";
+    $("model-texture-row").hidden = !info.ok;
+    $("model-texture-name").textContent = info.texture_file ? `Texture image: chosen (${info.texture_file.replace("texture-upload", "image")})`
+      : "Only needed when the model's texture is a separate file.";
     const facts = $("model-facts");
     facts.replaceChildren();
     if (info.ok && info.checks) {
@@ -212,6 +215,24 @@ const T3Model = (() => {
     } finally { busy = false; $("model-file").value = ""; }
   }
 
+  // a separate texture image for the uploaded model (models often ship one beside the file)
+  async function uploadTexture(file) {
+    if (!file || busy) return;
+    busy = true;
+    const progress = $("model-progress");
+    progress.hidden = false;
+    progress.textContent = `Checking the model with ${file.name}…`;
+    try {
+      const info = await api("/api/model/texture", { id: state.current.id, name: file.name, file: await readBase64(file) });
+      state.current.model_upload = info;
+      busy = false;
+      showCheck(info);
+      progress.hidden = true;
+    } catch (e) {
+      progress.textContent = e.message;
+    } finally { busy = false; $("model-texture").value = ""; }
+  }
+
   async function importModel() {
     const info = state.current.model_upload;
     if (busy || !info || !info.rigged) return;
@@ -271,6 +292,7 @@ const T3Model = (() => {
   }
 
   $("model-file").addEventListener("change", (e) => upload(e.target.files[0]));
+  $("model-texture").addEventListener("change", (e) => uploadTexture(e.target.files[0]));
   $("model-import").addEventListener("click", importModel);
   $("model-remove").addEventListener("click", remove);
   $("model-undo").addEventListener("click", undo);

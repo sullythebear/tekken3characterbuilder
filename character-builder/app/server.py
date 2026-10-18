@@ -1043,9 +1043,32 @@ def donor_models() -> dict:
 MODEL_SOURCES = (".fbx", ".glb", ".vrm")
 
 
+# a texture image the player chose beside the model file: texture-upload.* (with upload.*),
+# texture-source.* (with source.*), texture-prev.* (with source-prev.*, for Undo)
+TEXTURE_TYPES = {".png": bytes([0x89]) + b"PNG", ".jpg": bytes([0xFF, 0xD8]), ".jpeg": bytes([0xFF, 0xD8])}
+
+
+def model_texture(folder: Path, stem: str) -> Path | None:
+    return next((folder / f"texture-{stem}{e}" for e in TEXTURE_TYPES if (folder / f"texture-{stem}{e}").is_file()), None)
+
+
+def move_texture(folder: Path, src: str, dst: str) -> None:
+    """texture-<src>.* becomes texture-<dst>.* (any old texture-<dst>.* goes)."""
+    for old in folder.glob(f"texture-{dst}.*"):
+        old.unlink()
+    texture = model_texture(folder, src)
+    if texture:
+        texture.replace(folder / f"texture-{dst}{texture.suffix}")
+
+
 def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
     """Runs direct_import.py (own 3D models); returns (error or None, stdout). on_line(text) gets
-    every line while it runs (the import's progress)."""
+    every line while it runs (the import's progress). A model file upload.* or source.* gets its
+    texture image (texture-upload.* / texture-source.*) when the player chose one."""
+    if args and Path(args[0]).stem in ("upload", "source"):
+        texture = model_texture(Path(args[0]).parent, Path(args[0]).stem)
+        if texture:
+            args = [*args, "--texture", str(texture)]
     cmd = [venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)]
     try:
         if on_line is None:
@@ -1092,20 +1115,48 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This model file is too large (16 MB at most).")
-    for old in folder.glob("upload.*"):
+    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*")]:
         old.unlink()
     target = folder / f"upload{ext}"
     target.write_bytes(raw)
+    return recheck_upload(root, folder, target, Path(str(name)).name[:80])
+
+
+def recheck_upload(root: Path, folder: Path, target: Path, name: str) -> dict:
     problem, out = run_import_tool(root, [str(target), "--check"], timeout=180)
     if problem:
         target.unlink(missing_ok=True)
         raise ValueError(problem)
     info = json.loads(out.strip().splitlines()[-1])
-    info["file"] = Path(str(name)).name[:80]
+    info["file"] = name
+    texture = model_texture(folder, "upload")
+    if texture:
+        info["texture_file"] = texture.name
     (folder / "upload.json").write_text(json.dumps(info), encoding="utf-8")
     if not info.get("ok"):
         target.unlink(missing_ok=True)
     return info
+
+
+def upload_texture(cid: str, name: str, payload: str) -> dict:
+    """A texture image for the uploaded model (for materials without one of their own); the
+    check runs again with it."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    ext = Path(str(name)).suffix.lower()
+    raw = base64.b64decode(payload, validate=True)
+    if ext not in TEXTURE_TYPES or not raw.startswith(TEXTURE_TYPES[ext]):
+        raise ValueError("Use a .png or .jpg image as the texture.")
+    if len(raw) > MAX_UPLOAD:
+        raise ValueError("This texture image is too large.")
+    for old in folder.glob("texture-upload.*"):
+        old.unlink()
+    (folder / f"texture-upload{ext}").write_bytes(raw)
+    old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
+    return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
 
 def clean_parts(parts) -> dict:
@@ -1199,16 +1250,20 @@ def import_model(cid: str, costume: int, parts=None, on_line=None, settings=None
         old.unlink()
     (folder / "model-prev.bin").unlink(missing_ok=True)
     before = json.loads((folder / "character.json").read_text(encoding="utf-8")).get("own_model")
+    for old in folder.glob("texture-prev.*"):
+        old.unlink()
     if (folder / "model.bin").is_file():
         (folder / "model.bin").replace(folder / "model-prev.bin")
         for old in folder.glob("source.*"):
             old.replace(folder / f"source-prev{old.suffix}")
+        move_texture(folder, "source", "prev")
     kept = before if (folder / "model-prev.bin").is_file() else None
     (folder / "model-prev.json").write_text(json.dumps({"own_model": kept}), encoding="utf-8")
     out.replace(folder / "model.bin")
     for old in folder.glob("source.*"):
         old.unlink()
     upload.replace(folder / f"source{upload.suffix}")
+    move_texture(folder, "upload", "source")
     (folder / "upload.json").unlink(missing_ok=True)
     data = json.loads((folder / "character.json").read_text(encoding="utf-8"))
     made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
@@ -1312,6 +1367,7 @@ def undo_model(cid: str) -> dict:
         old.unlink()
     for old in folder.glob("source-prev.*"):
         old.replace(folder / f"source{old.suffix}")
+    move_texture(folder, "prev", "source")
     memo.unlink()
     info = folder / "character.json"
     data = json.loads(info.read_text(encoding="utf-8"))
@@ -1566,7 +1622,7 @@ def remove_model(cid: str) -> dict:
     folder = DATA / safe_id(cid)
     for name in ("model.bin", "model-new.bin", "upload.json", "model-prev.bin", "model-prev.json"):
         (folder / name).unlink(missing_ok=True)
-    for pattern in ("source.*", "upload.*", "source-prev.*"):
+    for pattern in ("source.*", "upload.*", "source-prev.*", "texture-*.*"):
         for old in folder.glob(pattern):
             old.unlink()
     info = folder / "character.json"
@@ -1838,6 +1894,9 @@ def export_character(cid: str) -> tuple[str, bytes]:
         source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
         if source:
             z.write(source, source.name)
+            texture = model_texture(folder, "source")     # its texture image, if one was chosen
+            if texture:
+                z.write(texture, texture.name)
     return f"{folder.name}.t3char", buffer.getvalue()
 
 
@@ -1892,7 +1951,7 @@ def import_character(payload: str) -> dict:
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
     allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
-               "source.fbx", "source.glb", "source.vrm"}
+               "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES)}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -1952,6 +2011,10 @@ def import_character(payload: str) -> dict:
         return saved
     folder = DATA / saved["id"]
     (folder / name).write_bytes(files[name])
+    for ext, magic in TEXTURE_TYPES.items():              # the model's texture image (checked)
+        texture = files.get(f"texture-source{ext}")
+        if texture and texture.startswith(magic):
+            (folder / f"texture-source{ext}").write_bytes(texture)
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
     warnings = fit_source(saved["id"], folder / name, int(own.get("costume", 0) or 0), own.get("parts") or {},
                           str(own.get("file") or name)[:80], own.get("settings"))
@@ -2135,6 +2198,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "warnings": sync_customs(drop=game_key(cid))})
             if path == "/api/model/check":
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
+            if path == "/api/model/texture":
+                return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":
                 return self._json(start_import(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"),
                                                data.get("settings")))
