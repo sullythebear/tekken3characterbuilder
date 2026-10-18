@@ -282,9 +282,6 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
     # layout (its areas may overlap where they are the same texels: same model, same 8-bit CLUT
     # or 4-bit) and the rest goes into the free space; if that fails, every area is packed anew,
     # biggest first. Identical source boxes are copied once.
-    texels = {}
-    for c in clusters:
-        texels[c["model"]] = texels.get(c["model"], 0) + int(np.prod(c["hi"] - c["lo"] + 1))
     def main8(model):
         area8 = {}
         for c in clusters:
@@ -292,6 +289,7 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
                 area8[c["mat"] & 0x7EFF] = area8.get(c["mat"] & 0x7EFF, 0) + int(np.prod(c["hi"] - c["lo"] + 1))
         return (model, max(area8, key=area8.get)) if area8 else None
     keeper = keeper8 = None
+    kept = False
 
     def size(c):
         w_, h_ = c["hi"] - c["lo"] + 1
@@ -338,18 +336,85 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
             spots[i] = placed[sk] = spot
         return spots
 
-    spots = None
-    for keeper in sorted(texels, key=texels.get, reverse=True):   # each model in turn keeps its layout
-        keeper8 = main8(keeper)
-        spots = pack(True)
+    def fit_page(texels):
+        """Each model in turn keeps its own layout, else every area is packed anew (None: no fit)."""
+        nonlocal keeper, keeper8, kept
+        for keeper in sorted(texels, key=texels.get, reverse=True):
+            keeper8 = main8(keeper)
+            spots = pack(True)
+            if spots is not None:
+                kept = True
+                return spots
+        kept = False
+        keeper = keeper8 = None
+        return pack(False)
+
+    def halve(model):
+        """The model's areas at half size (every second texel each way) from a band of their own,
+        its polygons' UVs to match: a mix whose textures do not fit one page still builds, a
+        little less sharp."""
+        import copy
+        for c in clusters:
+            if c["model"] != model:
+                continue
+            sm = src[model]
+            eight = bool(c["mat"] & 0x8000)
+            bits = 8 if eight else 4
+            per = 16 // bits
+            x0, y0, x1, y1 = c["lo"][0] // 4, c["lo"][1], c["hi"][0] // 4, c["hi"][1]
+            words = sm.band[y0:y1 + 1, x0:x1 + 1].astype(np.uint32)
+            tex = np.stack([(words >> (bits * k)) & ((1 << bits) - 1) for k in range(per)], 2).reshape(words.shape[0], -1)
+            sub = tex[::2, ::2]
+            if sub.shape[1] % per:
+                sub = np.pad(sub, ((0, 0), (0, per - sub.shape[1] % per)))
+            sub = sub.reshape(sub.shape[0], -1, per)
+            packed = np.zeros(sub.shape[:2], np.uint16)
+            for k in range(per):
+                packed |= (sub[:, :, k].astype(np.uint16) << (bits * k))
+            nid = max(src) + 1
+            syn = copy.copy(sm)                       # the same CLUTs, a band of its own
+            syn.band = np.zeros_like(sm.band)
+            syn.model = nid
+            syn.band[y0:y0 + packed.shape[0], x0:x0 + packed.shape[1]] = packed
+            src[nid] = syn
+            lo = c["lo"]
+            for i in c["faces"]:
+                f = faces[i]
+                page = 256 if f["smat"] & 0x100 else 0
+                uv = []
+                for u, v in f["suv"]:
+                    cu = (u * 2 if eight else u) + page
+                    cu = lo[0] + (cu - lo[0]) / 2
+                    uv.append(((cu - page) / (2 if eight else 1), lo[1] + (v - lo[1]) / 2))
+                f["suv"], f["model"] = uv, nid
+            if (model, c["mat"] & 0x7EFF) in wide_keys:
+                wide_keys.add((nid, c["mat"] & 0x7EFF))
+            c["model"] = nid
+            c["hi"] = np.array([lo[0] + 4 * packed.shape[1] - 1, y0 + packed.shape[0] - 1])
+        groups.clear()
+        for i, f in enumerate(faces):
+            groups.setdefault((f["model"], f["smat"]), []).append(i)
+
+    halved, synthetic = [], set()
+    while True:
+        texels = {}
+        for c in clusters:
+            texels[c["model"]] = texels.get(c["model"], 0) + int(np.prod(c["hi"] - c["lo"] + 1))
+        spots = fit_page(texels)
         if spots is not None:
             break
-    kept = spots is not None
-    if not kept:
-        keeper = keeper8 = None
-        spots = pack(False)
-    if spots is None:
-        raise MI.Budget("the chosen parts' textures do not fit in one texture page: take parts from fewer different fighters")
+        # the biggest other fighter's areas first, the base's last
+        todo = sorted((m for m in texels if m not in synthetic), key=lambda m: (m == base, -texels[m]))
+        if not todo:
+            raise MI.Budget("the chosen parts' textures do not fit in one texture page: take parts from fewer different fighters")
+        before = set(src)
+        halve(todo[0])
+        synthetic |= set(src) - before
+        halved.append(todo[0])
+        log(f"texture page: model {todo[0]}'s areas at half size, to fit")
+    if halved:
+        log(f"textures at half size: models {', '.join(map(str, halved))}")
+
     for i, c in enumerate(clusters):
         c["dst"] = spots[i]
     band = np.zeros((256, 64), dtype=np.uint16)

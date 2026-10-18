@@ -135,7 +135,8 @@
       if (run !== previewRun) return;
       showView(true);
       T3Costumes.preview(json, "Preview of the chosen parts: not built yet. Build puts it in the game.");
-      note.textContent = "Preview shown. Build puts this body in the game.";
+      note.textContent = "Preview shown. Build puts this body in the game." +
+        (json.half_textures ? " Some parts' textures are at half size, so all of them fit Tekken 3's one texture page." : "");
     } catch (e) {
       if (run === previewRun) note.textContent = `This mix does not work: ${e.message}`;
     }
@@ -160,7 +161,8 @@
       if (window.T3Model) T3Model.refresh();
       T3Costumes.refresh(true);
       showView(true);
-      note.textContent = saved.own_model?.triangles ? `Built: ${saved.own_model.triangles} triangles. Undo is on the Model Importer page.` : "Built.";
+      note.textContent = (saved.own_model?.triangles ? `Built: ${saved.own_model.triangles} triangles. Undo is on the Model Importer page.` : "Built.") +
+        (saved.own_model?.half_textures ? " Some parts' textures are at half size to fit one texture page." : "");
       if (!showWarnings(saved)) toast(`${saved.name} has a new body`);
     } catch (e) {
       note.textContent = e.message;

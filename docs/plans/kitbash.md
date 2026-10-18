@@ -121,3 +121,21 @@ Test: Nina's leg vertices were stretched 1.2x along the bone, and the knee and a
 legs were longer, but the feet stood about 30 px below the floor. The pelvis (row 1) has offset
 0 and its height comes from the animation, so longer legs push the feet through the floor. Taller
 or shorter fighters would need changed animations: left out of the Builder.
+
+### Texture page full: areas at half size (2026-10-18, tested)
+
+When no layout fits the one 256 x 256 page, `kitbash.halve` rebuilds the biggest other
+fighter's areas at half size (every second texel each way). They go in a band of their own,
+with the same CLUTs, and their polygons' UVs are scaled to match. Then packing runs again; the
+base's areas are halved last. The Builder notes "some parts' textures are at half size" in the
+preview and after Build (`half_textures`).
+
+Measured over every base x fitting source for the body part (1028 mixes):
+- before: 354 failed (229 page, 92 GPU packets, 33 bytes);
+- after: 141 failed (0 page, 108 GPU packets, 33 bytes). Some former page failures now stop at
+  the polygon budget instead.
+
+Tested:
+- Law's body on Nina (failed before) renders right offline;
+- `t3live fight` drew it with 0 of 5189 words differing and a clean HUD;
+- KITTEST's own mix is unchanged (halving only runs when nothing fits).

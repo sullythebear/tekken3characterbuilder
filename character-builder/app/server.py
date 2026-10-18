@@ -1532,12 +1532,16 @@ def kit_preview(cid: str, costume: int, parts, colours=None, shape=None) -> byte
     with model_lock:
         if not js.is_file():
             out.parent.mkdir(parents=True, exist_ok=True)
-            problem, _ = run_kitbash(root, models[costume], kit, out, colours, shape)
+            problem, text = run_kitbash(root, models[costume], kit, out, colours, shape)
             if problem or not out.is_file():
                 raise ValueError(problem or "The character builder failed.")
             problem, _ = run_model_tool(root, ["ownjson", "--file", str(out), "--out", str(js)])
             if problem:
                 raise ValueError(problem)
+            if "textures at half size" in text:       # kitbash halved some areas to fit one page
+                mesh = json.loads(js.read_text(encoding="utf-8"))
+                mesh["half_textures"] = True
+                js.write_text(json.dumps(mesh), encoding="utf-8")
     return js.read_bytes()
 
 
@@ -1578,7 +1582,8 @@ def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=Non
         old.unlink()
     out.replace(folder / "model.bin")
     made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
-    data["own_model"] = {"file": "Character Builder", "kit": kit, "colours": colours, "shape": shape, "costume": costume,
+    data["own_model"] = {"file": "Character Builder", "kit": kit, "colours": colours, "shape": shape,
+                         "half_textures": "textures at half size" in text, "costume": costume,
                          "model": models[costume],
                          "triangles": int(made[-1]) if made else None, "textured": True,
                          "imported": datetime.now().isoformat(timespec="seconds")}
