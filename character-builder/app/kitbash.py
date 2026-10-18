@@ -610,9 +610,28 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
     # Namco's own polygons only: up to what the stock models themselves need (imports keep a margin).
     # A model a little too big for the base's slot is written again with coarser normals (fewer
     # stored, the light barely changes)
+    # Over the packet budget: neighbouring triangles with the same texels on their shared edge go
+    # out as quads (the GPU draws the same two triangles, 52 bytes instead of 80)
+    def write(steps):
+        nonlocal faces, texture
+        try:
+            return MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
+                             max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
+        except MI.Budget as error:
+            if "GPU packets" not in str(error) or texture.get("paired"):
+                raise
+            from direct_import import _pair_quads
+            tris = [i for i, f in enumerate(faces) if len(f["v"]) == 3]
+            paired, paired_uv = _pair_quads([faces[i] for i in tris], [texture["uv"][i] for i in tris], G=pos)
+            keep = [i for i, f in enumerate(faces) if len(f["v"]) != 3]
+            log(f"{error}: {len(tris) - len(paired)} triangle pairs as quads")
+            faces = [faces[i] for i in keep] + paired
+            texture = dict(texture, uv=[texture["uv"][i] for i in keep] + paired_uv, paired=True)
+            return MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
+                             max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
+
     for steps in (8, 6, 4):
-        data, report = MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
-                                 max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
+        data, report = write(steps)
         if len(data) <= len(B.m):
             break
         log(f"{len(data)} bytes for a slot of {len(B.m)}: normals in coarser steps")

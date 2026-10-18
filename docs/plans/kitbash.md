@@ -170,3 +170,16 @@ coarser steps (6, then 4, instead of 8). Fewer normals are stored and the light 
 build: 8 slot-size and 1 packet failures. Randomize now draws one or two other fighters. When a
 random mix does not build, it draws again, at most 3 times. Browser: 3 Randomize clicks gave 3
 previews, one of them from two fighters.
+
+### Over the packet limit: triangle pairs as quads (2026-10-19, tested in game)
+
+When a mix is over the packet limit, `direct_import._pair_quads` joins neighbouring triangles
+that have the same texels on their shared edge, the same CLUT and the same shading into quads.
+It only joins nearly flat pairs (at most 12 degrees bent). The GPU draws (a, b, c) + (b, d, c),
+the same two triangles, for 52 bytes of packets instead of 80. Existing quads stay as they are.
+It only runs when the limit is passed, so mixes that fit are byte-identical (`t3cb kitregress`:
+all 6 the same).
+- Law (model 2) with body 36: 33376 → fits (104 pairs); clean render, no holes. Bodies 5 on
+  model 2, 36 on model 9 and 41 on model 21 build too (75-160 pairs).
+- In game: KITTEST's mix forced through the pairing (limit lowered to 28500: 96 pairs, 27088
+  packet bytes) fought 900 frames, falls included, with 0 of 5188 words differing.
