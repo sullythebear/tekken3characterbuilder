@@ -288,6 +288,34 @@ function creditsBody() {
   return out;
 }
 
+async function showCheck() {
+  const box = $("check-list");
+  box.textContent = "Checking…";
+  if (!$("check-dialog").open) $("check-dialog").showModal();
+  try {
+    const r = await api("/api/check", {});
+    box.textContent = "";
+    const mark = { ok: "✓", bad: "✗", warn: "!", info: "i" };
+    const line = (issue) => {
+      const p = document.createElement("p");
+      p.className = `check-line check-${issue.level}`;
+      p.textContent = `${mark[issue.level]}  ${issue.text}`;
+      return p;
+    };
+    r.general.forEach((g) => box.append(line(g)));
+    for (const f of r.fighters) {
+      const h = document.createElement("h3");
+      h.className = "check-fighter";
+      h.textContent = f.name;
+      box.append(h);
+      if (!f.issues.length) box.append(line({ level: "ok", text: "All in order." }));
+      f.issues.forEach((i) => box.append(line(i)));
+    }
+    if (!r.fighters.length) box.append(line({ level: "info", text: "No fighters yet." }));
+    $("check-fix").hidden = !isExpanded() || !r.fighters.some((f) => f.issues.some((i) => i.level === "bad" && /game/.test(i.text)));
+  } catch (e) { box.textContent = e.message; }
+}
+
 async function showLibrary() {
   const list = $("library-list"), note = $("library-note");
   list.textContent = "";
@@ -771,6 +799,14 @@ function wire() {
   $("delete").addEventListener("click", removeCharacter);
   $("export").addEventListener("click", exportFighter);
   $("library-button").addEventListener("click", showLibrary);
+  $("check-button").addEventListener("click", showCheck);
+  $("check-fix").addEventListener("click", async () => {
+    try {
+      const result = await api("/api/sync", {});
+      if (!showWarnings(result)) toast("Game files written again");
+    } catch (e) { toast(e.message); }
+    showCheck();
+  });
   for (const input of document.querySelectorAll("#credits [data-credit]")) input.addEventListener("input", markDirty);
   $("import-file").addEventListener("change", (e) => importPackage(e.target.files[0]));
   $("portrait-file").addEventListener("change", (e) => { useFile(e.target.files[0]); e.target.value = ""; });

@@ -46,6 +46,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   name|voice), route `/api/namecall/voices`; UI `arena.js` `#name-voice`, `#name-pitch`, `#name-echo`.
 - Licence register: `clean_credits` (field `credits` in character.json, `CREDIT_ASSETS`, `LICENCES`),
   `licence_warnings` (`/api/export/check`, UI `exportFighter`), UI `#credits` + `creditsBody()`.
+- Check library: `check_library` (`/api/check`), UI `showCheck` + `#check-dialog` (fix = `/api/sync`).
 - Asset library: `own_assets`, `asset_library` (`/api/library`), UI `showLibrary` + `#library-dialog`.
 - Backup: `backup_all` (GET `/api/backup`, every package in a .t3backup zip), `backup_packages` (the
   `/api/import` route imports each package of a backup).

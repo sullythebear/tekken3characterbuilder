@@ -48,6 +48,7 @@
     <div class="menu-actions">
       <button class="menu-item" id="new-character" type="button">New fighter</button>
       <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.t3backup,.zip" hidden></label>
+      <button class="menu-item" id="check-button" type="button">Check library</button>
       <button class="menu-item" id="library-button" type="button">Asset library</button>
       <a class="menu-item" id="backup-all" href="/api/backup" title="Every fighter as a package in one .t3backup file; Import package reads it back">Back up all fighters</a>
     </div>
@@ -394,6 +395,17 @@
       <button class="btn btn-primary" type="button" id="root-save">Use folder</button>
       <button class="btn btn-ghost" type="button" id="sync-customs" hidden>Refresh Custom page files</button>
       <button class="btn btn-ghost" type="button" id="support-remove">Remove the creator's changes</button>
+      <button class="btn btn-ghost" value="close">Close</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="check-dialog">
+  <form method="dialog" class="dialog-body">
+    <h2>Check library</h2>
+    <p class="hint">Every fighter against the game folder: is what the creator writes there present, and is anything missing in the fighter itself. Nothing is changed by this check.</p>
+    <div id="check-list"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="button" id="check-fix" hidden>Write the game files again</button>
       <button class="btn btn-ghost" value="close">Close</button>
     </div>
   </form>

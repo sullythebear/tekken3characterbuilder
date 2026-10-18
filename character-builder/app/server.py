@@ -667,6 +667,53 @@ def asset_library() -> list[dict]:
     return rows
 
 
+def check_library() -> dict:
+    """A read-only check of every fighter against the game folder: is what the creator writes
+    there present (Custom page entry, portrait, own model, name call, stage colours), and what is
+    missing in the fighter itself. {"general": [...], "fighters": [{id, name, issues: [{level, text}]}]}
+    with level "bad" (the game will not show it as made), "warn" or "info"."""
+    root = project_root()
+    general, out = [], []
+    expanded = bool(root) and creator_patch.project_kind(root) == "expanded"
+    if not expanded:
+        general.append({"level": "bad", "text": "No Tekken 3 Expanded folder is set: the game files cannot be checked."})
+    else:
+        status = project_status()
+        if not (status.get("patch") or {}).get("installed"):
+            general.append({"level": "bad", "text": "The Custom page is not installed in the game (step 1)."})
+        elif not status.get("built"):
+            general.append({"level": "warn", "text": "The game has not been built with the current changes (step 2)."})
+    entries = dict(custom_page.read_entries(root, {})[0]) if expanded else {}
+
+    def game_file(key, name):
+        return any((root / folder / name).is_file() for folder in custom_page.FOLDERS)
+
+    for c in sorted(character_list(), key=lambda c: c.get("created", "")):
+        folder, issues = DATA / c["id"], []
+        add = lambda level, text: issues.append({"level": level, "text": text})
+        if not (folder / "portrait-ps1.png").is_file():
+            add("info", "No portrait yet: the select screen shows a plain tile.")
+        if c.get("name_call") == "own" and not (folder / "namecall.wav").is_file():
+            add("bad", "The name call is set to your own sound, but nothing is recorded.")
+        for text in licence_warnings(c["id"]):
+            add("warn", text)
+        if expanded:
+            key = game_key(c["id"])
+            prefix = custom_page.file_prefix(key)
+            if key not in entries:
+                add("bad", "Not on the Custom page (customs.txt): save the fighter or refresh the Custom page files.")
+            if not game_file(key, f"{prefix}-ui.jui"):
+                add("bad", "The portrait and name plate files are missing in the game.")
+            if c.get("own_model") and (folder / "model.bin").is_file() and not game_file(key, f"{prefix}-model.bin"):
+                add("bad", "Its own 3D model is not in the game yet.")
+            if c.get("name_call") in ("auto", "own") and not game_file(key, name_call.pack_name(key)):
+                add("warn", "The name call is not in the game yet.")
+            if c.get("stage_look") and not game_file(key, f"{prefix}-stage.bin"):
+                add("warn", "The stage colours are not in the game yet.")
+        out.append({"id": c["id"], "name": c["name"], "issues": issues})
+    return {"general": general, "fighters": out}
+
+
 def backup_all() -> tuple[str, bytes]:
     """Every fighter as its .t3char package, in one .t3backup zip (Import package reads it)."""
     buffer = io.BytesIO()
@@ -2061,6 +2108,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"points": restore_points(str(data.get("id", "")))})
             if path == "/api/namecall/voices":
                 return self._json({"voices": name_call.voices()})
+            if path == "/api/check":
+                return self._json(check_library())
             if path == "/api/library":
                 return self._json({"assets": asset_library()})
             if path == "/api/export/check":

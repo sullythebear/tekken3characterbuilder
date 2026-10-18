@@ -264,6 +264,13 @@ class CreditsAndBackupTests(CharacterTests):
         rows = server.asset_library()
         self.assertEqual([(r["id"], r["asset"], r["licence"]) for r in rows], [(c["id"], "portrait", "own")])
 
+    def test_check_without_game(self):
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "name_call": "own"})
+        r = server.check_library()
+        issues = [i["text"] for f in r["fighters"] for i in f["issues"] if f["id"] == c["id"]]
+        self.assertTrue(any("portrait" in t for t in issues))
+        self.assertEqual(server.check_library()["fighters"][0]["name"], "A")
+
     def test_backup_round_trip(self):
         import base64
         server.save_character({"name": "A", "donor": 1, "costumes": []})

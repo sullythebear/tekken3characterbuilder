@@ -19,6 +19,7 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Module navigation in the UI over the existing pages | **done** (tabs Fighter, Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab) |
 | Model Importer separate from Character Builder | **partly** (own tab "3D model") |
 | Licence register per fighter (own model, portrait image, recording) + export warning | **done** (Fighter page "Credits and licences", in packages and restore points; Export warns when a carried asset's licence is not known; tested in the browser) |
+| Check library: every fighter against the game folder (Custom page entry, portrait, own model, name call, stage colours) and against itself | **done** (menu "Check library", read-only, "Write the game files again" when files are missing; negative test: hiding KITTEST's model file was reported) |
 | Asset library: one view of every fighter's own assets with source, author and licence | **done** (menu "Asset library", unknown licences marked, click opens the fighter; browser-tested) |
 | Backup of all fighters (.t3backup, read back by Import package) | **done** (download tested: 4 fighters, 7.2 MB; import round trip unit-tested; the import takes up to ~24 MB) |
 | Project versions / restore points per fighter | **done** (settings before each save, last 20, Restore on the Fighter page; restoring is itself undoable; 3D model: its own Undo) |

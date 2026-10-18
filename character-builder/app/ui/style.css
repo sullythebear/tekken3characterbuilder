@@ -463,3 +463,11 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .library-table tbody tr { cursor: pointer; }
 .library-table tbody tr:hover { background: var(--panel-hi); }
 .library-table tr.licence-unknown td:last-child { color: var(--amber); }
+
+#check-dialog { width: min(720px, 94vw); }
+#check-list { max-height: 60vh; overflow: auto; }
+.check-fighter { margin: .7rem 0 .2rem; font: italic 1rem/1 var(--display); color: var(--paper); text-transform: uppercase; }
+.check-line { margin: .15rem 0; font-size: .85rem; color: var(--steel); }
+.check-line.check-ok::first-letter { color: var(--ok); }
+.check-line.check-bad { color: var(--bad); }
+.check-line.check-warn { color: var(--amber); }
