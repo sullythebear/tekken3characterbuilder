@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 import name_call  # noqa: E402
+import command_list as command_list_module  # noqa: E402   (stdlib only: struct)
 
 APP_VERSION = "0.5.1"
 APP = Path(__file__).resolve().parent
@@ -491,6 +492,30 @@ def stage_arena(fighter: dict) -> int:
     return STAGE_ARENA[fighter["donor"] if owner is None else owner]
 
 
+def write_moves(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-moves.bin (patch 20): the fighter's changed damage of basic moves (or none)."""
+    name = f"{custom_page.file_prefix(key)}-moves.bin"
+    data = None
+    if fighter.get("move_damage"):
+        try:
+            moves = command_list(fighter["donor"])
+        except ValueError as error:
+            return f"Move damage: {error}"
+        data = command_list_module.moves_file(moves["key"], moves["records"], fighter["move_damage"])
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if data:
+                (target / name).write_bytes(data)
+            else:
+                (target / name).unlink(missing_ok=True)
+    except OSError as error:
+        return f"Move damage: {error}"
+    return None
+
+
 def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
     """<Key>-T3-stage.bin: the home stage's colour variant (or none), cached per stage and look."""
     name = f"{custom_page.file_prefix(key)}-stage.bin"
@@ -600,6 +625,17 @@ def validate_character(data: dict) -> dict:
     voice = str(data.get("name_call_voice") or "").strip()
     if voice and name_call.VOICE_RE.fullmatch(voice):   # an installed Windows voice (auto mode)
         clean["name_call_voice"] = voice
+    moves = data.get("move_damage")                      # Move Lab: {basic input: damage}
+    if isinstance(moves, dict) and moves:
+        clean_moves = {}
+        for k, v in list(moves.items())[:command_list_module.MOVES_FILE_MAX]:
+            if re.fullmatch(r"(?:(?:u|uf|ub|f|b|d|df|db)\+)?[1-4](?:\+[1-4]){0,3}", str(k)):
+                try:
+                    clean_moves[str(k)] = max(0, min(200, int(v)))
+                except (TypeError, ValueError):
+                    raise ValueError("Invalid move damage.") from None
+        if clean_moves:
+            clean["move_damage"] = clean_moves
     credits = clean_credits(data.get("credits"))
     if credits:
         clean["credits"] = credits
@@ -710,6 +746,8 @@ def check_library() -> dict:
                 add("warn", "The name call is not in the game yet.")
             if c.get("stage_look") and not game_file(key, f"{prefix}-stage.bin"):
                 add("warn", "The stage colours are not in the game yet.")
+            if c.get("move_damage") and not game_file(key, f"{prefix}-moves.bin"):
+                add("warn", "The changed move damage is not in the game yet.")
         out.append({"id": c["id"], "name": c["name"], "issues": issues})
     return {"general": general, "fighters": out}
 
@@ -887,7 +925,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
         problem = write_palettes(root, key, c) or write_own_model(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
-        for problem in (write_name_call(root, key, c), write_stage_look(root, key, c)):
+        for problem in (write_name_call(root, key, c), write_stage_look(root, key, c), write_moves(root, key, c)):
             if problem:
                 warnings.append(f"{c['name']}: {problem}")
     if left_out:
@@ -1296,7 +1334,7 @@ def command_list(donor) -> dict:
     models = donors["donors"].get(str(donor))
     if not models:
         raise ValueError("That style does not exist.")
-    path = CACHE / f"commandlist2-{models[0]}-{donor}.json"   # 2: with the damage column
+    path = CACHE / f"commandlist3-{models[0]}-{donor}.json"   # 3: damage, records and key
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)
@@ -1305,7 +1343,8 @@ def command_list(donor) -> dict:
         CACHE.mkdir(exist_ok=True)
         path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {"donor": donor, "moves": data["moves"], "basic": data["basic"]}
+    return {"donor": donor, "moves": data["moves"], "basic": data["basic"], "records": data["records"],
+            "key": data["key"]}
 
 
 # --------------------------------------------------- character builder --
@@ -1658,7 +1697,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits")
+                  "costumes", "credits", "move_damage")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:

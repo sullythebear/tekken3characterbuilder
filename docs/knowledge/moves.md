@@ -164,3 +164,26 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   The Move Lab therefore shows damage only for single-input lines and the basic grid, not
   summed strings.
 - **tested** The very first input after a fight starts is ignored (seen in every run).
+
+## Changed damage per fighter: patch 20 (2026-10-18, tested in game)
+
+- **tested** Word 5 sets the damage. In Practice (ATTACK DATA on), Xiaoyu's 3 showed DMG 024
+  (120 %) with record 113 at 20. With the value written to 60 live, it showed DMG 072.
+- **tested** In Practice the dummy is a mirror of P1. **Both players then share one moveset
+  buffer**: the headers at 0x800ADC20 and 0x800ADC24 were both 0x800F9D80. In Arcade every player
+  has its own (KITTEST 0x800F9D80, Jin and Paul 0x8015C6D8).
+- **T3CB-PATCH-20** (roster.c, `custom_moves_tick`, every frame in state 8):
+  - `<prefix>-moves.bin` = "T3MV", u16 version 1, u16 key, u16 count, then per change u16 record,
+    u16 old damage, u16 new damage.
+  - When the player is that custom fighter, holds a moveset of that key, and the other player
+    does not share the buffer, records still at the old value get the new one (the low byte;
+    the flags are kept).
+  - When the buffer belongs to someone else again, the changed values go back.
+- **tested** KITTEST (Nina, key 5) with 3 = 60, written by the builder from the Move Lab
+  (record 110, 25 → 60):
+  - Arcade: P1 record 110 = 60, the opponent untouched; log "Kittest has 1 changed moves",
+    "P1 Kittest changed moves in (1)".
+  - Practice mirror: left at 25 (shared buffer), as designed.
+- **not tested** The "goes back" path, when a stock fighter of the same style later gets that
+  buffer. It is done in code; its value check makes sure it only resets values still at the new
+  damage, in a moveset of the same key.

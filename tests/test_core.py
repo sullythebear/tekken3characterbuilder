@@ -300,6 +300,15 @@ class VoiceShapeTests(unittest.TestCase):
 
 
 class BasicDamageTests(unittest.TestCase):
+    def test_moves_file(self):
+        import command_list as M
+        records = {"3": [110, 25], "1": [99, 5]}
+        self.assertIsNone(M.moves_file(5, records, {"3": 25}))           # unchanged
+        b = M.moves_file(5, records, {"3": 60, "9": 1})
+        self.assertEqual(b, b"T3MV" + struct.pack("<HHH", 1, 5, 1) + struct.pack("<HHH", 110, 25, 60))
+        c = server.validate_character({"name": "A", "donor": 5, "move_damage": {"3": 999, "df+2": "12", "x": 3}})
+        self.assertEqual(c["move_damage"], {"3": 200, "df+2": 12})
+
     def test_notation(self):
         import command_list as M
         self.assertEqual(M.notation(0x0404), "f+3")

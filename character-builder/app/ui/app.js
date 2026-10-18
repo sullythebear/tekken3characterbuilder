@@ -583,7 +583,7 @@ async function save(event) {
   if (variantProblem) { error.textContent = variantProblem; return; }
   error.textContent = "";
   const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
-    costumes: T3Costumes.serialize(), ...T3Arena.body(), credits: creditsBody() };
+    costumes: T3Costumes.serialize(), ...T3Arena.body(), ...T3MoveLab.body(), credits: creditsBody() };
   if (state.portraitChanged && state.source) {
     body.portrait_ps1 = $("portrait-canvas").toDataURL("image/png");
     body.portrait_source = sourcePNG();

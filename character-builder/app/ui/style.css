@@ -456,8 +456,10 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 
 .move-table td.move-damage { color: var(--gold); text-align: right; white-space: nowrap; font-size: .85rem; }
 .basic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: .3rem .6rem; font-size: .85rem; }
-.basic-grid div { display: flex; justify-content: space-between; gap: .4rem; border-bottom: 1px solid var(--line); padding: .1rem 0; }
-.basic-grid strong { color: var(--gold); }
+.basic-grid label { display: flex; justify-content: space-between; align-items: center; gap: .4rem; border-bottom: 1px solid var(--line); padding: .1rem 0; }
+.basic-grid input { width: 3.4rem; background: transparent; color: var(--gold); border: 1px solid transparent; text-align: right; font: inherit; }
+.basic-grid input:hover, .basic-grid input:focus { border-color: var(--line); }
+.basic-grid label.changed input { color: var(--ember); border-color: var(--ember); }
 
 #library-dialog { width: min(860px, 94vw); }
 .library-table tbody tr { cursor: pointer; }

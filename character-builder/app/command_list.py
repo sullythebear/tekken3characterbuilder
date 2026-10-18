@@ -194,6 +194,11 @@ def moveset_key(exe: bytes, style: int) -> int:
 def basic_damage(moveset: bytes, exe: bytes) -> dict[str, int]:
     """{notation: damage} of the basic inputs, standing (the shared lists' unconditional entries
     first; a few styles change some inputs in stances, which this leaves out)."""
+    return {name: damage for name, (_, damage) in basic_records(moveset, exe).items()}
+
+
+def basic_records(moveset: bytes, exe: bytes) -> dict[str, tuple[int, int]]:
+    """{notation: (record, damage)} of the basic inputs (see basic_damage)."""
     word = lambda o: struct.unpack_from("<I", moveset, o)[0]
     start, alias = word(8), word(12)
     count = (alias - start) // 56
@@ -207,10 +212,28 @@ def basic_damage(moveset: bytes, exe: bytes) -> dict[str, int]:
         if not 0 <= record < count:
             continue
         damage = word(start + 56 * record + 20) & 0xFF   # high bits: flags (0x4000 on throws)
-        (later if cond else out).setdefault(name, damage)
+        (later if cond else out).setdefault(name, (record, damage))
     for name, damage in later.items():
         out.setdefault(name, damage)
     return out
+
+
+MOVES_FILE_MAX = 32
+
+
+def moves_file(key: int, records: dict, changes: dict) -> bytes | None:
+    """<prefix>-moves.bin for patch 20 ("T3MV"): {notation: new damage} over the style's basic
+    records {notation: [record, damage]}; None when nothing changes."""
+    rows = []
+    for name, new in sorted(changes.items()):
+        if name in records and 0 <= int(new) <= 200 and int(new) != records[name][1]:
+            record, old = records[name]
+            if (record, old, int(new)) not in rows and not any(r[0] == record for r in rows):
+                rows.append((record, old, int(new)))
+    if not rows:
+        return None
+    rows = rows[:MOVES_FILE_MAX]
+    return b"T3MV" + struct.pack("<HHH", 1, key, len(rows)) + b"".join(struct.pack("<HHH", *r) for r in rows)
 
 
 def with_damage(entries: list[dict], damage: dict[str, int]) -> list[dict]:
