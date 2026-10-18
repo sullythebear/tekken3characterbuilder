@@ -1,4 +1,4 @@
-DIZZY CHARACTER CREATOR 0.5.1
+DIZZY CHARACTER CREATOR 0.6.0
 =============================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
@@ -65,6 +65,13 @@ fighters: head, body, arms and legs, each from any fighter of a similar build
 (read from your own disc; packages carry only your choices). "Randomize"
 picks for you; "Build" puts it on the chosen costume. Undo is on the Model
 Importer tab. A costume with an own model keeps that model's colours.
+Body colours (hue, saturation, lightness, keep skin tones) and body shape
+(head size; arms, legs and body thicker or thinner; presets Slim, Athletic,
+Heavy, Big head) work on the same build. "Save this look" keeps the parts,
+colours and shape under a name, to use on any fighter. When a mix's textures
+do not fit Tekken 3's one texture page, some parts get their textures at half
+size (the preview says so). Taller or shorter fighters are not possible: the
+animations set the height.
 
 Own 3D models (Model Importer tab)
 ---------------------------------
@@ -74,17 +81,22 @@ without a skeleton are locked. Big models are reduced to PS1 size with a new
 texture (1 to 3 minutes). Hair, tails or horns that stick out are folded
 down; change that per part before you import. "What makes a model work
 well?" on that tab lists the details.
+Before you import, a check list shows the geometry, materials and rigging.
+Big models have "Face detail" and "Body detail". If the model's texture is a
+separate image file, use "Choose texture image" (.png or .jpg).
 
 Portrait Lab
 ------------
 Choose an image, or (with an own 3D model) "Make from 3D model" with an
-angle, framing, light and background.
+angle, framing, light and background. "Keep this portrait" saves it under
+"Saved portraits" (up to 12): click one to use it again.
 
 Voice Lab
 ---------
 The announcer calls your fighter's name in Practice, as Tekken 3 does for its
 own fighters. Silent unless you choose: your own recording or sound file
-(optionally with an announcer effect), or Windows' computer voice.
+(pitch, echo, or the Announcer preset), or Windows' computer voice (choose
+which of the voices installed on your computer).
 
 Stage Lab
 ---------
@@ -95,7 +107,19 @@ own colour. New stage shapes are not possible.
 Move Lab
 --------
 The moves of your fighter's style, as Tekken 3's COMMAND LIST shows them
-(read from your disc). Changing single moves is not possible yet.
+(read from your disc), and the damage of every basic input (1, 2, 3, 4 with
+the directions). Change a number to give your fighter other damage: it applies
+to your fighter only (game patch T3CB-PATCH-20), not to the style's own
+fighter, and not in a mirror match, where both players share one moveset.
+
+Library
+-------
+"Check library" (menu) checks every fighter against the game folder.
+"Asset library" lists your own assets (3D model source, portrait image,
+recording) with where they come from; fill in "Credits and licences" on the
+Fighter tab. Export warns when an asset in the package has no known licence.
+"Back up all fighters" saves every fighter in one .t3backup file; "Import
+package" reads it back.
 
 Restore points
 --------------
