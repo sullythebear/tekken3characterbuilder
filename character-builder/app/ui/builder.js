@@ -6,6 +6,13 @@
   let models = null, fit = 0.07, busy = false, previewTimer = null, previewRun = 0;
 
   // colour presets: [hue, saturation, lightness]
+  // body shape presets: head, arms, legs, body in % (the sliders' ranges)
+  const SHAPE_PRESETS = [["Normal shape", [100, 100, 100, 100]], ["Slim", [100, 85, 88, 90]],
+    ["Athletic", [100, 112, 108, 106]], ["Heavy", [105, 125, 120, 122]], ["Big head", [128, 100, 100, 100]]];
+  function setShape(values) {
+    const inputs = [...document.querySelectorAll(".kit-shape input")];
+    inputs.forEach((input, k) => { input.value = String(values[k]); });
+  }
   const PRESETS = [["Original", 0, 100, 0], ["Darker", 0, 90, -15], ["Lighter", 0, 90, 12], ["Muted", 0, 40, 0],
     ["Vivid", 0, 160, 0], ["Opposite", 180, 100, 0]];
   const label = (m) => `${DONORS[m.donor].name} ${m.costume + 1}`;
@@ -106,6 +113,8 @@
     if (!Object.keys(chosen()).length) selects[0].value = sources[0];
     const hue = Math.random() < 0.4 ? Math.round(Math.random() * 360 - 180) : 0;   // sometimes new colours
     [$("kit-hue").value, $("kit-sat").value, $("kit-light").value] = [hue, 100, 0];
+    // sometimes another build too (never the extremes)
+    setShape(Math.random() < 0.3 ? SHAPE_PRESETS[1 + Math.floor(Math.random() * 3)][1] : SHAPE_PRESETS[0][1]);
     schedulePreview();
   }
 
@@ -167,10 +176,12 @@
       input.addEventListener("change", schedulePreview);
       input.addEventListener("input", () => { input.title = `${input.value} %`; });
     }
-    $("kit-shape-reset").addEventListener("click", () => {
-      for (const input of document.querySelectorAll(".kit-shape input")) input.value = "100";
-      schedulePreview();
-    });
+    for (const [name, values] of SHAPE_PRESETS) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn btn-ghost mini"; b.textContent = name;
+      b.addEventListener("click", () => { setShape(values); schedulePreview(); });
+      $("kit-shape-presets").append(b);
+    }
     for (const [name, h, s, l] of PRESETS) {
       const b = document.createElement("button");
       b.type = "button"; b.className = "btn btn-ghost mini"; b.textContent = name;
