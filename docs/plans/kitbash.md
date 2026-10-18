@@ -113,3 +113,11 @@ Tested on KITTEST (head 1.25, arms 1.25, body 1.2):
 - `t3live fight` drew it with 0 of 5386 words differing, and the HUD text stays clean.
 
 Same size in bytes and triangles as without a shape.
+
+### Height / leg length (2026-10-18, tested: not possible this way)
+
+Test: Nina's leg vertices were stretched 1.2x along the bone, and the knee and ankle offsets
+(rows 6, 7, 9, 10, words 3..5) were scaled the same. The game drew it (0 words differ) and the
+legs were longer, but the feet stood about 30 px below the floor. The pelvis (row 1) has offset
+0 and its height comes from the animation, so longer legs push the feet through the floor. Taller
+or shorter fighters would need changed animations: left out of the Builder.
