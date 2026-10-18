@@ -87,8 +87,9 @@ separate image file, use "Choose texture image" (.png or .jpg).
 
 Portrait Lab
 ------------
-Choose an image, or (with an own 3D model) "Make from 3D model" with an
-angle, framing, light and background. "Keep this portrait" saves it under
+Choose an image, or "Make from 3D model" with an angle, framing, light and
+background (from the fighter's own model, else from its style's first
+costume). "Keep this portrait" saves it under
 "Saved portraits" (up to 12): click one to use it again.
 
 Voice Lab

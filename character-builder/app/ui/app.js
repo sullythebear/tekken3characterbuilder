@@ -478,7 +478,8 @@ async function dropPortrait(variant) {
 }
 
 function showPortraitFromModel() {
-  $("portrait-from-model").hidden = $("portrait-look").hidden = !(state.current.id && state.current.has_model);
+  // with an own model from that model, else from the style's first costume (Tekken 3 Expanded)
+  $("portrait-from-model").hidden = $("portrait-look").hidden = !(state.current.id && (state.current.has_model || (isExpanded() && state.current.donor !== null)));
 }
 
 async function selectCharacter(character) {

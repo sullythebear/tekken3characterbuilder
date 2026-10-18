@@ -1303,8 +1303,23 @@ def own_portrait(cid: str, look=None) -> dict:
     clean = {k: look[k] for k, names in PORTRAIT_LOOK.items() if look.get(k) in names}
     root = project_root()
     source = DATA / safe_id(cid) / "model.bin"
-    if not root or not source.is_file():
-        raise ValueError("This fighter has no own 3D model yet.")
+    if not root:
+        raise ValueError("Set the game folder first.")
+    if not source.is_file():
+        # no own model: the style's first costume as Tekken 3 draws it (cached, from the disc)
+        if creator_patch.project_kind(root) != "expanded":
+            raise ValueError("Portraits from the 3D model need Tekken 3 Expanded.")
+        character = get_character(safe_id(cid))
+        models = donor_models()["donors"].get(str(character.get("donor")), [])
+        if not models:
+            raise ValueError("Choose a fighting style first.")
+        source = CACHE / "kit" / f"{models[0]}-stock.bin"
+        if not source.is_file():
+            source.parent.mkdir(parents=True, exist_ok=True)
+            with model_lock:
+                problem, _ = run_kitbash(root, models[0], {}, source)
+            if problem or not source.is_file():
+                raise ValueError(problem or "The style's model could not be read.")
     out = CACHE / f"portrait-{safe_id(cid)}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     with model_lock:
