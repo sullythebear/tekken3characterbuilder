@@ -191,3 +191,17 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - **tested** Mirror in Arcade too: with a CPU opponent of the same moveset key (5), both headers
   were 0x800F9D80 (one shared buffer) and the patch left it at 25. With Law (key 1) and Eddy
   (key 8) the buffers were separate and the change applied.
+
+## "During crouch" moves (2026-10-18, partly tested; not in the app)
+
+- **tested** King (Practice):
+  - holding down goes to record 25, then 11 (crouching);
+  - from the crouch, df+1 starts record 117 (21 damage), not standing df+1's 137;
+  - "while rising 1" (hold d, release, 1) started 97, the standing 1.
+- **tested** King's list block has df+1 entries with condition 0x0004 → record 117 (entries 215
+  and 356). All 17 of King's cond-4 entries look like crouch moves.
+- **tested** Xiaoyu and Law have no cond-4 entries. Their crouch variants (Xiaoyu df+1 → 254,
+  d+2 → 272, measured) come from the crouch records' own lists. Cond 4 is not a general "during
+  crouch" mark.
+- Not in the Move Lab: finding each style's crouch record statically needs more of the state
+  machine (c001/c002 entries, the transitions out of standing).
