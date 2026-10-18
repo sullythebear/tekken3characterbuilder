@@ -119,7 +119,8 @@ Library
 recording) with where they come from; fill in "Credits and licences" on the
 Fighter tab. Export warns when an asset in the package has no known licence.
 "Back up all fighters" saves every fighter in one .t3backup file; "Import
-package" reads it back.
+package" reads it back. "Duplicate" (next to Export) makes a copy of a
+fighter, named with a 2 at the end, to make a variant.
 
 Restore points
 --------------
