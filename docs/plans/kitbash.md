@@ -139,3 +139,16 @@ Tested:
 - Law's body on Nina (failed before) renders right offline;
 - `t3live fight` drew it with 0 of 5189 words differing and a clean HUD;
 - KITTEST's own mix is unchanged (halving only runs when nothing fits).
+
+### GPU packet limit for mixes (2026-10-18, tested in game)
+
+The writer's 31000-byte packet limit is a margin for imports. Stock models need up to 32580
+(`knowledge/t3-model-style.md`), and a model needing 33596 crashed. Mixes are Namco's own
+polygons, so kitbash now writes up to `MI.STOCK_PACKET_BYTES` = 32580; direct imports keep 31000,
+so the regression is unchanged.
+- Stock models rebuilt by kitbash: highest 31812 (model 21).
+- In game: Nina with head and arms of model 3 (32464 bytes, 1145 triangles) fought 1500 frames
+  (falls, throws) with 0 of 5781 words differing and no crash.
+- Body mixes after this: 52 of 1028 fail. 17 are over the packet limit (32600-33496). 35 do not
+  fit the base model's slot in bytes: small slots such as 18412 bytes, overshot by 400-1400.
+  Overall 354 → 52 since the start of 2026-10-18.

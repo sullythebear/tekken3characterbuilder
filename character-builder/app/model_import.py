@@ -37,6 +37,8 @@ TEMPLATE = True
 # bytes, and a model needing 33596 crashed the game when the fight started (2026-10-02).
 PACKET = (32, 40, 40, 52)
 MAX_PACKET_BYTES = 31000
+# the most a stock fighter model needs (see above): safe for models made of Namco's own polygons
+STOCK_PACKET_BYTES = 32580
 
 
 def frame_row(r):
@@ -673,7 +675,7 @@ def _bake_donor_layout(faces, G, Nrm, tex, side=None):
             "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0, "face8": bool(eight_mats)}
 
 
-def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None, zsign=1):
+def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None, zsign=1, max_packets=None):
     """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
     vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
     normals Nrm. Each face is drawn by the latest row among its vertices; vertices of earlier rows
@@ -975,8 +977,9 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=Non
         report["rows"][r] = {"fam": [len(fam[k]) for k in range(4)], "own": len(verts),
                              "borrowed": len(borrow.get(r, [])), "normals": len(normals), "uvs": len(uvs)}
     packets = sum(sum(PACKET[k] * v["fam"][k] for k in range(4)) for v in report["rows"].values())
-    if packets > MAX_PACKET_BYTES:
-        raise Budget(f"{packets} bytes of GPU packets, the game allows about {MAX_PACKET_BYTES}")
+    limit = max_packets or MAX_PACKET_BYTES
+    if packets > limit:
+        raise Budget(f"{packets} bytes of GPU packets, the game allows about {limit}")
     report["packet_bytes"] = packets
     hdr = struct.pack("<6I", 27, struct.unpack_from("<I", m, 4)[0], 0x4B4D4433, 0, header - 8, 0)
     body = b"".join(struct.pack("<14i", *rows[r]) for r in range(27))

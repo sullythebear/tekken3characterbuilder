@@ -607,7 +607,9 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
     Nrm /= np.linalg.norm(Nrm, axis=1, keepdims=True) + 1e-12
     F = {r: B.W[r][0] for r in B.W}
     J = {r: B.W[r][1] for r in B.W}
-    data, report = MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture})
+    # Namco's own polygons only: up to what the stock models themselves need (imports keep a margin)
+    data, report = MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
+                             max_packets=MI.STOCK_PACKET_BYTES)
     report.update(bytes=len(data), budget=len(B.m), parts=parts)
     if len(data) > len(B.m):
         raise MI.Budget(f"{len(data)} bytes, the base model's slot holds {len(B.m)}")
