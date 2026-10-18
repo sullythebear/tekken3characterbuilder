@@ -16,8 +16,8 @@ Updated: 2026-10-18.
   offered.
 - Saved looks, and Randomize with one or two fighters (it draws again when a mix fails).
 - Mixes that did not fit now build: textures at half size, the stock packet limit, and coarser
-  normals for slots that are just too small. Body mixes failing went from 354 to 52 of 1028; head
-  54, arm 28.
+  normals for slots that are just too small. Body mixes failing went from 354 to 34 of 1028 (only slot size
+  left, after quad pairing); head 54, arm 28 before quad pairing.
 
 **Model Importer**
 - Face and body detail settings for big models.

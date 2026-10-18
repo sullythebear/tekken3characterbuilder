@@ -183,3 +183,5 @@ all 6 the same).
   model 2, 36 on model 9 and 41 on model 21 build too (75-160 pairs).
 - In game: KITTEST's mix forced through the pairing (limit lowered to 28500: 96 pairs, 27088
   packet bytes) fought 900 frames, falls included, with 0 of 5188 words differing.
+- Body mixes with all of this (2026-10-19): 34 of 1028 fail. All are slot size (small slots
+  such as 18412 bytes), none is packets or texture page.
