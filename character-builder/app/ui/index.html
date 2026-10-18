@@ -48,6 +48,7 @@
     <div class="menu-actions">
       <button class="menu-item" id="new-character" type="button">New fighter</button>
       <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.t3backup,.zip" hidden></label>
+      <button class="menu-item" id="library-button" type="button">Asset library</button>
       <a class="menu-item" id="backup-all" href="/api/backup" title="Every fighter as a package in one .t3backup file; Import package reads it back">Back up all fighters</a>
     </div>
   </nav>
@@ -395,6 +396,15 @@
       <button class="btn btn-ghost" type="button" id="support-remove">Remove the creator's changes</button>
       <button class="btn btn-ghost" value="close">Close</button>
     </div>
+  </form>
+</dialog>
+<dialog id="library-dialog">
+  <form method="dialog" class="dialog-body">
+    <h2>Asset library</h2>
+    <p class="hint">Your own assets in this library and where they come from. Parts read from your Tekken 3 disc are not listed: packages never carry them. Fill in a licence on the fighter's page, under "Credits and licences".</p>
+    <table class="move-table library-table"><thead><tr><th>Fighter</th><th>Asset</th><th>Source</th><th>Author</th><th>Licence</th></tr></thead><tbody id="library-list"></tbody></table>
+    <p class="hint" id="library-note"></p>
+    <div class="form-actions"><button class="btn btn-ghost" value="close">Close</button></div>
   </form>
 </dialog>
 <div class="flash" id="flash" aria-hidden="true"><span id="flash-text">READY</span></div>

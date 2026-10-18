@@ -628,17 +628,43 @@ def clean_credits(value) -> dict:
     return out
 
 
+ASSET_NAMES = {"model": "the 3D model source", "portrait": "the portrait image", "sound": "the name call recording"}
+
+
+def own_assets(folder: Path, data: dict) -> dict:
+    """Which of the player's own assets a fighter carries (its package holds them)."""
+    return {"model": any((folder / f"source{e}").is_file() for e in MODEL_SOURCES),
+            "portrait": (folder / "portrait.png").is_file(),
+            "sound": data.get("name_call") == "own" and (folder / "namecall.wav").is_file()}
+
+
 def licence_warnings(cid: str) -> list[str]:
     """Own assets in the fighter's package whose licence is not filled in (export check)."""
     folder = DATA / safe_id(cid)
     data = get_character(folder.name)
     credits = data.get("credits") or {}
-    present = {"model": any((folder / f"source{e}").is_file() for e in MODEL_SOURCES),
-               "portrait": (folder / "portrait.png").is_file(),
-               "sound": data.get("name_call") == "own" and (folder / "namecall.wav").is_file()}
-    names = {"model": "the 3D model source", "portrait": "the portrait image", "sound": "the name call recording"}
-    return [f"The licence of {names[a]} is not known." for a in CREDIT_ASSETS
+    present = own_assets(folder, data)
+    return [f"The licence of {ASSET_NAMES[a]} is not known." for a in CREDIT_ASSETS
             if present[a] and (credits.get(a) or {}).get("licence", "unknown") == "unknown"]
+
+
+def asset_library() -> list[dict]:
+    """Every fighter's own assets with their credits: the licence register over the library.
+    Disc parts (Character Builder bodies, colour variants) are not listed: they stay on the
+    player's disc and packages never carry them."""
+    rows = []
+    for c in character_list():
+        folder = DATA / c["id"]
+        credits = c.get("credits") or {}
+        for asset, present in own_assets(folder, c).items():
+            if not present:
+                continue
+            entry = credits.get(asset) or {}
+            rows.append({"id": c["id"], "fighter": c["name"], "asset": asset,
+                         "source": entry.get("source", ""), "author": entry.get("author", ""),
+                         "licence": entry.get("licence", "unknown"),
+                         "licence_name": LICENCES[entry.get("licence", "unknown")]})
+    return rows
 
 
 def backup_all() -> tuple[str, bytes]:
@@ -2035,6 +2061,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"points": restore_points(str(data.get("id", "")))})
             if path == "/api/namecall/voices":
                 return self._json({"voices": name_call.voices()})
+            if path == "/api/library":
+                return self._json({"assets": asset_library()})
             if path == "/api/export/check":
                 return self._json({"warnings": licence_warnings(str(data.get("id", "")))})
             if path == "/api/portraits":

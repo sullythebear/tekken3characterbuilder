@@ -288,6 +288,35 @@ function creditsBody() {
   return out;
 }
 
+async function showLibrary() {
+  const list = $("library-list"), note = $("library-note");
+  list.textContent = "";
+  try {
+    const { assets } = await api("/api/library", {});
+    const kinds = { model: "3D model source", portrait: "Portrait image", sound: "Name call recording" };
+    for (const a of assets) {
+      const row = document.createElement("tr");
+      for (const text of [a.fighter, kinds[a.asset], a.source || "-", a.author || "-", a.licence_name]) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        row.append(td);
+      }
+      if (a.licence === "unknown") row.className = "licence-unknown";
+      row.addEventListener("click", () => {
+        $("library-dialog").close();
+        const c = state.characters.find((x) => x.id === a.id);
+        if (c) selectCharacter(c);
+      });
+      list.append(row);
+    }
+    const unknown = assets.filter((a) => a.licence === "unknown").length;
+    note.textContent = !assets.length ? "No own assets yet." : unknown
+      ? `${unknown} of ${assets.length} assets have no known licence. Click a row to open that fighter.`
+      : `All ${assets.length} assets have a licence.`;
+  } catch (e) { note.textContent = e.message; }
+  $("library-dialog").showModal();
+}
+
 async function exportFighter() {
   if (!state.current.id) return;
   if (state.dirty) { toast("Save your changes first."); return; }
@@ -741,6 +770,7 @@ function wire() {
   $("new-character").addEventListener("click", () => selectCharacter(null));
   $("delete").addEventListener("click", removeCharacter);
   $("export").addEventListener("click", exportFighter);
+  $("library-button").addEventListener("click", showLibrary);
   for (const input of document.querySelectorAll("#credits [data-credit]")) input.addEventListener("input", markDirty);
   $("import-file").addEventListener("change", (e) => importPackage(e.target.files[0]));
   $("portrait-file").addEventListener("change", (e) => { useFile(e.target.files[0]); e.target.value = ""; });

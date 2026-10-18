@@ -256,6 +256,14 @@ class CreditsAndBackupTests(CharacterTests):
                                "credits": {"sound": {"licence": "own"}}})
         self.assertEqual(server.licence_warnings(c["id"]), [])
 
+    def test_asset_library(self):
+        red = PortraitVariantTests.image((255, 0, 0, 255))
+        c = server.save_character({"name": "A", "donor": 1, "costumes": [], "portrait_ps1": red, "portrait_source": red,
+                                   "credits": {"portrait": {"source": "drawn", "licence": "own"}}})
+        server.save_character({"name": "B", "donor": 2, "costumes": []})
+        rows = server.asset_library()
+        self.assertEqual([(r["id"], r["asset"], r["licence"]) for r in rows], [(c["id"], "portrait", "own")])
+
     def test_backup_round_trip(self):
         import base64
         server.save_character({"name": "A", "donor": 1, "costumes": []})
