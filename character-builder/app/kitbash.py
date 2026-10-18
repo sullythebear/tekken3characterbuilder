@@ -607,10 +607,16 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
     Nrm /= np.linalg.norm(Nrm, axis=1, keepdims=True) + 1e-12
     F = {r: B.W[r][0] for r in B.W}
     J = {r: B.W[r][1] for r in B.W}
-    # Namco's own polygons only: up to what the stock models themselves need (imports keep a margin)
-    data, report = MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
-                             max_packets=MI.STOCK_PACKET_BYTES)
-    report.update(bytes=len(data), budget=len(B.m), parts=parts)
+    # Namco's own polygons only: up to what the stock models themselves need (imports keep a margin).
+    # A model a little too big for the base's slot is written again with coarser normals (fewer
+    # stored, the light barely changes)
+    for steps in (8, 6, 4):
+        data, report = MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
+                                 max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
+        if len(data) <= len(B.m):
+            break
+        log(f"{len(data)} bytes for a slot of {len(B.m)}: normals in coarser steps")
+    report.update(bytes=len(data), budget=len(B.m), parts=parts, normal_steps=steps)
     if len(data) > len(B.m):
         raise MI.Budget(f"{len(data)} bytes, the base model's slot holds {len(B.m)}")
     return B.m, data, texture, report

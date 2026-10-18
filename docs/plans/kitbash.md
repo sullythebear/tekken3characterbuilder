@@ -152,3 +152,12 @@ so the regression is unchanged.
 - Body mixes after this: 52 of 1028 fail. 17 are over the packet limit (32600-33496). 35 do not
   fit the base model's slot in bytes: small slots such as 18412 bytes, overshot by 400-1400.
   Overall 354 → 52 since the start of 2026-10-18.
+
+### Slot size: coarser normals (2026-10-18, tested offline)
+
+A mix a little too big for the base model's slot is written again with its normals snapped in
+coarser steps (6, then 4, instead of 8). Fewer normals are stored and the light barely changes.
+- Head mixes: 54 of 1028 failed before this. Model 7 with head 13 went from 24568 to 24480 bytes
+  (slot 24488) and now builds.
+- Bigger overshoots still fail with a clear message, e.g. model 30 (slot 18412) at 19128 bytes.
+- Imports keep steps of 8, so the regression is unchanged.

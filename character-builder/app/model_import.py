@@ -675,7 +675,8 @@ def _bake_donor_layout(faces, G, Nrm, tex, side=None):
             "palette": [c for _, p in runs for c in p], "charts": len(mats), "density": 0.0, "face8": bool(eight_mats)}
 
 
-def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None, zsign=1, max_packets=None):
+def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=None, zsign=1, max_packets=None,
+           normal_steps=8):
     """The 3DMK model for faces (3 or 4 vertex ids, triangle (0, 1, 2) facing out) over the
     vertices G (game coordinates, T-pose), owned by rows vrows, gouraud shaded with the vertex
     normals Nrm. Each face is drawn by the latest row among its vertices; vertices of earlier rows
@@ -888,7 +889,7 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=Non
         def norm_index(nl):
             # snapped to 1/8 steps first, so nearly equal normals are stored once (the light
             # difference is invisible; it saves bytes in the donor's model slot)
-            u = np.round(np.asarray(nl) / (np.linalg.norm(nl) + 1e-12) * 8) / 8
+            u = np.round(np.asarray(nl) / (np.linalg.norm(nl) + 1e-12) * normal_steps) / normal_steps
             q = tuple(int(round(x * 4096 / (np.linalg.norm(u) + 1e-12))) for x in u)
             if q not in normals:
                 normals.append(q)
