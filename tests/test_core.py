@@ -283,6 +283,33 @@ class VoiceShapeTests(unittest.TestCase):
         c = server.validate_character({"name": "A", "donor": 1, "name_call_voice": "Zira; rm -rf"})
         self.assertNotIn("name_call_voice", c)
 
+
+class BasicDamageTests(unittest.TestCase):
+    def test_notation(self):
+        import command_list as M
+        self.assertEqual(M.notation(0x0404), "f+3")
+        self.assertEqual(M.notation(0x0048), "d+4")
+        self.assertEqual(M.notation(0x0003), "1+2")
+        self.assertEqual(M.notation(0x0201), "1")
+        self.assertIsNone(M.notation(0x0410))          # a direction alone
+        self.assertIsNone(M.notation(0xC00C))
+
+    def test_basic_damage(self):
+        import command_list as M
+        # a moveset: header, two records (damage 0 and 12), alias table: slot 2 -> record 1
+        start, count = 64, 2
+        alias = start + 56 * count
+        ms = bytearray(alias + 16)
+        struct.pack_into("<IIII", ms, 0, 0x0701, 0x40, start, alias)
+        struct.pack_into("<I", ms, start + 56 + 20, 12)
+        struct.pack_into("<I", ms, alias + 8, 1)
+        exe = bytearray(M.SHARED_LISTS[1] - 0x80010000 + 0x800 + 12)
+        at = M.SHARED_LISTS[0] - 0x80010000 + 0x800
+        struct.pack_into("<4H", exe, at, 0x0404, 0, 0, 2)      # f+3 -> slot 2
+        self.assertEqual(M.basic_damage(bytes(ms), bytes(exe)), {"f+3": 12})
+        rows = M.with_damage([{"name": "Kick", "command": "f+3"}, {"name": "Two", "command": "1, 2"}], {"f+3": 12})
+        self.assertEqual([r.get("damage") for r in rows], [12, None])
+
 class BodyShapeTests(unittest.TestCase):
     def test_clean_shape(self):
         self.assertEqual(server.clean_kit_shape({"head": 1.2, "arms": 1, "legs": 5, "tail": 2}),

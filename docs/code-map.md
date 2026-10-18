@@ -38,6 +38,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Body shape: `kitbash.SHAPES` / `clean_shape` / `shape_scale` (applied in `build.place`, local axes: head all,
   arms/legs/body Y and Z; hands and feet kept), CLI `--shape JSON`; server `KIT_SHAPES`, `clean_kit_shape`,
   `run_kitbash(shape=)`, `own_model.shape`; UI `.kit-shape` sliders in `builder.js shape()`.
+- Move Lab damage: `command_list.basic_damage` / `moveset_key` / `with_damage` (BNS record 280 + key, shared
+  lists in SLUS_004.02); `model_export commandlist --style` prints {moves, basic}; server cache
+  `commandlist2-<model>-<style>.json`; UI `movelab.js showBasic`.
 - Voice Lab: `name_call.shape(samples, pitch, echo)` (`ECHOES`, `announcer` = shape -18 hall),
   `voices()` / `speak(name, voice)` (System.Speech, `VOICE_RE`), field `name_call_voice` (auto cache key
   name|voice), route `/api/namecall/voices`; UI `arena.js` `#name-voice`, `#name-pitch`, `#name-echo`.

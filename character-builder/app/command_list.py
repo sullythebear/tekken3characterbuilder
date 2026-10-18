@@ -153,3 +153,70 @@ def moves(data: bytes) -> list[dict]:
         else:
             out.append({"name": text(n), "command": command(c)})
     return out
+
+
+# ------------------------------------------------------------ basic damage --
+# A style's moveset is BNS record MOVESET_FIRST + key (key: descriptor byte 9), with offsets in
+# place of pointers: +4 cancel lists, +8 the 56-byte move records, +12 the alias table, whose
+# entries are record numbers there. The basic inputs (direction + buttons) come from the shared
+# cancel lists in the executable, which name a fixed alias slot each; the record's word 5 (low
+# halfword) is the damage. Tested 2026-10-18 (knowledge/moves.md).
+MOVESET_FIRST = 280
+SHARED_LISTS = (0x8001823C, 0x800187D0)          # first and last entry
+DESCRIPTORS = 0x80097D40                          # 16 bytes per style, pointer to its descriptor
+CANCEL_BUTTONS = {1: "1", 2: "2", 4: "3", 8: "4"}
+CANCEL_DIRECTIONS = {0x20: "db", 0x40: "d", 0x80: "df", 0x100: "b", 0x200: "", 0x400: "f",
+                     0x800: "uf", 0x1000: "u", 0x2000: "ub"}
+
+
+def notation(cmd: int) -> str | None:
+    """Tekken notation of a basic cancel command, or None for special ones (0x8000 and up)."""
+    if cmd >= 0x8000:
+        return None
+    buttons = "+".join(name for bit, name in CANCEL_BUTTONS.items() if cmd & bit)
+    dirs = [name for bit, name in CANCEL_DIRECTIONS.items() if cmd & bit]
+    if not buttons:
+        return None
+    if len(dirs) != 1:                           # no or several directions: any direction
+        return buttons
+    return f"{dirs[0]}+{buttons}" if dirs[0] else buttons
+
+
+def _exe_word(exe: bytes, addr: int) -> int:
+    return struct.unpack_from("<I", exe, addr - 0x80010000 + 0x800)[0]
+
+
+def moveset_key(exe: bytes, style: int) -> int:
+    """The style's moveset key (descriptor byte 9; differs from the style for Mokujin and a few)."""
+    return exe[_exe_word(exe, DESCRIPTORS + 16 * style) + 9 - 0x80010000 + 0x800]
+
+
+def basic_damage(moveset: bytes, exe: bytes) -> dict[str, int]:
+    """{notation: damage} of the basic inputs, standing (the shared lists' unconditional entries
+    first; a few styles change some inputs in stances, which this leaves out)."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    start, alias = word(8), word(12)
+    count = (alias - start) // 56
+    out, later = {}, {}
+    for a in range(SHARED_LISTS[0], SHARED_LISTS[1] + 12, 12):
+        cmd, cond, _, dest = struct.unpack_from("<4H", exe, a - 0x80010000 + 0x800)
+        name = notation(cmd)
+        if name is None or alias + 4 * dest + 4 > len(moveset):
+            continue
+        record = word(alias + 4 * dest)
+        if not 0 <= record < count:
+            continue
+        damage = word(start + 56 * record + 20) & 0xFF   # high bits: flags (0x4000 on throws)
+        (later if cond else out).setdefault(name, damage)
+    for name, damage in later.items():
+        out.setdefault(name, damage)
+    return out
+
+
+def with_damage(entries: list[dict], damage: dict[str, int]) -> list[dict]:
+    """The COMMAND LIST with "damage" on lines whose command is one basic input."""
+    for e in entries:
+        key = e.get("command", "").replace(" ", "")
+        if key in damage and damage[key]:
+            e["damage"] = damage[key]
+    return entries

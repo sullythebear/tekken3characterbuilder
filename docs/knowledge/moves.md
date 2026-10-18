@@ -125,3 +125,26 @@ for 40 frames; then the direction, then direction + button for 4 frames.
     yet.
 - The app cannot show this without a live capture: the records are not raw on the disc. A Move
   Lab "damage" column would need a capture per style (t3live, debug build).
+
+## Movesets on the disc (2026-10-18, tested): damage without a running game
+
+- **code** The loader 0x80069F74 calls 0x80052958(dest, key): file `74 + key` (key -1: file 73,
+  the common moveset), through 0x8006BF20 with the file table at 0x80098574 (halfword per file)
+  and 0x80024400 (8 bytes: start, size). File 73 + n is **BNS record 279 + n**, so a style's
+  moveset is **record 280 + key** and the common one is 279. After loading, the loader adds the
+  base to header words +4..+52 (offsets become pointers).
+- **tested** On the disc the moveset holds offsets, and its alias table holds **record numbers**:
+  Xiaoyu alias 300 → 113, 295 → 104, 302 → 120, as measured live. Record 287 (Xiaoyu) is 326,972
+  bytes with 594 records, the same as in RAM.
+- **tested** Key per style = descriptor byte 9: `exe[*(0x80097D40 + 16 * style) + 9]`.
+  Keys 0..14, 9, 16, 19, 17, 18, 14 for styles 0..20.
+- **tested** `command_list.basic_damage` (app) reads the shared lists from SLUS_004.02 and the
+  moveset record. Law matches the live dump: 1 = 5, 2 = 12, 3 = 18, 4 = 16.
+  - The record of each basic input matched the measured one in 30 of 38 Xiaoyu inputs pressed
+    with the direction (test 3: direction and button in the same frame).
+  - The 8 misses are her stance and crouch variants, which are in her own lists (entries 1200+),
+    not in the standing table.
+- **tested** The damage halfword's high bits are flags: throws carry 0x4000, so the low byte is
+  used.
+- The Move Lab shows this: a damage column on single-input COMMAND LIST lines, and a "Basic
+  moves: damage" grid (browser-tested on Nina).

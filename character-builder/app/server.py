@@ -1223,14 +1223,16 @@ def command_list(donor) -> dict:
     models = donors["donors"].get(str(donor))
     if not models:
         raise ValueError("That style does not exist.")
-    path = CACHE / f"commandlist-{models[0]}.json"
+    path = CACHE / f"commandlist2-{models[0]}-{donor}.json"   # 2: with the damage column
     if not path.is_file():
-        problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0])], timeout=120)
+        problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
+                                      timeout=120)
         if problem:
             raise ValueError(problem)
         CACHE.mkdir(exist_ok=True)
         path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
-    return {"donor": donor, "moves": json.loads(path.read_text(encoding="utf-8"))}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {"donor": donor, "moves": data["moves"], "basic": data["basic"]}
 
 
 # --------------------------------------------------- character builder --

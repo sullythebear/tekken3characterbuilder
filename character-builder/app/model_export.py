@@ -615,6 +615,7 @@ def main() -> None:
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
+    parser.add_argument("--style", type=int, help="commandlist: the style (0..20) for the damage column")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--scale-rows", default="", help="ownmodel test: rows whose own vertices are scaled")
     parser.add_argument("--factor", type=float, default=1.0)
@@ -634,7 +635,14 @@ def main() -> None:
             fail("commandlist needs --model.")
         import command_list
         rid = FIRST_MODEL_RECORD + 4 * args.model + 2
-        print(json.dumps(command_list.moves(records(args.root, [rid])[rid])))
+        entries = command_list.moves(records(args.root, [rid])[rid])
+        if args.style is None:
+            print(json.dumps(entries))
+            return
+        exe = exe_bytes(args.root)                # damage of the basic inputs (the style's moveset)
+        mid = command_list.MOVESET_FIRST + command_list.moveset_key(exe, args.style)
+        basic = command_list.basic_damage(records(args.root, [mid])[mid], exe)
+        print(json.dumps({"moves": command_list.with_damage(entries, basic), "basic": basic}))
         return
     if args.command == "ownportrait":
         if args.file is None or args.out is None:

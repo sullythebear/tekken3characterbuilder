@@ -453,3 +453,8 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .credits summary { cursor: pointer; font-weight: 600; }
 .credits-grid { display: grid; grid-template-columns: auto minmax(7rem, 1fr) minmax(5rem, .6fr) minmax(8rem, .8fr); gap: .35rem .5rem; align-items: center; font-size: .85rem; }
 @media (max-width: 900px) { .credits-grid { grid-template-columns: 1fr; } }
+
+.move-table td.move-damage { color: var(--gold); text-align: right; white-space: nowrap; font-size: .85rem; }
+.basic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: .3rem .6rem; font-size: .85rem; }
+.basic-grid div { display: flex; justify-content: space-between; gap: .4rem; border-bottom: 1px solid var(--line); padding: .1rem 0; }
+.basic-grid strong { color: var(--gold); }
