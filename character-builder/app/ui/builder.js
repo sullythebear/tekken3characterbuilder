@@ -93,6 +93,53 @@
 
   const nothing = () => !Object.keys(chosen()).length && !colours() && !Object.keys(shape()).length;
 
+  // saved looks (server looks.json): parts, colours and shape under a name, for any fighter
+  let looks = [];
+  async function loadLooks() {
+    try { looks = (await api("/api/looks", {})).looks; } catch { looks = []; }
+    showLooks();
+  }
+  function showLooks(pick) {
+    const select = $("kit-looks");
+    select.textContent = "";
+    if (!looks.length) select.add(new Option("None saved yet", ""));
+    for (const l of looks) {
+      const style = l.donor !== null && DONORS[l.donor] ? ` (${DONORS[l.donor].name})` : "";
+      select.add(new Option(l.name + style, l.name));
+    }
+    if (pick) select.value = pick;
+    $("kit-look-use").disabled = $("kit-look-delete").disabled = !looks.length;
+  }
+  function useLook() {
+    const look = looks.find((l) => l.name === $("kit-looks").value);
+    if (!look) return;
+    for (const select of document.querySelectorAll("#kit-parts select")) {
+      const v = look.kit[select.dataset.part];
+      select.value = v !== undefined && [...select.options].some((o) => o.value === String(v) && !o.disabled) ? String(v) : "";
+    }
+    const c = look.colours || [0, 100, 0, true];
+    [$("kit-hue").value, $("kit-sat").value, $("kit-light").value, $("kit-skin").checked] = c;
+    for (const input of document.querySelectorAll(".kit-shape input"))
+      input.value = String(Math.round(((look.shape || {})[input.dataset.shape] || 1) * 100));
+    const left = Object.keys(look.kit).filter((p) => !chosen()[p]);
+    if (left.length) toast(`Not for this style's build: ${left.join(", ")}`);
+    schedulePreview();
+  }
+  async function saveLook() {
+    const name = prompt("Name for this look:", "");
+    if (!name) return;
+    try {
+      looks = (await api("/api/looks/save", { name, donor: state.current.donor, parts: chosen(), colours: colours(), shape: shape() })).looks;
+      showLooks(name.trim());
+      toast("Look saved");
+    } catch (e) { toast(e.message); }
+  }
+  async function deleteLook() {
+    const name = $("kit-looks").value;
+    if (!name || !confirm(`Delete the look "${name}"?`)) return;
+    try { looks = (await api("/api/looks/delete", { name })).looks; showLooks(); } catch (e) { toast(e.message); }
+  }
+
   function chosen() {
     const parts = {};
     for (const select of document.querySelectorAll("#kit-parts select"))
@@ -171,6 +218,10 @@
 
   function init() {
     $("kit-build").addEventListener("click", build);
+    $("kit-look-use").addEventListener("click", useLook);
+    $("kit-look-save").addEventListener("click", saveLook);
+    $("kit-look-delete").addEventListener("click", deleteLook);
+    loadLooks();
     $("kit-random").addEventListener("click", randomize);
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
     for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);

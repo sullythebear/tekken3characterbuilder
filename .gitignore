@@ -3,6 +3,8 @@ character-builder/characters/
 character-builder/logs/
 character-builder/config.json
 character-builder/cache/
+character-builder/looks.json
+*.t3backup
 __pycache__/
 *.pyc
 

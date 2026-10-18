@@ -1438,7 +1438,7 @@ def kit_heights() -> dict:
 
 def clean_kit(parts) -> dict:
     """{part: model} for the body parts taken from another fighter (the rest stays the style's)."""
-    if not isinstance(parts, dict):
+    if not isinstance(parts, dict) or not any(parts.get(name) not in (None, "", -1) for name in KIT_PARTS):
         return {}
     allowed = set(kit_models())
     out = {}
@@ -1511,6 +1511,42 @@ def run_kitbash(root: Path, base: int, kit: dict, out: Path, colours: list | Non
         last = lines[-1] if lines else "The character builder failed."
         return (last[7:] if last.startswith("ERROR: ") else last), ""
     return None, done.stdout
+
+
+# saved looks: a body-part mix with its colours and shape under a name, for any fighter (looks.json)
+LOOKS_FILE = BASE / "looks.json"
+LOOKS_MAX = 40
+
+
+def list_looks() -> list[dict]:
+    try:
+        looks = json.loads(LOOKS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [l for l in looks if isinstance(l, dict) and isinstance(l.get("name"), str)][:LOOKS_MAX]
+
+
+def save_look(name: str, donor, parts, colours=None, shape=None) -> list[dict]:
+    name = re.sub(r"[^\w .\-]", "", str(name or "")).strip()[:32]
+    if not name:
+        raise ValueError("Give the look a name.")
+    kit, colours, shape = clean_kit(parts), clean_kit_colours(colours), clean_kit_shape(shape)
+    if not kit and not colours and not shape:
+        raise ValueError("Choose body parts, colours or a body shape first.")
+    look = {"name": name, "donor": donor if isinstance(donor, int) and 0 <= donor <= 20 else None,
+            "kit": kit, "colours": colours, "shape": shape}
+    looks = [l for l in list_looks() if l["name"] != name]
+    if len(looks) >= LOOKS_MAX:
+        raise ValueError(f"At most {LOOKS_MAX} saved looks: delete one first.")
+    looks.append(look)
+    LOOKS_FILE.write_text(json.dumps(looks, indent=1), encoding="utf-8")
+    return looks
+
+
+def delete_look(name: str) -> list[dict]:
+    looks = [l for l in list_looks() if l["name"] != name]
+    LOOKS_FILE.write_text(json.dumps(looks, indent=1), encoding="utf-8")
+    return looks
 
 
 def kit_preview(cid: str, costume: int, parts, colours=None, shape=None) -> bytes:
@@ -2247,6 +2283,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"models": [{"model": m, "donor": int(d), "costume": c, "height": heights.get(m)}
                                               for d, ms in donors["donors"].items() for c, m in enumerate(ms)],
                                    "parts": list(KIT_PARTS), "fit": KIT_FIT})
+            if path == "/api/looks":
+                return self._json({"looks": list_looks()})
+            if path == "/api/looks/save":
+                return self._json({"looks": save_look(data.get("name"), data.get("donor"), data.get("parts"),
+                                                      data.get("colours"), data.get("shape"))})
+            if path == "/api/looks/delete":
+                return self._json({"looks": delete_look(str(data.get("name", "")))})
             if path == "/api/kit/preview":
                 return self._send(200, kit_preview(str(data.get("id", "")), int(data.get("costume", 0)),
                                                    data.get("parts"), data.get("colours"), data.get("shape")),

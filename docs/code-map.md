@@ -35,6 +35,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Restore points: `keep_restore_point` (in `save_character`, `characters/<id>/history/`), `restore_points` (`/api/history`), `restore_character` (`/api/history/restore`); UI `loadHistory`, `restorePoint` in app.js.
 - `app/stage_look.py` (venv) – stage colour looks: `variant` (CLUT rows of record 36 + arena, recoloured), `preview` (texture sheet); server `write_stage_look` (in sync), `stage_preview` (`/api/stage/preview`), `STAGE_ARENA`.
 - `app/command_list.py` (stdlib) – decodes a fighter's COMMAND LIST (ARC member 4, word tokens, Tekken notation); `model_export.py commandlist --model N`; server `command_list` (`/api/moves`); UI `movelab.js`.
+- Saved looks: `list_looks` / `save_look` / `delete_look` (character-builder/looks.json, max 40, git-ignored),
+  routes `/api/looks`, `/save`, `/delete`; UI `builder.js` loadLooks / useLook / saveLook.
 - Body shape: `kitbash.SHAPES` / `clean_shape` / `shape_scale` (applied in `build.place`, local axes: head all,
   arms/legs/body Y and Z; hands and feet kept), CLI `--shape JSON`; server `KIT_SHAPES`, `clean_kit_shape`,
   `run_kitbash(shape=)`, `own_model.shape`; UI `.kit-shape` sliders in `builder.js shape()`.

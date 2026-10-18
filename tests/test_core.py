@@ -271,6 +271,15 @@ class CreditsAndBackupTests(CharacterTests):
         self.assertTrue(any("portrait" in t for t in issues))
         self.assertEqual(server.check_library()["fighters"][0]["name"], "A")
 
+    def test_saved_looks(self):
+        server.LOOKS_FILE = server.DATA.parent / "looks-test.json"
+        looks = server.save_look("Heavy blue", 5, {}, [-60, 100, 0, True], {"arms": 1.2})
+        self.assertEqual([(l["name"], l["shape"]) for l in looks], [("Heavy blue", {"arms": 1.2})])
+        self.assertEqual(len(server.save_look("Heavy blue", 5, {}, None, {"body": 1.1})), 1)   # same name: replaced
+        with self.assertRaises(ValueError):
+            server.save_look("", 5, {}, None, {"arms": 1.2})
+        self.assertEqual(server.delete_look("Heavy blue"), [])
+
     def test_backup_round_trip(self):
         import base64
         server.save_character({"name": "A", "donor": 1, "costumes": []})
