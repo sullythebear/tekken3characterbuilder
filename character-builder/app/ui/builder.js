@@ -147,14 +147,17 @@
     return parts;
   }
 
-  function randomize() {
-    // one other fighter (two or more rarely fit the colour tables a fighter has); each part: the
-    // style's own or that fighter's
+  let retries = 0;          // a random mix that does not build is drawn again (a few times)
+  function randomize(again = false) {
+    // one or two other fighters (95 % of two-fighter mixes build, tested 2026-10-18); each part:
+    // the style's own or one of theirs
+    retries = again ? retries + 1 : 0;
     const selects = [...document.querySelectorAll("#kit-parts select")];
     const usable = [...selects[0].options].filter((o) => o.value && !o.disabled).map((o) => o.value);
     if (!usable.length) return;
     const pick = () => usable[Math.floor(Math.random() * usable.length)];
     const sources = [pick()];
+    if (usable.length > 1 && Math.random() < 0.5) sources.push(pick());
     for (const select of selects)
       select.value = Math.random() < 0.4 ? "" : sources[Math.floor(Math.random() * sources.length)];
     if (!Object.keys(chosen()).length) selects[0].value = sources[0];
@@ -185,7 +188,11 @@
       note.textContent = "Preview shown. Build puts this body in the game." +
         (json.half_textures ? " Some parts' textures are at half size, so all of them fit Tekken 3's one texture page." : "");
     } catch (e) {
-      if (run === previewRun) note.textContent = `This mix does not work: ${e.message}`;
+      if (run !== previewRun) return;
+      if (retries && retries < 3) { randomize(true); return; }
+      note.textContent = `This mix does not work: ${e.message}`;
+    } finally {
+      if (run === previewRun && !note.textContent.startsWith("Preview: building")) retries = 0;
     }
   }
 
@@ -222,7 +229,7 @@
     $("kit-look-save").addEventListener("click", saveLook);
     $("kit-look-delete").addEventListener("click", deleteLook);
     loadLooks();
-    $("kit-random").addEventListener("click", randomize);
+    $("kit-random").addEventListener("click", () => { randomize(); retries = 1; });
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
     for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);
     for (const input of document.querySelectorAll(".kit-shape input")) {

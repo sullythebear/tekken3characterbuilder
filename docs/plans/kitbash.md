@@ -163,3 +163,10 @@ coarser steps (6, then 4, instead of 8). Fewer normals are stored and the light 
 - Imports keep steps of 8, so the regression is unchanged.
 - Other parts after these changes (1028 mixes each): head 54 fail, arm 28 fail. All of them are
   packet-limit or slot-size cases, none is texture page.
+
+### Randomize with two fighters (2026-10-18)
+
+200 random mixes with parts from two other fighters (60 % chance per part) gave 184 of 193 that
+build: 8 slot-size and 1 packet failures. Randomize now draws one or two other fighters. When a
+random mix does not build, it draws again, at most 3 times. Browser: 3 Randomize clicks gave 3
+previews, one of them from two fighters.
