@@ -612,21 +612,24 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
     # stored, the light barely changes)
     # Over the packet budget: neighbouring triangles with the same texels on their shared edge go
     # out as quads (the GPU draws the same two triangles, 52 bytes instead of 80)
-    def write(steps):
+    def pair(why):
         nonlocal faces, texture
+        from direct_import import _pair_quads
+        tris = [i for i, f in enumerate(faces) if len(f["v"]) == 3]
+        paired, paired_uv = _pair_quads([faces[i] for i in tris], [texture["uv"][i] for i in tris], G=pos)
+        keep = [i for i, f in enumerate(faces) if len(f["v"]) != 3]
+        log(f"{why}: {len(tris) - len(paired)} triangle pairs as quads")
+        faces = [faces[i] for i in keep] + paired
+        texture = dict(texture, uv=[texture["uv"][i] for i in keep] + paired_uv, paired=True)
+
+    def write(steps):
         try:
             return MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
                              max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
         except MI.Budget as error:
             if "GPU packets" not in str(error) or texture.get("paired"):
                 raise
-            from direct_import import _pair_quads
-            tris = [i for i, f in enumerate(faces) if len(f["v"]) == 3]
-            paired, paired_uv = _pair_quads([faces[i] for i in tris], [texture["uv"][i] for i in tris], G=pos)
-            keep = [i for i, f in enumerate(faces) if len(f["v"]) != 3]
-            log(f"{error}: {len(tris) - len(paired)} triangle pairs as quads")
-            faces = [faces[i] for i in keep] + paired
-            texture = dict(texture, uv=[texture["uv"][i] for i in keep] + paired_uv, paired=True)
+            pair(str(error))
             return MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
                              max_packets=MI.STOCK_PACKET_BYTES, normal_steps=steps)
 
@@ -635,6 +638,9 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         if len(data) <= len(B.m):
             break
         log(f"{len(data)} bytes for a slot of {len(B.m)}: normals in coarser steps")
+    if len(data) > len(B.m) and not texture.get("paired"):   # last: quads take fewer bytes too
+        pair(f"{len(data)} bytes for a slot of {len(B.m)}")
+        data, report = write(steps)
     report.update(bytes=len(data), budget=len(B.m), parts=parts, normal_steps=steps)
     if len(data) > len(B.m):
         raise MI.Budget(f"{len(data)} bytes, the base model's slot holds {len(B.m)}")

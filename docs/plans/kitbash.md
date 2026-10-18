@@ -185,3 +185,7 @@ all 6 the same).
   packet bytes) fought 900 frames, falls included, with 0 of 5188 words differing.
 - Body mixes with all of this (2026-10-19): 34 of 1028 fail. All are slot size (small slots
   such as 18412 bytes), none is packets or texture page.
+- Slot size, last try (2026-10-19): when coarser normals are not enough, the quad pairing runs
+  too, since quads take fewer bytes. Model 7 with head 37 went from 24504 to 23844 bytes (slot
+  24488) and builds. Model 30 with head 0 still fails (19004 bytes for 18412). kitregress: all
+  the same.
