@@ -51,8 +51,7 @@ Updated: 2026-10-18.
   - Damage in Practice's attack data: Xiaoyu 3, 024 → 072.
   - Input tests for Xiaoyu and Law.
 - Browser pane: every new tab and dialog.
-- Not tested: patch 20 putting values back when a stock fighter of the same style later gets
-  the buffer.
+- Patch 20 putting values back: tested by simulation (actor id switched), see `knowledge/moves.md`.
 
 ## For the owner to check
 
