@@ -76,5 +76,14 @@
     } catch (e) { note.textContent = e.message; shown = null; }
   }
 
+  function resetDamage() {
+    let changed = false;
+    for (const v of document.querySelectorAll("#basic-list input")) {
+      if (v.value !== v.dataset.original) { v.value = v.dataset.original; v.parentElement.classList.remove("changed"); changed = true; }
+    }
+    if (changed) markDirty();
+  }
+  document.getElementById("basic-reset").addEventListener("click", resetDamage);
+
   window.T3MoveLab = { show, body, reset: () => { shown = null; } };
 })();
