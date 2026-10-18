@@ -80,3 +80,23 @@ scratch `inputs.py`, using `t3live.Game` with `set_input` and read `actor + 0x54
 - **tested** Resetting with the debug server's `savestate` (op load, slot 5) before each input
   does not work: after a load, `set_input` started no move (48 of 48 inputs stayed in record 0).
   Use a Practice reset or a longer wait instead.
+
+### Input test 2 (2026-10-18, tested)
+
+Method: Xiaoyu in Practice. Before each input, wait until `actor + 0x54` stays on record 0
+for 40 frames; then the direction, then direction + button for 4 frames.
+- 46 of 48 inputs started a move. Single 1 and 2 did not (not understood).
+- **tested** Jump attacks are in the standing cancel lists, with the button bits above:
+  - u/uf + 3 → `0004`, 25 damage;
+  - u/uf + 4 → `0008`, 25 damage;
+  - uf + 2 → `0002`, 18 damage;
+  - 1+2 in the air → `0003`.
+- **tested** Ground attacks are not plain entries of record 0's list or its `C00C` sub-lists:
+  3 → record 113, 4 → 114, f+1 → 120, 1+2 → 104. Their aliases (300/309, 301/310, 302,
+  295/311) show up in no 12-byte entry of the list block. Two words point straight at record 113:
+  0x80108F4C and 0x80108F70, in the alias table area right after the records.
+- **inferred** Ground attacks are started some other way, probably through the tables at header
+  `+16 .. +44` (0x8010C978 ...) or the common moveset (key 99). Next: read those tables around
+  the direct pointers.
+- So the Move Lab cannot put damage next to COMMAND LIST lines yet. The records and damage values
+  themselves are known (above).
