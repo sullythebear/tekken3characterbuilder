@@ -184,6 +184,10 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   - Arcade: P1 record 110 = 60, the opponent untouched; log "Kittest has 1 changed moves",
     "P1 Kittest changed moves in (1)".
   - Practice mirror: left at 25 (shared buffer), as designed.
-- **not tested** The "goes back" path, when a stock fighter of the same style later gets that
-  buffer. It is done in code; its value check makes sure it only resets values still at the new
-  damage, in a moveset of the same key.
+- **tested** The "goes back" path, simulated in Arcade (opponent Law):
+  - KITTEST's record 110 = 60;
+  - P1's character id (actor+0x18) written to 5 (stock Nina) for a few frames: 25;
+  - written back to 44: 60 again.
+- **tested** Mirror in Arcade too: with a CPU opponent of the same moveset key (5), both headers
+  were 0x800F9D80 (one shared buffer) and the patch left it at 25. With Law (key 1) and Eddy
+  (key 8) the buffers were separate and the change applied.

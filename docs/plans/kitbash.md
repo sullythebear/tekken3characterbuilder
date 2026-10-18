@@ -161,3 +161,5 @@ coarser steps (6, then 4, instead of 8). Fewer normals are stored and the light 
   (slot 24488) and now builds.
 - Bigger overshoots still fail with a clear message, e.g. model 30 (slot 18412) at 19128 bytes.
 - Imports keep steps of 8, so the regression is unchanged.
+- Other parts after these changes (1028 mixes each): head 54 fail, arm 28 fail. All of them are
+  packet-limit or slot-size cases, none is texture page.
