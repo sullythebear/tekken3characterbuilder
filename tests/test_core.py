@@ -280,6 +280,17 @@ class CreditsAndBackupTests(CharacterTests):
             server.save_look("", 5, {}, None, {"arms": 1.2})
         self.assertEqual(server.delete_look("Heavy blue"), [])
 
+    def test_duplicate(self):
+        red = PortraitVariantTests.image((255, 0, 0, 255))
+        c = server.save_character({"name": "KAZAMA", "donor": 9, "costumes": [], "portrait_ps1": red, "portrait_source": red,
+                                   "move_damage": {"3": 40}, "credits": {"portrait": {"licence": "own"}}})
+        copy = server.duplicate_character(c["id"])
+        self.assertNotEqual(copy["id"], c["id"])
+        self.assertEqual((copy["name"], copy["donor"], copy["move_damage"]), ("KAZAMA 2", 9, {"3": 40}))
+        self.assertTrue((server.DATA / copy["id"] / "portrait-ps1.png").is_file())
+        long = server.save_character({"name": "ABCDEGHIJKLMNOP", "donor": 1, "costumes": []})
+        self.assertEqual(server.duplicate_character(long["id"])["name"], "ABCDEGHIJKLMN 2")
+
     def test_backup_round_trip(self):
         import base64
         server.save_character({"name": "A", "donor": 1, "costumes": []})

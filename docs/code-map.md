@@ -57,6 +57,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `licence_warnings` (`/api/export/check`, UI `exportFighter`), UI `#credits` + `creditsBody()`.
 - Check library: `check_library` (`/api/check`), UI `showCheck` + `#check-dialog` (fix = `/api/sync`).
 - Asset library: `own_assets`, `asset_library` (`/api/library`), UI `showLibrary` + `#library-dialog`.
+- Duplicate: `duplicate_character` (`/api/duplicate`), UI `duplicateFighter`.
 - Backup: `backup_all` (GET `/api/backup`, every package in a .t3backup zip), `backup_packages` (the
   `/api/import` route imports each package of a backup).
 - Saved portraits (server): `portrait_variants`, `keep_portrait`, `use_portrait` (keeps the current one first, then

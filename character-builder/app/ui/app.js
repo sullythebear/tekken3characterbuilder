@@ -345,6 +345,18 @@ async function showLibrary() {
   $("library-dialog").showModal();
 }
 
+async function duplicateFighter() {
+  if (!state.current.id) return;
+  if (state.dirty) { toast("Save your changes first."); return; }
+  toast("Duplicating… (a fighter with its own 3D model takes up to 3 minutes)");
+  try {
+    const copy = await api("/api/duplicate", { id: state.current.id });
+    await loadCharacters();
+    await selectCharacter(copy);
+    if (!showWarnings(copy)) toast(`${copy.name} made`);
+  } catch (e) { toast(e.message); }
+}
+
 async function exportFighter() {
   if (!state.current.id) return;
   if (state.dirty) { toast("Save your changes first."); return; }
@@ -361,7 +373,7 @@ function fillForm() {
   const credits = state.current.credits || {};
   for (const input of document.querySelectorAll("#credits [data-credit]"))
     input.value = (credits[input.dataset.credit] || {})[input.dataset.field] || (input.dataset.field === "licence" ? "unknown" : "");
-  $("export").hidden = $("delete").hidden = !state.current.id;
+  $("export").hidden = $("delete").hidden = $("duplicate").hidden = !state.current.id;
   $("form-error").textContent = "";
   renderDonors();
   renderStage();
@@ -798,6 +810,7 @@ function wire() {
   $("new-character").addEventListener("click", () => selectCharacter(null));
   $("delete").addEventListener("click", removeCharacter);
   $("export").addEventListener("click", exportFighter);
+  $("duplicate").addEventListener("click", duplicateFighter);
   $("library-button").addEventListener("click", showLibrary);
   $("check-button").addEventListener("click", showCheck);
   $("check-fix").addEventListener("click", async () => {

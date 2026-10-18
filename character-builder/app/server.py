@@ -752,6 +752,23 @@ def check_library() -> dict:
     return {"general": general, "fighters": out}
 
 
+def duplicate_character(cid: str) -> dict:
+    """A copy of the fighter under the name + " 2" (Tekken 3's name font has 2 as its only digit),
+    made through its package so everything travels: portraits, model, choices, credits."""
+    _, package = export_character(cid)
+    source = zipfile.ZipFile(io.BytesIO(package))
+    out = io.BytesIO()
+    with source, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for info in source.infolist():
+            raw = source.read(info)
+            if info.filename == "character.json":
+                data = json.loads(raw.decode("utf-8"))
+                data["name"] = (data.get("name", "")[:13].rstrip() + " 2").strip()
+                raw = json.dumps(data).encode("utf-8")
+            z.writestr(info.filename, raw)
+    return import_character(base64.b64encode(out.getvalue()).decode())
+
+
 def backup_all() -> tuple[str, bytes]:
     """Every fighter as its .t3char package, in one .t3backup zip (Import package reads it)."""
     buffer = io.BytesIO()
@@ -2309,6 +2326,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/remove":
                 saved = remove_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/duplicate":
+                copy = duplicate_character(str(data.get("id", "")))
+                model_warnings = copy.pop("model_warnings", [])
+                return self._json({**copy, "warnings": model_warnings + sync_customs(changed=copy["id"])})
             if path == "/api/import":
                 packages = backup_packages(str(data.get("file", "")))
                 if packages is not None:                # a .t3backup: every fighter in it
