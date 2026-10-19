@@ -6,7 +6,7 @@ session token embedded in its own page.
 """
 from __future__ import annotations
 
-import base64, io, json, os, re, secrets, shutil, struct, subprocess, sys, threading, time, zipfile
+import base64, io, json, os, re, secrets, shutil, struct, subprocess, sys, threading, time, zipfile, zlib
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1436,7 +1436,8 @@ def command_list(donor) -> dict:
     models = donors["donors"].get(str(donor))
     if not models:
         raise ValueError("That style does not exist.")
-    path = CACHE / f"commandlist4-{models[0]}-{donor}.json"   # 4: own moves too
+    own = zlib.crc32(repr(sorted(command_list_module.OWN_MOVES.get(donor, {}).items())).encode())
+    path = CACHE / f"commandlist5-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)
