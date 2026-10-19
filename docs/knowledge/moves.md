@@ -279,3 +279,11 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   (`command_list.STRINGS`), e.g. Bryan Hands of Doom b+2, 1, 2 → 152, 153, 151 (21 + 21 + 21),
   Xiaoyu u+1+2, 2, 1 → 242, 244, 150. The Move Lab shows "21 + 21 + 21 = 63 dmg"; hits 2 and
   later are changeable on their own (keys "b+2,1,2#2"; hit 1 is the basic or own move).
+
+## Lines with alternatives ("or") (2026-10-19, measured in game)
+
+- The first alternative is pressed ("b (or, B), 1+2" → b, 1+2; "A, or, B" → A); the key stays the
+  whole command ("b(or,B),1+2", accepted by `server.MOVE_KEY`). Scratch `measure7.py`, two passes.
+- Kept: Lei Falling Tree "uf (or, ub), 2" → 58 (15) and Turn Around "B (or, b), 3+4" → 401 (15).
+- Left out: several gave a basic input's record; parries give no damage; Xiaoyu's Lower Parry gave
+  record 254, her crouching df+1, so the parry did not come out.

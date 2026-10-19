@@ -228,7 +228,7 @@ OWN_MOVES: dict[int, dict[str, int]] = {
         "f,F+1+2": 336},
     1: {"d+3+4": 128, "Duringcrouch,df,d,DF+3": 225, "Duringsidestep,3+4": 243, "DF+1+2": 439,
         "f,F+3+4": 435},
-    2: {"f+3+4": -1, "f,F+1+2": 582, "During(*),1": 195, "During(**),4": 224},
+    2: {"f+3+4": -1, "f,F+1+2": 582, "During(*),1": 195, "During(**),4": 224, "uf(or,ub),2": 58, "B(or,b),3+4": 401},
     3: {"F+1+2": 195, "1+4": 232, "b+4": 322, "Duringsidestep,2": 208, "Duringcrouch,df+1": 117,
         "Duringsidestep,3+4": 217, "D,db,d,DB+1+2": 445, "d,db,B+1+2": 439},
     4: {"d+1+4": 285, "D+3+4": 340, "f,F+2": 126, "d,db,B+1+2": 433, "During(**),2": 230},

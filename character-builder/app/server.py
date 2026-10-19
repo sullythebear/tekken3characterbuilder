@@ -466,7 +466,8 @@ STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno", "custom")
 _DIR = r"(?:u|uf|ub|f|b|d|df|db|U|UF|UB|F|B|D|DF|DB)"
 _HIT = rf"(?:{_DIR}\+)?[1-4](?:\+[1-4]){{0,3}}"
 MOVE_KEY = re.compile(rf"(?:(?:Duringcrouch|Whilecrouching|Whilerising|Duringsidestep|During\(\*{{1,2}}\)),)?(?:{_DIR},){{0,4}}"
-                      rf"{_HIT}|(?:{_HIT},){{1,6}}{_HIT}#[2-8]")    # the last: a string's hit 2..8
+                      rf"{_HIT}|(?:{_HIT},){{1,6}}{_HIT}#[2-8]"    # a string's hit 2..8
+                      rf"|(?=[^#]*or)[A-Za-z0-9+,()]{{3,48}}")      # a line with alternatives ("b(or,B),1+2")
 STAGE_VIEWS = ("front", "right", "back", "left", "textures")
 STAGE_MODELS = 15                                        # arenas with a scenery model (stage_look.py)
 
