@@ -17,7 +17,7 @@
       const cell = document.createElement("label");
       const input = document.createElement("span"), value = document.createElement("input");
       input.className = "move-input";
-      input.textContent = titles && titles[k] ? `${titles[k]}  ${k}` : k;
+      input.textContent = titles && titles[k] ? titles[k] : k;
       value.type = "number"; value.min = "0"; value.max = "200";
       value.dataset.move = k; value.dataset.original = basic[k];
       value.value = own[k] ?? basic[k];
@@ -74,7 +74,7 @@
         list.append(row);
       }
       const titles = {};
-      for (const m of r.moves) if (m.command) titles[m.command.replace(/ /g, "")] ??= m.name;
+      for (const m of r.moves) if (m.command) titles[m.command.replace(/ /g, "")] ??= `${m.name}  ${m.command}`;
       const basic = showBasic(r.basic || {});
       const own = showBasic(r.own || {}, "own-list", titles);
       $("own-moves").hidden = !own;

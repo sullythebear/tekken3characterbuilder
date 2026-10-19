@@ -330,6 +330,9 @@ class BasicDamageTests(unittest.TestCase):
         self.assertEqual(c["move_damage"], {"3": 200, "df+2": 12})
         c = server.validate_character({"name": "A", "donor": 4, "move_damage": {"D+3+4": 9, "d+1+4": 70}})
         self.assertEqual(c["move_damage"], {"D+3+4": 9, "d+1+4": 70})
+        c = server.validate_character({"name": "A", "donor": 3, "move_damage": {
+            "Duringcrouch,df+1": 30, "d,df,f+2": 40, "1,2": 5, "x;y": 1}})
+        self.assertEqual(c["move_damage"], {"Duringcrouch,df+1": 30, "d,df,f+2": 40})
 
     def test_own_records(self):
         import command_list as M

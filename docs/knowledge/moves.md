@@ -226,3 +226,15 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - The app: `OWN_MOVES` (record numbers only, no game data), `own_records` reads their damage
   from the disc, the Move Lab shows them as "the style's own moves" and patch 20 changes them
   like basic ones.
+- **tested** Sequences the same way (scratch `measure2.py`): motion inputs (direction taps, then
+  direction + buttons in the last token: "f, F+2", "d, df, f+2"; the same direction twice gets
+  2 neutral frames between), and situations: "During crouch" / "While crouching" (down held 25
+  frames first), "While rising" (down 25, release 2), "During side step" (up tapped, 6 frames).
+  Leg Breaker (King, During crouch, df+1) → 117, as found before.
+- Filters: a record that is another basic input's (the motion was not read: "f, f+2" gave the
+  plain f+2) is left out, so is damage above 100 (flags: Kuma b, B+2+3+4 read 200), and jump
+  inputs keep the basic table (their record depends on timing). Two passes: 50 sequences gave
+  the same record both times and are in `OWN_MOVES`; 5 differed and are left out. With the
+  single inputs: 75 entries over 20 styles. Keys are the command without spaces
+  ("Duringcrouch,df+1"); the server accepts them (`server.MOVE_KEY`).
+- Not measured: strings ("1, 2"), stance moves (marks such as (*)), "or" alternatives, throws.

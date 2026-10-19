@@ -460,6 +460,11 @@ def name_call_preview(data: dict) -> dict:
 STAGE_ARENA = {0: 0, 1: 1, 2: 5, 3: 11, 4: 2, 5: 9, 6: 4, 7: 3, 8: 10, 9: 8, 10: 12, 11: 1, 12: 0, 13: 12,
                14: 6, 15: 2, 16: 9, 17: 13, 18: 9, 19: 14, 20: 6}
 STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno", "custom")
+# Move Lab damage keys: a COMMAND LIST command without spaces ("df+2", "D+3+4", "d,df,f+2",
+# "Duringcrouch,df+1"): an optional situation, direction taps, then direction + buttons
+_DIR = r"(?:u|uf|ub|f|b|d|df|db|U|UF|UB|F|B|D|DF|DB)"
+MOVE_KEY = re.compile(rf"(?:(?:Duringcrouch|Whilecrouching|Whilerising|Duringsidestep),)?(?:{_DIR},){{0,4}}"
+                      rf"(?:{_DIR}\+)?[1-4](?:\+[1-4]){{0,3}}")
 STAGE_VIEWS = ("front", "right", "back", "left", "textures")
 STAGE_MODELS = 15                                        # arenas with a scenery model (stage_look.py)
 
@@ -638,7 +643,7 @@ def validate_character(data: dict) -> dict:
     if isinstance(moves, dict) and moves:
         clean_moves = {}
         for k, v in list(moves.items())[:command_list_module.MOVES_FILE_MAX]:
-            if re.fullmatch(r"(?:(?:u|uf|ub|f|b|d|df|db|U|UF|UB|F|B|D|DF|DB)\+)?[1-4](?:\+[1-4]){0,3}", str(k)):
+            if MOVE_KEY.fullmatch(str(k)):
                 try:
                     clean_moves[str(k)] = max(0, min(200, int(v)))
                 except (TypeError, ValueError):
