@@ -644,8 +644,11 @@ def main() -> None:
         moveset = records(args.root, [mid])[mid]
         rows = command_list.basic_records(moveset, exe)
         basic = {name: damage for name, (_, damage) in rows.items()}
-        own = {name: row for name, row in command_list.own_records(moveset, args.style).items()
-               if name not in rows}
+        own = command_list.own_records(moveset, args.style)
+        for name in command_list.OWN_MOVES.get(args.style, {}):
+            if name in rows and own.get(name, (None,))[0] != rows[name][0]:
+                rows.pop(name)                    # measured: the style's own move, not the basic one
+                basic.pop(name, None)
         rows.update(own)
         own = {name: damage for name, (_, damage) in own.items()}
         print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}), "basic": basic,

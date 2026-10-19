@@ -205,3 +205,24 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   crouch" mark.
 - Not in the Move Lab: finding each style's crouch record statically needs more of the state
   machine (c001/c002 entries, the transitions out of standing).
+
+## The style's own moves (2026-10-19, measured in game)
+
+- **tested** Statically, the first matching entry of record 0's list (with `C00C` sub-lists) is
+  not reliable: Yoshimitsu d+1+4 → 285 matched, but Xiaoyu f+3+4 started 313 (an entry with
+  condition 0x2400 comes first) and f+1+2 started 325, which is in no entry. The conditions
+  decide, and they are not known.
+- **method** (scratch `measure.py`, t3live): Practice, the cursor moved to the character (right
+  along a row, down every 12 presses: the select grid wraps per row, so right alone never reaches
+  ids 10 and up), the first input thrown away, then per single-input COMMAND LIST line (no
+  comma, no [Throw]): wait for record 0, press direction + buttons together for 4 frames
+  (upper-case direction: held 12 frames first), trace `actor + 0x54` for 30 frames.
+- The record kept is the first in the trace with damage ≥ 3: damage 0 starts strings, and
+  King's F+1+2 (Jaguar Lariat) begins with a record of 1 damage before the 50-damage one.
+- **tested** Some basic inputs start the style's own move instead of the shared basic slot:
+  Law d+3+4 → 128 (12) not 136 (25); King b+4 → 322 (10) not 115 (20); Kuma f+3+4 and Jin
+  b+1+2 → records without damage. `command_list.OWN_MOVES` holds these too (-1 = no damage);
+  they leave the basic grid.
+- The app: `OWN_MOVES` (record numbers only, no game data), `own_records` reads their damage
+  from the disc, the Move Lab shows them as "the style's own moves" and patch 20 changes them
+  like basic ones.

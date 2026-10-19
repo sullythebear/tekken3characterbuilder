@@ -1,11 +1,20 @@
 # Project status
 
-Updated: 2026-10-18.
-- Released: builder 0.5.1 (tag v0.5.1).
-- Pushed: `main` up to ae9d9fb, with the owner's permission (2026-10-18).
-- Local commits since then are not pushed.
+Updated: 2026-10-19.
+- Released: builder 0.6.0 (tag v0.6.0, 2026-10-19, with the owner's permission).
+- Pushed: `main` up to dc1174e. Local commits since then are not pushed.
 
-## Since 0.5.1 (all local unless pushed above)
+## Since 0.6.0 (local)
+
+- Stage Lab: the stage itself as a picture from the fighters' place (scenery model record
+  56 + arena decoded), with the colour look and four views; the floor from the stage's own
+  tiles (layout approximate). Browser-tested.
+- Move Lab: the style's own moves (COMMAND LIST lines of one input), records measured in game
+  per style, damage from the disc, changeable with patch 20. A few basic inputs turned out to
+  start the style's own move; they are corrected.
+- Body mixes failing: 34 → 29 of 1028.
+
+## In 0.6.0
 
 **Character Builder**
 - Body parts: live preview, three-fighter mixes, whole skins, hands.
@@ -80,6 +89,8 @@ Updated: 2026-10-18.
 ## Next
 
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
-1. Stage Lab: stage geometry stays research (`knowledge/stages.md`).
-2. Move Lab: the moves a style does differently in a stance or crouch (its own cancel lists).
-3. Release 0.6.0 when the owner wants it. Push and publish only with permission.
+1. Stage Lab: editing the scenery within its byte size; the floor routine and collision are
+   not known (`knowledge/stages.md`).
+2. Move Lab: moves from a stance or crouch (measured the same way), throws (damage is not in
+   the first record).
+3. Push and publish only with the owner's permission.

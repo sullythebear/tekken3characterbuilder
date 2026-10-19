@@ -221,7 +221,23 @@ def basic_records(moveset: bytes, exe: bytes) -> dict[str, tuple[int, int]]:
 # The style's own moves (COMMAND LIST lines of one input that are not basic inputs): the record
 # each one started in game, measured per style with t3live (docs/knowledge/moves.md). Their list
 # entries carry conditions that the static data alone does not settle, so these are measured.
-OWN_MOVES: dict[int, dict[str, int]] = {}
+# A basic input listed here started the style's own move instead of the basic one (-1: one
+# without damage in its first records); it then leaves the basic grid.
+OWN_MOVES: dict[int, dict[str, int]] = {
+    0: {"f+1+4": 222},
+    1: {"d+3+4": 128},
+    2: {"f+3+4": -1},
+    3: {"F+1+2": 195, "1+4": 232, "b+4": 322},
+    4: {"d+1+4": 285, "D+3+4": 340},
+    6: {"U+3": 53},
+    9: {"b+1+2": -1},
+    10: {"F+1+4": 193},
+    13: {"1+2": 223, "b+2": 209, "D+1+4": 110},
+    14: {"f+1+4": 216},
+    16: {"3+4": 243, "df+2+3": 247},
+    17: {"D+3+4": 171, "UF+3+4": 263, "1+2": 28, "DB+3+4": 173},
+    19: {"B+3+4": 387, "b+1+2": 320, "d+3+4": 386, "d+1+2": -1},
+}
 
 
 def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
