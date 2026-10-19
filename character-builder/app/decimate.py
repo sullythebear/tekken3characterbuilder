@@ -49,9 +49,11 @@ def _boundary_quadrics(p, tris, Q, weight=1000.0):
         Q[v] += K
 
 
-def decimate(positions, triangles, target: int, keep=None, importance=None, uniform=0.0, manifold=False):
+def decimate(positions, triangles, target: int, keep=None, importance=None, uniform=0.0, manifold=False,
+             alive_out=None):
     """uniform > 0 adds that much of the edge's squared length to its cost (relative to the
-    mean quadric error), so short edges go first and triangles stay even (no slivers)."""
+    mean quadric error), so short edges go first and triangles stay even (no slivers).
+    alive_out: a list that receives the input index of each output triangle (corner order kept)."""
     p = np.array(positions, dtype=float).copy()
     tris = np.array(triangles, dtype=np.int64)
     Q = _plane_quadrics(p, tris)
@@ -181,6 +183,8 @@ def decimate(positions, triangles, target: int, keep=None, importance=None, unif
         return v
 
     out = np.array([faces[f] for f in range(len(faces)) if alive[f]], dtype=np.int64)
+    if alive_out is not None:
+        alive_out.extend(f for f in range(len(faces)) if alive[f])
     used = sorted(set(out.ravel().tolist()))
     merged = [root(v) for v in range(len(p))]
     return p, used, out, merged

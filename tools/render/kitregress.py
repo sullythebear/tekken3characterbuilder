@@ -6,8 +6,8 @@ longer builds.
     python tools/t3cb.py kitregress [--approve]
 
 The mixes cover the paths that matter: a plain style model, a whole skin, KITTEST's mix with its
-shape and colours, a mix that needs areas at half size, the heavy mix near the packet limit and a
-mix that needs coarser normals."""
+shape and colours, a mix that needs areas at half size, the heavy mix near the packet limit, a
+mix that needs coarser normals and one that is simplified to fit a small slot."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -28,6 +28,7 @@ MIXES = {
     "law-body-on-nina": (10, {"body": 2}, None, None),           # areas at half size
     "heavy-model3-on-nina": (10, {"head": 3, "arm_l": 3, "arm_r": 3}, None, None),   # 32464 packet bytes
     "head13-on-model7": (7, {"head": 13}, None, None),           # coarser normals for the slot
+    "body35-on-model30": (30, {"body": 35}, None, None),         # simplified to fit the small slot
 }
 
 

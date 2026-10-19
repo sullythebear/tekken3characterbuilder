@@ -446,6 +446,27 @@ class KitColourTests(unittest.TestCase):
             server.clean_kit_colours(["red", 1, 2, 3])
 
 
+class DecimateTests(unittest.TestCase):
+    def test_alive_out(self):
+        import numpy as np
+        import decimate as D
+        # a flat 4 x 4 grid of quads as triangles: collapses keep the order of what survives
+        n = 5
+        pos = np.array([(x, 0.0, z) for z in range(n) for x in range(n)])
+        tris = []
+        for z in range(n - 1):
+            for x in range(n - 1):
+                a = z * n + x
+                tris += [[a, a + 1, a + n], [a + 1, a + n + 1, a + n]]
+        alive = []
+        _, _, out, _ = D.decimate(pos, np.array(tris), 20, alive_out=alive)
+        self.assertEqual(len(alive), len(out))
+        self.assertEqual(alive, sorted(alive))
+        for k, t in zip(alive, out):                     # a surviving triangle keeps its corner order
+            same = [a == b for a, b in zip(tris[k], t)]
+            self.assertGreaterEqual(sum(same), 1)
+
+
 class StageModelTests(unittest.TestCase):
     def test_triangles(self):
         import stage_look as S

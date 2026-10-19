@@ -622,6 +622,32 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         faces = [faces[i] for i in keep] + paired
         texture = dict(texture, uv=[texture["uv"][i] for i in keep] + paired_uv, paired=True)
 
+    # Still too big for the slot: edge collapses (decimate.py) down to keep_share of the triangles,
+    # never joining two body parts; every corner keeps its texel, then pairs go out as quads again
+    def simplify(keep_share, why):
+        nonlocal faces, texture, pos, Nrm
+        import decimate as D
+        tris, src, uvs = [], [], []
+        for i, f in enumerate(faces):
+            corners = [(0, 1, 2)] if len(f["v"]) == 3 else [(0, 1, 2), (1, 3, 2)]
+            for c in corners:
+                tris.append([f["v"][k] for k in c])
+                uvs.append([texture["uv"][i][k] for k in c])
+                src.append(i)
+        alive = []
+        new_pos, _, out, _ = D.decimate(pos, np.array(tris), int(len(tris) * keep_share),
+                                        keep=lambda a, b: owner[a] == owner[b], alive_out=alive)
+        log(f"{why}: {len(tris)} triangles simplified to {len(out)}")
+        faces = [dict(faces[src[k]], v=[int(x) for x in out[n]]) for n, k in enumerate(alive)]
+        texture = dict(texture, uv=[uvs[k] for k in alive], paired=False)
+        pos = new_pos
+        Nrm = np.zeros_like(pos)
+        for f in faces:
+            v = f["v"]
+            Nrm[v] += np.cross(pos[v[1]] - pos[v[0]], pos[v[2]] - pos[v[0]])
+        Nrm /= np.linalg.norm(Nrm, axis=1, keepdims=True) + 1e-12
+        pair("after simplifying")
+
     def write(steps):
         try:
             return MI._write(B.m, pos, Nrm, faces, [int(o) for o in owner], {}, F, J, row, {"ready": texture},
@@ -638,8 +664,15 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         if len(data) <= len(B.m):
             break
         log(f"{len(data)} bytes for a slot of {len(B.m)}: normals in coarser steps")
-    if len(data) > len(B.m) and not texture.get("paired"):   # last: quads take fewer bytes too
+    if len(data) > len(B.m) and not texture.get("paired"):   # then: quads take fewer bytes too
         pair(f"{len(data)} bytes for a slot of {len(B.m)}")
+        data, report = write(steps)
+    whole = (faces, texture, pos)
+    for keep_share in (0.95, 0.9, 0.85, 0.8):                   # last: a little simpler, within each body part
+        if len(data) <= len(B.m):
+            break
+        faces, texture, pos = whole
+        simplify(keep_share, f"{len(data)} bytes for a slot of {len(B.m)}")
         data, report = write(steps)
     report.update(bytes=len(data), budget=len(B.m), parts=parts, normal_steps=steps)
     if len(data) > len(B.m):
