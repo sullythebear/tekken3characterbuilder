@@ -255,6 +255,20 @@ OWN_MOVES: dict[int, dict[str, int]] = {
 }
 
 
+# Strings per style {COMMAND LIST command: [record of each hit]}, measured in game: kept only
+# when every hit after the first is a record of the string itself (not a basic input's).
+STRINGS: dict[int, dict[str, list[int]]] = {}
+
+
+def string_records(moveset: bytes, style: int) -> dict[str, list[tuple[int, int]]]:
+    """{command: [(record, damage) per hit]} of the style's measured strings."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    start, alias = word(8), word(12)
+    count = (alias - start) // 56
+    return {name: [(r, word(start + 56 * r + 20) & 0xFF) for r in records]
+            for name, records in STRINGS.get(style, {}).items() if all(0 <= r < count for r in records)}
+
+
 def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
     """{COMMAND LIST command: (record, damage)} of the style's measured own moves with damage."""
     word = lambda o: struct.unpack_from("<I", moveset, o)[0]
@@ -287,10 +301,14 @@ def moves_file(key: int, records: dict, changes: dict) -> bytes | None:
     return b"T3MV" + struct.pack("<HHH", 1, key, len(rows)) + b"".join(struct.pack("<HHH", *r) for r in rows)
 
 
-def with_damage(entries: list[dict], damage: dict[str, int]) -> list[dict]:
-    """The COMMAND LIST with "damage" on lines whose command is one basic input."""
+def with_damage(entries: list[dict], damage: dict[str, int], strings: dict[str, list[int]] | None = None) -> list[dict]:
+    """The COMMAND LIST with "damage" on lines whose command is a known input, and for strings
+    "hits" (damage per hit) with their sum as "damage"."""
     for e in entries:
         key = e.get("command", "").replace(" ", "")
-        if key in damage and damage[key]:
+        if strings and key in strings:
+            e["hits"] = strings[key]
+            e["damage"] = sum(strings[key])
+        elif key in damage and damage[key]:
             e["damage"] = damage[key]
     return entries

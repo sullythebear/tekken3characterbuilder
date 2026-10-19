@@ -464,8 +464,9 @@ STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno", "custom")
 # "Duringcrouch,df+1", "During(**),4"): an optional situation or stance, direction taps, then
 # direction + buttons
 _DIR = r"(?:u|uf|ub|f|b|d|df|db|U|UF|UB|F|B|D|DF|DB)"
+_HIT = rf"(?:{_DIR}\+)?[1-4](?:\+[1-4]){{0,3}}"
 MOVE_KEY = re.compile(rf"(?:(?:Duringcrouch|Whilecrouching|Whilerising|Duringsidestep|During\(\*{{1,2}}\)),)?(?:{_DIR},){{0,4}}"
-                      rf"(?:{_DIR}\+)?[1-4](?:\+[1-4]){{0,3}}")
+                      rf"{_HIT}|(?:{_HIT},){{1,6}}{_HIT}#[2-8]")    # the last: a string's hit 2..8
 STAGE_VIEWS = ("front", "right", "back", "left", "textures")
 STAGE_MODELS = 15                                        # arenas with a scenery model (stage_look.py)
 
@@ -1437,7 +1438,8 @@ def command_list(donor) -> dict:
     models = donors["donors"].get(str(donor))
     if not models:
         raise ValueError("That style does not exist.")
-    own = zlib.crc32(repr(sorted(command_list_module.OWN_MOVES.get(donor, {}).items())).encode())
+    own = zlib.crc32(repr((sorted(command_list_module.OWN_MOVES.get(donor, {}).items()),
+                           sorted(command_list_module.STRINGS.get(donor, {}).items()))).encode())
     path = CACHE / f"commandlist5-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],

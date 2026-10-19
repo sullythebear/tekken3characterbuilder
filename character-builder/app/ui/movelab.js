@@ -68,13 +68,18 @@
           input.className = "move-input";
           damage.className = "move-damage";
           const own = (state.current.move_damage || {})[(m.command || "").replace(/ /g, "")];
-          damage.textContent = !m.damage ? "" : own !== undefined && own !== m.damage ? `${own} dmg (Tekken 3: ${m.damage})` : `${m.damage} dmg`;
+          damage.textContent = !m.damage ? "" : m.hits ? `${m.hits.join(" + ")} = ${m.damage} dmg`
+            : own !== undefined && own !== m.damage ? `${own} dmg (Tekken 3: ${m.damage})` : `${m.damage} dmg`;
           row.append(name, input, damage);
         }
         list.append(row);
       }
       const titles = {};
       for (const m of r.moves) if (m.command) titles[m.command.replace(/ /g, "")] ??= `${m.name}  ${m.command}`;
+      for (const k of Object.keys(r.own || {})) {                // a string's later hits: "(hit 2)"
+        const [base, hit] = k.split("#");
+        if (hit && titles[base]) titles[k] = `${titles[base]} (hit ${hit})`;
+      }
       const basic = showBasic(r.basic || {});
       const own = showBasic(r.own || {}, "own-list", titles);
       $("own-moves").hidden = !own;

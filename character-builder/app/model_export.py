@@ -651,7 +651,13 @@ def main() -> None:
                 basic.pop(name, None)
         rows.update(own)
         own = {name: damage for name, (_, damage) in own.items()}
-        print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}), "basic": basic,
+        strings = command_list.string_records(moveset, args.style)
+        for name, hits in strings.items():              # hits after the first: changeable on their own
+            for n, (record, damage) in enumerate(hits[1:], 2):
+                rows[f"{name}#{n}"] = (record, damage)
+                own[f"{name}#{n}"] = damage
+        strings = {name: [d for _, d in hits] for name, hits in strings.items()}
+        print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}, strings), "basic": basic,
                           "own": own, "records": rows, "key": command_list.moveset_key(exe, args.style)}))
         return
     if args.command == "ownportrait":

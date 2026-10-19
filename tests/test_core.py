@@ -334,6 +334,23 @@ class BasicDamageTests(unittest.TestCase):
             "Duringcrouch,df+1": 30, "d,df,f+2": 40, "1,2": 5, "x;y": 1}})
         self.assertEqual(c["move_damage"], {"Duringcrouch,df+1": 30, "d,df,f+2": 40})
 
+    def test_strings(self):
+        import command_list as M
+        moveset = bytearray(16 + 3 * 56 + 4)
+        struct.pack_into("<III", moveset, 4, 0, 16, 16 + 3 * 56)
+        for r, d in ((0, 12), (1, 12), (2, 15)):
+            struct.pack_into("<I", moveset, 16 + 56 * r + 20, d)
+        saved = M.STRINGS.get(99)
+        M.STRINGS[99] = {"b+1,2,1": [0, 1, 2], "1,2": [0, 7]}
+        try:
+            self.assertEqual(M.string_records(bytes(moveset), 99), {"b+1,2,1": [(0, 12), (1, 12), (2, 15)]})
+        finally:
+            M.STRINGS.pop(99) if saved is None else M.STRINGS.__setitem__(99, saved)
+        out = M.with_damage([{"name": "Combo", "command": "b+1, 2, 1"}], {}, {"b+1,2,1": [12, 12, 15]})
+        self.assertEqual((out[0]["hits"], out[0]["damage"]), ([12, 12, 15], 39))
+        c = server.validate_character({"name": "A", "donor": 1, "move_damage": {"b+1,2,1#2": 20, "1,2#9": 5}})
+        self.assertEqual(c["move_damage"], {"b+1,2,1#2": 20})
+
     def test_own_records(self):
         import command_list as M
         # header: +8 records at 16, +12 alias table after 3 records; record 2 has damage 0x4060
