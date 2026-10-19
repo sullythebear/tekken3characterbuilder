@@ -22,7 +22,10 @@ Export warns when an asset in the package has no known licence.
 |---|---|---|---|---|---|---|
 
 Test models used for the regression check (`character-builder/testmodels`, not committed) are
-category 3: downloaded with the owner's permission for local testing only.
+category 3: downloaded with the owner's permission for local testing only. Added 2026-10-19 (CC0,
+each in its own `dl-*` folder): KayKit Adventurers Mage, Rogue_Hooded, Knight (Kay Lousberg,
+LICENSE.txt in the KayKit GitHub repo) and 100Avatars R1 Rose, Lydia, Witch, HorrorNurse
+(Polygonal Mind, licence CC0 in toxsam/open-source-avatars, files on arweave.net).
 
 Candidate sources to check one by one before any download (licence per asset, not per site):
 Kenney (CC0), Quaternius (CC0), Poly Haven (CC0), OpenGameArt (mixed), Sketchfab (mixed).

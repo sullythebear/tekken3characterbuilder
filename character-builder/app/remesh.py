@@ -139,9 +139,10 @@ def snap(v, samples, origin, h, shape, reach=2):
     idx = np.floor((samples - origin) / h).astype(int)
     centre = origin + (idx + 0.5) * h
     dc = np.einsum("ij,ij->i", samples - centre, samples - centre)
-    # the grids get an empty border `reach` voxels wide (no bounds test per neighbour; a vertex
-    # outside the grid is clamped onto the border, where nothing is found, as before)
-    pad = reach + 1
+    # the grids get an empty border (no bounds test per neighbour): a vertex up to `reach` voxels
+    # outside the grid, plus `reach` neighbours around it, must still land inside (2 * reach + 1;
+    # reach + 1 indexed past the end for reach >= 2, KayKit's Mage)
+    pad = 2 * reach + 1
     reps = []
     for order in (np.argsort(-dc), np.argsort(dc)):
         rep = -np.ones(tuple(n + 2 * pad for n in shape), dtype=np.int64)

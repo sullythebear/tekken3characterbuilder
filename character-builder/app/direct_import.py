@@ -592,6 +592,10 @@ def inspect(path: Path) -> dict:
         info["problems"].append("The skeleton misses bones Tekken needs: " + ", ".join(info["missing"]) + ".")
     elif weighted < 0.95 * len(src["P"]):
         info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
+    elif (share := hips_share(src)) is not None and share < CHIBI_HIPS:
+        info["problems"].append(f"Chibi build: the hips are at {share:.0%} of the height (Tekken 3 fighters about "
+                                "50 %). Tekken's animations stretch such a model into a giant; use a model with a "
+                                "human build.")
     info["rigged"] = not info["problems"]
     info["notes"] = []
     if info["triangles"] > REDUCE_ABOVE:
@@ -603,6 +607,20 @@ def inspect(path: Path) -> dict:
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     info["checks"] = checks(src, info, weighted)
     return info
+
+
+# hips below 30 % of the height: a chibi (KayKit's adventurers, 19-23 %); tested 2026-10-19: the
+# Mage came out as a stretched giant in a fight, so such models are not imported
+CHIBI_HIPS = 0.30
+
+
+def hips_share(src: dict) -> float | None:
+    """Height of the hips (the thigh bones) as a share of the model's height, or None."""
+    P = np.asarray(src["P"], float)
+    hips = [b["matrix"][1][3] for b in src.get("bones") or [] if MI._part(b["name"])[0] == "thigh"]
+    if not hips or not len(P) or np.ptp(P[:, 1]) <= 0:
+        return None
+    return (float(np.mean(hips)) - P[:, 1].min()) / float(np.ptp(P[:, 1]))
 
 
 def checks(src: dict, info: dict, weighted: int) -> list:
@@ -632,6 +650,16 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                                     "A-pose models; arms-down models may stretch at the shoulders")
         else:
             add("Geometry", "ok", "Pose: arms spread out (T-pose or A-pose)")
+        # build: Tekken 3's fighters have the hips at about half their height; the import keeps
+        # the model's own build (100Avatars' Lydia: hips at 73 %, she comes out on stilts)
+        share = hips_share(src)
+        if share is not None:
+            if share > 0.62:
+                add("Geometry", "warn", f"Long legs: the hips are at {share:.0%} of the height (Tekken 3 "
+                                        "fighters about 50 %); the fighter keeps this build and looks stretched")
+            elif CHIBI_HIPS <= share < 0.35:
+                add("Geometry", "warn", f"Short legs: the hips are at {share:.0%} of the height (Tekken 3 "
+                                        "fighters about 50 %); the fighter keeps this build")
     # materials
     mats = sorted(set(np.asarray(src["MAT"]).tolist()))
     tex = src.get("textures") or {}

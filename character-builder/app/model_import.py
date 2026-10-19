@@ -51,6 +51,8 @@ def _part(name: str):
     n = name.split(":")[-1].lower()
     side = None
     import re
+    if re.search(r"ik[-_.]|[-_.]ik|ik$|^ik|control", n):  # rig helpers (kneeIK.l, IK-foot.l, control-heel-roll.l)
+        return None, None
     tail = re.search(r"[._ ](l|r|left|right)$", n)          # Blender style: hand.L, upper_arm_R
     if tail:
         side, n = ("L" if tail.group(1)[0] == "l" else "R"), n[:tail.start()]
@@ -58,7 +60,7 @@ def _part(name: str):
     for pre, s in (("left", "L"), ("right", "R")):
         if side is None and n.startswith(pre):
             n, side = n[len(pre):], s
-    order = [("upleg", "thigh"), ("thigh", "thigh"), ("toe", "foot"), ("foot", "foot"), ("ankle", "foot"),
+    order = [("upleg", "thigh"), ("upperleg", "thigh"), ("thigh", "thigh"), ("toe", "foot"), ("foot", "foot"), ("ankle", "foot"),
              ("forearm", "fore"), ("lowerarm", "fore"), ("hand", "hand"), ("thumb", "hand"), ("index", "hand"),
              ("middle", "hand"), ("ring", "hand"), ("pinky", "hand"), ("finger", "hand"),
              ("shoulder", "collar"), ("clavicle", "collar"), ("upperarm", "upper"), ("arm", "upper"),

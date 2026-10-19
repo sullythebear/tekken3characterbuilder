@@ -466,6 +466,17 @@ class KitColourTests(unittest.TestCase):
             server.clean_kit_colours(["red", 1, 2, 3])
 
 
+class BoneNameTests(unittest.TestCase):
+    def test_part(self):
+        import model_import as MI
+        self.assertEqual(MI._part("upperleg.l"), ("thigh", "L"))          # KayKit
+        self.assertEqual(MI._part("lowerleg.r"), ("shin", "R"))
+        self.assertEqual(MI._part("mixamorig:LeftUpLeg"), ("thigh", "L"))
+        self.assertEqual(MI._part("mixamorig:RightForeArm"), ("fore", "R"))
+        for helper in ("kneeIK.l", "IK-foot.r", "control-heel-roll.l", "handIK.l"):
+            self.assertEqual(MI._part(helper), (None, None), helper)  # rig helpers are no body part
+
+
 class DecimateTests(unittest.TestCase):
     def test_alive_out(self):
         import numpy as np

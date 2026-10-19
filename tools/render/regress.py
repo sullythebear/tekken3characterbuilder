@@ -137,7 +137,8 @@ def main():
         if info and src:
             items.append((d.name, info, src, d / "model.bin"))
     if "--all" in sys.argv:
-        for f in sorted((root / "testmodels").glob("*")):
+        tm = root / "testmodels"                         # loose files, or one download per folder
+        for f in sorted([*tm.glob("*"), *tm.glob("*/*")]):
             if f.suffix.lower() not in (".glb", ".fbx", ".vrm"):
                 continue
             if not DI.inspect(f)["rigged"]:

@@ -81,9 +81,22 @@ def read(path: Path) -> dict:
             bones.append({"name": human.get(nd) or j["nodes"][nd].get("name", f"joint{k}"), "parent": index.get(up, -1),
                           "matrix": np.linalg.inv(ibm[k]).tolist()})
         skin_of[si] = base
+    # a mesh without a skin under a joint node (a hat or an armour piece that hangs on a bone,
+    # as KayKit's characters have) moves rigidly with that bone
+    node_parent = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}
+    joint_bone = {nd: skin_of[si] + k for si, sk in enumerate(j.get("skins", [])) for k, nd in enumerate(sk["joints"])}
+
+    def holder(ni):
+        up = node_parent.get(ni)
+        while up is not None and up not in joint_bone:
+            up = node_parent.get(up)
+        return joint_bone.get(up)
     for ni, n in enumerate(j["nodes"]):
         if "mesh" not in n:
             continue
+        rigid = holder(ni) if "skin" not in n else None
+        if rigid is not None and "slot" in bones[rigid]["name"].lower():
+            continue                                    # a held item (KayKit: every weapon on the hand slots)
         M = world.get(ni, np.eye(4)) if "skin" not in n else np.eye(4)
         for prim in j["meshes"][n["mesh"]]["primitives"]:
             a = prim["attributes"]
@@ -94,7 +107,7 @@ def read(path: Path) -> dict:
                 wt = acc(a["WEIGHTS_0"]).astype(float)
                 WTS += [{int(b): float(w) for b, w in zip(jr, wr) if w > 0} for jr, wr in zip(jt, wt)]
             else:
-                WTS += [{} for _ in range(len(p))]
+                WTS += [{} if rigid is None else {rigid: 1.0} for _ in range(len(p))]
             idx = acc(prim["indices"]).astype(int) if "indices" in prim else np.arange(len(p))
             uv = acc(a["TEXCOORD_0"]).astype(float) if "TEXCOORD_0" in a else np.zeros((len(p), 2))
             base = sum(len(x) for x in P)

@@ -196,3 +196,25 @@ texture of its own, before the colour swatches, so the model's UVs stay as they 
   now gets one plain palette.
 - Browser: an upload with an image through `/api/model/texture` shows "Texture image: chosen".
 - Packages carry `texture-source.*`. Undo and Remove handle it.
+
+## More model kinds (2026-10-19, with the owner's permission to download)
+
+Seven CC0 test models, each downloaded into its own folder `testmodels/dl-*/` (never committed;
+`regress --all` now also looks one folder deep):
+- 100Avatars R1 (Polygonal Mind, CC0, VRM): Rose, Lydia, Witch, HorrorNurse. All import; Rose,
+  Witch (hat, skirt) and HorrorNurse fought 600 frames on KITTEST with 0 data words differing.
+  Lydia is built with the hips at 71 % of her height (stilts in the source too): imported as she
+  is, the check list now warns "Long legs".
+- KayKit Adventurers (Kay Lousberg, CC0, glb): Mage, Rogue_Hooded, Knight. Found and fixed:
+  - meshes without a skin hanging under a joint node (hats, armour) now move rigidly with that
+    bone (`glb.read`), instead of "skin weights are missing";
+  - meshes held on a "*slot*" bone (every weapon and shield of the pack at once) are left out;
+  - bone names: "upperleg" is a thigh (it read as a shin), rig helpers (kneeIK, IK-foot,
+    control-*, ik_hand_*) are no body part (`model_import._part`). The fighter "test" (Rogue)
+    has Unreal ik_* helpers: its import changed by 20 bytes, renders identical, re-approved;
+  - `remesh.snap`: the grid border was too narrow for a search reach of 2+ voxels (an index past
+    the end: the Mage crashed the reduction; below 0 it read the far side silently).
+  - In a fight the Mage came out as a stretched giant: KayKit's characters are chibis (hips at
+    19-23 % of the height). Models with the hips below 30 % are now refused with a clear reason
+    ("Chibi build"); 30-35 % gets a warning.
+- `regress --all`: every earlier model the same, except "test" as above; the four VRMs approved.
