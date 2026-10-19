@@ -566,7 +566,7 @@ def stage_preview(data: dict) -> dict:
     if arena >= STAGE_MODELS:                            # no scenery model known: the textures
         view = "textures"
     args, label = stage_look_args(look, data.get("tint"), data.get("strength")) if look else ([], "original")
-    out = CACHE / f"stage-{arena}-{label}-{view}.png"
+    out = CACHE / f"stage2-{arena}-{label}-{view}.png"         # 2: with the floor
     if not out.is_file():
         CACHE.mkdir(exist_ok=True)
         extra = [] if view == "textures" else ["--view", view]
