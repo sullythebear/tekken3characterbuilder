@@ -92,6 +92,6 @@ Updated: 2026-10-19.
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
 1. Stage Lab: editing the scenery within its byte size; the floor routine and collision are
    not known (`knowledge/stages.md`).
-2. Move Lab: the other strings (they look like separate moves from outside), chain throws, "or"
-   alternatives.
+2. Move Lab: the other strings (they look like separate moves from outside); chain throws tried
+   and not reliable with scripted input (`knowledge/moves.md`).
 3. Push and publish only with the owner's permission.

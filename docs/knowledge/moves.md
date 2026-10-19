@@ -287,3 +287,14 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - Kept: Lei Falling Tree "uf (or, ub), 2" → 58 (15) and Turn Around "B (or, b), 3+4" → 401 (15).
 - Left out: several gave a basic input's record; parries give no damage; Xiaoyu's Lower Parry gave
   record 254, her crouching df+1, so the parry did not come out.
+
+## Chain throws (2026-10-19, tried, not in the app)
+
+- 11 chain lines (Nina 9, Anna 2), each "From M, ..." led by the entry carrying mark M
+  ((*), (**), ^%, {*, }_), built recursively (scratch `measure8.py` Arcade, `measure8p.py`
+  Practice).
+- **tested** Not reliable with set_input: Nina's Back Hand Slap d, df, f+1+2 comes out as her
+  basic f+1+2 (record 230), so every chain led by it fails; a chain led by Betrayer
+  d, db, B+1+4 gave basic moves in Practice (the throw missed). In Arcade the CPU breaks or
+  wins before the long sequences finish. Left out; the chains' first throws (Betrayer 15,
+  Elbow Smash 50) are in `OWN_MOVES`.
