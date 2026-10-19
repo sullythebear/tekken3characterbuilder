@@ -33,6 +33,11 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in so
   see-through, the look's CLUTs): all 15 arenas look like the game's stages (street, forest,
   fair, temple, harbour, beach, ...). The Stage Lab shows it with a View choice (front, right,
   back, left, textures); browser-tested on Gon's beach with Sunset.
-- **not known**: the floor (drawn separately, not in this model) and the floor/wall collision.
+- **tested** The floor is not in the scenery model. Its tiles are the stage's 4-bit TIMs that
+  no scenery primitive uses: 64 x 64 texels each, usually four stacked (sand on arena 13,
+  grass on arena 2, one tile on arena 0). **inferred**: how the game lays them out;
+  `stage_look.floor_triangles` repeats them (a tile per 240 units), which looks right on all
+  15 arenas but is not the game's routine.
+- **not known**: the floor routine itself and the floor/wall collision.
   New stage geometry is therefore not offered; editing the scenery within its byte size is the
   possible next step.

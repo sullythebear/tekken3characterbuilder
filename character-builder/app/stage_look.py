@@ -112,7 +112,7 @@ def preview(root: Path, arena: int, look: str | None, out: Path, width: int = 64
 # count again, 0 (offsets from +12). Vertices are 4 i16 (x, y, z, 0; y up is negative). The
 # primitives are GPU packets without the tag word: code 0x20/0x28 flat triangle/quad (rgb, code,
 # 3/4 vertex indices; 8 bytes), 0x24/0x2C textured (rgb, code, uv+clut, uv+tpage, uv, uv,
-# indices; 20 bytes). Code bit 1: semi-transparent. The floor is not part of it.
+# indices; 20 bytes). Code bit 1: semi-transparent. The floor is not part of it (floor_triangles).
 FIRST_STAGE_MODEL = 56
 STAGE_MODELS = 15
 VIEWS = {"front": 0.0, "right": 1.5708, "back": 3.1416, "left": -1.5708}
@@ -148,6 +148,45 @@ def stage_triangles(model: bytes) -> list:
     return tris
 
 
+def floor_triangles(tims, scenery: list, cell: int = 120) -> list:
+    """The floor (not in the scenery model) as stage_triangles tuples: the stage's 4-bit TIMs that
+    no scenery primitive uses are its floor tiles (sand on Gon's beach, grass in the forest;
+    tested 2026-10-19). How the game lays them out is not known: here they repeat in rows of
+    cells over -1200..1200, which is only an approximation."""
+    used = set()
+    for _, uv, clut, tpage, _, _ in scenery:
+        if uv is None:
+            continue
+        mode, bx, by = (tpage >> 7) & 3, (tpage & 15) * 64, ((tpage >> 4) & 1) * 256
+        for u, v in uv:
+            wx = bx + (u // 4 if mode == 0 else u // 2 if mode == 1 else u)
+            for i, tim in enumerate(tims):
+                im = tim.image
+                if im.x <= wx < im.x + im.width_words and im.y <= by + v < im.y + im.height:
+                    used.add(i)
+    tiles = [tim for i, tim in enumerate(tims) if i not in used and tim.mode == 0 and tim.clut is not None
+             and tim.image.width_words <= 64]
+    tiles.sort(key=lambda tim: (tim.image.x, tim.image.y))
+    out = []
+    for n, z in enumerate(range(-1200, 1200, cell)):
+        if not tiles:
+            break
+        tim = tiles[n // 2 % len(tiles)]
+        im, c = tim.image, tim.clut
+        bx, by = im.x // 64 * 64, im.y // 256 * 256
+        tpage, clut = (im.x // 64) | ((im.y // 256) << 4), (c.x >> 4) | (c.y << 6)
+        u0, v0 = (im.x - bx) * 4, im.y - by
+        tw, th = im.width_words * 4 // 2, min(im.height, 64) // 2   # a tile spans 2 x 2 cells
+        vz = v0 + th * (1 - n % 2)
+        for k, x in enumerate(range(-1200, 1200, cell)):
+            uu = u0 + tw * (k % 2)
+            a, b, d, e = (x, 0, z), (x + cell, 0, z), (x, 0, z + cell), (x + cell, 0, z + cell)
+            s0, s1, t0, t1 = uu, uu + tw - 1, vz, vz + th - 1
+            out.append(([a, b, d], [(s0, t1), (s1, t1), (s0, t0)], clut, tpage, (128, 128, 128), False))
+            out.append(([b, e, d], [(s1, t1), (s1, t0), (s0, t0)], clut, tpage, (128, 128, 128), False))
+    return out
+
+
 def arena_view(root: Path, arena: int, look, out: Path, view: str = "front", size=(960, 540)) -> None:
     """PNG of the stage as seen from the fighters' place (yaw from VIEWS), with the look, if any.
     A software render in the PS1's way: textures through their CLUTs, colour 0 see-through."""
@@ -178,7 +217,8 @@ def arena_view(root: Path, arena: int, look, out: Path, view: str = "front", siz
     img = np.zeros((H, W, 3))
     img[:] = (22, 22, 28)
     zb = np.full((H, W), np.inf)
-    for xyz, uv, clut, tpage, rgb, semi in stage_triangles(model):
+    scenery = stage_triangles(model)
+    for xyz, uv, clut, tpage, rgb, semi in floor_triangles(tims, scenery) + scenery:
         P = np.array(xyz, float)
         P = np.stack([cy_ * P[:, 0] - sy_ * P[:, 2], P[:, 1], sy_ * P[:, 0] + cy_ * P[:, 2]], 1) - eye
         y = P[:, 1] * cp + P[:, 2] * sp
