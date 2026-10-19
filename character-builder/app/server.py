@@ -557,6 +557,12 @@ def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
 def stage_preview(data: dict) -> dict:
     """PNG (base64) of the stage seen from the fighters' place (view front/right/back/left), or of
     its largest textures (view "textures"), with a look or as the game colours them."""
+    out, view = stage_view_file(data)
+    return {"png": base64.b64encode(out.read_bytes()).decode(), "view": view}
+
+
+def stage_view_file(data: dict) -> tuple[Path, str]:
+    """The cached PNG of stage_preview and the view it shows."""
     root = project_root()
     if not root or creator_patch.project_kind(root) != "expanded":
         raise ValueError("The Stage Lab needs Tekken 3 Expanded.")
@@ -580,7 +586,7 @@ def stage_preview(data: dict) -> dict:
         problem = run_stage_tool(root, ["--arena", str(arena), *args, "--preview", str(out), *extra])
         if problem:
             raise ValueError(problem)
-    return {"png": base64.b64encode(out.read_bytes()).decode(), "view": view}
+    return out, view
 
 
 def write_name_call(root: Path, key: str, fighter: dict) -> str | None:
@@ -1309,7 +1315,7 @@ def import_model(cid: str, costume: int, parts=None, on_line=None, settings=None
 
 
 PORTRAIT_LOOK = {"angle": ("turned", "front", "other", "profile"), "frame": ("shoulders", "close", "chest"),
-                 "light": ("left", "front", "dramatic"), "backdrop": ("warm", "cool", "red", "dark")}
+                 "light": ("left", "front", "dramatic"), "backdrop": ("warm", "cool", "red", "dark", "stage")}
 
 
 def own_portrait(cid: str, look=None) -> dict:
@@ -1336,6 +1342,14 @@ def own_portrait(cid: str, look=None) -> dict:
                 problem, _ = run_kitbash(root, models[0], {}, source)
             if problem or not source.is_file():
                 raise ValueError(problem or "The style's model could not be read.")
+    if clean.get("backdrop") == "stage":                 # the fighter's home stage in its colours
+        character = get_character(safe_id(cid))
+        if creator_patch.project_kind(root) != "expanded" or character.get("donor") is None:
+            raise ValueError("The home stage background needs Tekken 3 Expanded and a fighting style.")
+        image, _ = stage_view_file({"donor": character["donor"], "stage": character.get("stage"),
+                                    "look": character.get("stage_look"), "tint": character.get("stage_tint"),
+                                    "strength": character.get("stage_strength"), "view": "front"})
+        clean["backdrop_image"] = str(image)
     out = CACHE / f"portrait-{safe_id(cid)}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     with model_lock:

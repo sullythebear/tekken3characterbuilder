@@ -89,7 +89,8 @@ Portrait Lab
 ------------
 Choose an image, or "Make from 3D model" with an angle, framing, light and
 background (from the fighter's own model, else from its style's first
-costume). "Keep this portrait" saves it under
+costume). The background "My home stage" puts the fighter in front of its
+home stage, in its stage colours. "Keep this portrait" saves it under
 "Saved portraits" (up to 12): click one to use it again.
 
 Voice Lab

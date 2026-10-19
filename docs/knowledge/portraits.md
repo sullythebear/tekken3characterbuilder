@@ -19,3 +19,11 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   (`PORTRAIT_LOOK`); UI selects in the Portrait Lab tab, shown when the fighter has an own model.
 - Verified: Medea in three looks (default; front/close/dramatic/red; profile/chest/flat/cool),
   KITTEST front/red from the UI. The close-up can touch the top of tall hair.
+
+## Home stage background (2026-10-19, browser-tested)
+
+- Background "My home stage": the server renders the fighter's home stage from the front in its
+  stage colours (`server.stage_view_file`, the Stage Lab's cached picture) and passes its path
+  as `backdrop_image`; `model_export.own_portrait` scales it to cover the frame, crops the
+  middle and darkens it to 75 % so the fighter stands out. KITTEST on Gon's beach looked right
+  after the select-screen conversion.

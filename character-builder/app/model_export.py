@@ -565,6 +565,12 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756), look
     yy, xx = np.mgrid[0:H, 0:W]
     d = np.hypot((xx - W / 2) / W, (yy - 0.75 * H) / H)
     img = np.stack([base[k] + glow[k] * np.clip(0.7 - d, 0, 1) for k in range(3)], 2)
+    if look.get("backdrop_image"):                       # a picture (the home stage): fills, a bit darker
+        bg = Image.open(look["backdrop_image"]).convert("RGB")
+        s = max(W / bg.width, H / bg.height)
+        bg = bg.resize((round(bg.width * s), round(bg.height * s)), Image.BILINEAR)
+        x0, y0 = (bg.width - W) // 2, (bg.height - H) // 2
+        img = np.asarray(bg.crop((x0, y0, x0 + W, y0 + H)), float) * 0.75
     zb = np.full((H, W), -np.inf)
     for i, t in enumerate(T):
         xy = np.stack([X[t], Y[t]], 1)
