@@ -243,8 +243,15 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   "Kittest has 2 changed moves (moveset 5)", "P1 Kittest changed moves in (2)". Set back to
   15 afterwards (KITTEST keeps only 3 = 60). Browser: King's six own moves show with their
   names (Jaguar Lariat 50, Leg Breaker 21, Deadly Boomerang 60, ...).
-- **open** Throws: their records carry 0x4000 and damage 0 (the damage is applied elsewhere,
-  perhaps in the victim's reaction). Measuring it as the opponent's health drop needs the
-  health address: actor + 0x50 / 0x58 / 0x5A / 0x5C (P2 actor = 0x800A9228 + 0x188C) changed
-  in ways that are not health (6 → 50 after a throw), and the Practice dummy refills. Not in
-  the Move Lab.
+- **tested** Health: `actor + 0x3F6` (halfword), 130 = full. Found by dumping both actors every
+  30 frames while P1 stood still in Arcade: only P1 + 0x3F6 fell, 130 → 118 → 97 → 82 (hits of
+  12, 21, 15), and the HUD bar stood at about 63 %. In Practice the dummy's reads 200 and does
+  not fall (endless health), so damage is measured in Arcade.
+- **method** Throws (scratch `measure4.py`): Arcade against the CPU, walk forward 45 frames, the
+  throw input, then P2's lowest health over 150 frames. A try counts when the trace holds a
+  record with the 0x4000 throw flag and P2's health fell; up to 5 tries. Paul: Foot Launch
+  (B+2+3) 35, Twist & Shout (DF+1+2) 40.
+- **tested** The throw's damage is in its follow-up record in the thrower's own moveset: Foot
+  Launch traced 242 (0x4000, no damage) → 346 (35), Twist & Shout 244 → 344 (40), exactly the
+  health drops. So a throw goes into `OWN_MOVES` with that follow-up record, kept only when its
+  damage equals the measured drop in both passes, and patch 20 can change it like any move.

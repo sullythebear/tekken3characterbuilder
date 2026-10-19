@@ -2,9 +2,9 @@
 
 Updated: 2026-10-19.
 - Released: builder 0.6.0 (tag v0.6.0, 2026-10-19, with the owner's permission).
-- Pushed: `main` up to dc1174e. Local commits since then are not pushed.
+- Pushed: `main` up to b6c78b2 (2026-10-19, with the owner's permission). Later commits are local.
 
-## Since 0.6.0 (local)
+## Since 0.6.0
 
 - Stage Lab: the stage itself as a picture from the fighters' place (scenery model record
   56 + arena decoded), with the colour look and four views; the floor from the stage's own

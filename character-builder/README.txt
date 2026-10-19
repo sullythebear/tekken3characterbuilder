@@ -111,7 +111,9 @@ Move Lab
 --------
 The moves of your fighter's style, as Tekken 3's COMMAND LIST shows them
 (read from your disc), and the damage of every basic input (1, 2, 3, 4 with
-the directions). Change a number to give your fighter other damage: it applies
+the directions) and of many of the style's own moves (special inputs, motions
+such as d, df, f+2, moves from a crouch or side step, throws), measured in the
+game for each style. Change a number to give your fighter other damage: it applies
 to your fighter only (game patch T3CB-PATCH-20), not to the style's own
 fighter, and not in a mirror match, where both players share one moveset.
 
