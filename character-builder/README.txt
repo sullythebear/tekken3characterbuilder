@@ -103,7 +103,9 @@ Stage Lab
 ---------
 Your fighter's home stage and theme (where it is met in Arcade), and the
 stage's colours: night, sunset, dusk, ice, inferno, black and white, or your
-own colour. New stage shapes are not possible.
+own colour. The picture shows the stage in those colours as seen from where the
+fighters stand (View: front, right, back, left, or its textures); the floor is
+not in the picture. New stage shapes are not possible.
 
 Move Lab
 --------
