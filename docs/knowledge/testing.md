@@ -169,3 +169,9 @@ half size, near the packet limit, coarser normals. It compares their SHA-256 wit
 state in `character-builder/cache/kitregress/`. Exit 1 when a mix that built before fails.
 Approved on 2026-10-18; the KITTEST mix is 23080 bytes, as installed in game. Run it after any
 kitbash or writer change.
+
+## Check after 0.7.0 (2026-10-19)
+
+- `t3cb regress --all`: all 11 import models the same as approved (BrainStem locked, as before).
+- `t3cb kitregress`: all 7 Builder mixes the same.
+- Unit tests: 54 pass.
