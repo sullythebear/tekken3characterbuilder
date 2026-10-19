@@ -266,3 +266,16 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   the same: Lei During (*), 1 → 195 (25) and During (**), 4 → 224 (70); Yoshimitsu During (**),
   2 → 230 (10); Eddy During (**), 4 → 256 (12). Eddy During (**), D+3+4 gave his basic d+3+4
   and is left out. 99 entries in `OWN_MOVES`.
+
+## Strings (2026-10-19, measured in game)
+
+- **method** (scratch `measure6.py`): Practice, each COMMAND LIST line whose tokens all hold
+  buttons ("1, 2", "b+1, 2, 1"), pressed 3 frames each with gaps of 8, 12, 16 or 20 frames (the
+  first gap that gives every hit wins), tracing the records with damage.
+- From outside, two separate moves in a row look the same as a string, so a string is kept only
+  when every hit after the first is a record that is no basic input's and no measured own move's
+  (e.g. Law b+1, 2, 1 → 115, 209, 204; "f+2, 1" gave basic f+2 then basic 1 and is left out).
+- Two passes, kept when both gave the same records: 10 strings in 8 styles
+  (`command_list.STRINGS`), e.g. Bryan Hands of Doom b+2, 1, 2 → 152, 153, 151 (21 + 21 + 21),
+  Xiaoyu u+1+2, 2, 1 → 242, 244, 150. The Move Lab shows "21 + 21 + 21 = 63 dmg"; hits 2 and
+  later are changeable on their own (keys "b+2,1,2#2"; hit 1 is the basic or own move).

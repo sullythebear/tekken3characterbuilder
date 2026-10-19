@@ -257,7 +257,15 @@ OWN_MOVES: dict[int, dict[str, int]] = {
 
 # Strings per style {COMMAND LIST command: [record of each hit]}, measured in game: kept only
 # when every hit after the first is a record of the string itself (not a basic input's).
-STRINGS: dict[int, dict[str, list[int]]] = {}
+STRINGS: dict[int, dict[str, list[int]]] = {
+    1: {"d+4,3": [135, 145]},
+    5: {"b+2,2": [120, 121], "db+4,3": [148, 317]},
+    6: {"f+3,4": [209, 256], "f+4,4": [101, 253]},
+    7: {"u+1+2,2,1": [242, 244, 150]},
+    8: {"db+3,3": [138, 248]},
+    12: {"b+2,1,2": [152, 153, 151]},
+    14: {"ub+3,2": [70, 193]},
+}
 
 
 def string_records(moveset: bytes, style: int) -> dict[str, list[tuple[int, int]]]:
