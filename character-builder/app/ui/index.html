@@ -336,8 +336,17 @@
               <span class="model-import-row"><input type="color" id="stage-tint" value="#ff8040"><input type="range" id="stage-strength" min="0" max="100" value="60"></span>
             </label>
           </div>
-          <p class="hint">Recolours your home stage when your fighter is in the fight (Tekken 3 Expanded). Below: the stage's textures in these colours. New stage shapes are not possible: the stage format is not known well enough.</p>
-          <img class="stage-sheet" id="stage-sheet" alt="The stage's textures in the chosen colours" hidden>
+          <p class="hint">Recolours your home stage when your fighter is in the fight (Tekken 3 Expanded). Below: the stage in these colours, seen from where the fighters stand (the floor is drawn by the game separately and is not shown). New stage shapes are not possible yet.</p>
+          <div class="arena-lists"><label>View
+            <select id="stage-view">
+              <option value="front">Front</option>
+              <option value="right">Right</option>
+              <option value="back">Back</option>
+              <option value="left">Left</option>
+              <option value="textures">Textures</option>
+            </select>
+          </label></div>
+          <img class="stage-sheet" id="stage-sheet" alt="The stage in the chosen colours" hidden>
         </fieldset>
       </div>
 
@@ -350,9 +359,13 @@
           <table class="move-table"><tbody id="move-list"></tbody></table>
         </fieldset>
         <fieldset class="field" id="basic-field" hidden>
-          <legend>Basic moves: damage</legend>
+          <legend>Moves: damage</legend>
           <p class="hint">Damage of each basic input of this style, standing, read from the moveset on your disc (first hit of the move; a few styles do something else from a stance or crouch). Change a number to give your fighter other damage: it applies only to your fighter, not to the style's own fighter, and not in a mirror match (both players then share one moveset).</p>
           <div class="basic-grid" id="basic-list"></div>
+          <div id="own-moves" hidden>
+            <p class="hint">The style's own moves (measured in the game, first hit):</p>
+            <div class="basic-grid own-grid" id="own-list"></div>
+          </div>
           <div class="portrait-buttons"><button class="btn btn-ghost mini" type="button" id="basic-reset">Tekken 3's damage everywhere</button></div>
         </fieldset>
       </div>

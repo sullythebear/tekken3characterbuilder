@@ -16,5 +16,23 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in so
   (or it was already written), so other data is never overwritten. Live on Gon's beach: night and
   sunset clean; the hit spark changes colour too (its CLUT comes with the stage data). The HUD's
   name plates fade in dark at the round start with or without a variant.
-- **not possible yet**: new stage geometry or objects. The stage model records (forest:
-  model record 58 per Expanded's forest-hd report) and the floor/wall collision are not known.
+- **tested** (2026-10-19) The stage's scenery model is disc record **56 + arena** (arenas 0..14;
+  record 71 is a fighter model again, so arena 15 has none there). Format (first hint: Expanded's
+  `tools/forest_hd_pack.py` for record 58):
+  - header: u32 65, u32 (varies), u32 36 = piece count;
+  - 36 pieces of 7 u32 at 12 + 28 * i: vertex offset, vertex count, ?, primitive count,
+    primitive offset, the count again, 0 (offsets from +12). The pieces form a 6 x 6 grid of
+    480-unit cells over x/z -1200..1200;
+  - vertices: 4 i16 (x, y, z, 0), y up is negative (scenery up to about -860);
+  - primitives: GPU packets without the tag word. 0x20/0x28 flat triangle/quad (rgb, code,
+    3/4 vertex indices; 8 bytes), 0x24/0x2C textured (rgb, code, uv+clut, uv+tpage, uv, uv,
+    indices; 20 bytes). Code bit 1 = semi-transparent. All 15 records parse with only these.
+  - Textures: tpage/CLUT point into VRAM as the stage's TIMs (record 36 + arena) load them.
+    Primitives whose UVs span one or two texels are plain colours (the sky on arena 0).
+- **tested** `stage_look.arena_view` renders it (software, perspective-correct, PS1 colour 0
+  see-through, the look's CLUTs): all 15 arenas look like the game's stages (street, forest,
+  fair, temple, harbour, beach, ...). The Stage Lab shows it with a View choice (front, right,
+  back, left, textures); browser-tested on Gon's beach with Sunset.
+- **not known**: the floor (drawn separately, not in this model) and the floor/wall collision.
+  New stage geometry is therefore not offered; editing the scenery within its byte size is the
+  possible next step.

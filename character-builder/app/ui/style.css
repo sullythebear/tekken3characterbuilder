@@ -460,6 +460,7 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .basic-grid input { width: 3.4rem; background: transparent; color: var(--gold); border: 1px solid transparent; text-align: right; font: inherit; }
 .basic-grid input:hover, .basic-grid input:focus { border-color: var(--line); }
 .basic-grid label.changed input { color: var(--ember); border-color: var(--ember); }
+.basic-grid.own-grid { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
 
 #library-dialog { width: min(860px, 94vw); }
 .library-table tbody tr { cursor: pointer; }

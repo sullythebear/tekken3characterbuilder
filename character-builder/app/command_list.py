@@ -218,6 +218,26 @@ def basic_records(moveset: bytes, exe: bytes) -> dict[str, tuple[int, int]]:
     return out
 
 
+# The style's own moves (COMMAND LIST lines of one input that are not basic inputs): the record
+# each one started in game, measured per style with t3live (docs/knowledge/moves.md). Their list
+# entries carry conditions that the static data alone does not settle, so these are measured.
+OWN_MOVES: dict[int, dict[str, int]] = {}
+
+
+def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
+    """{COMMAND LIST command: (record, damage)} of the style's measured own moves with damage."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    start, alias = word(8), word(12)
+    count = (alias - start) // 56
+    out = {}
+    for name, record in OWN_MOVES.get(style, {}).items():
+        if 0 <= record < count:
+            damage = word(start + 56 * record + 20) & 0xFF
+            if damage:
+                out[name] = (record, damage)
+    return out
+
+
 MOVES_FILE_MAX = 32
 
 

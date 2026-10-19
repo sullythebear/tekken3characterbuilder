@@ -641,10 +641,15 @@ def main() -> None:
             return
         exe = exe_bytes(args.root)                # damage of the basic inputs (the style's moveset)
         mid = command_list.MOVESET_FIRST + command_list.moveset_key(exe, args.style)
-        rows = command_list.basic_records(records(args.root, [mid])[mid], exe)
+        moveset = records(args.root, [mid])[mid]
+        rows = command_list.basic_records(moveset, exe)
         basic = {name: damage for name, (_, damage) in rows.items()}
-        print(json.dumps({"moves": command_list.with_damage(entries, basic), "basic": basic,
-                          "records": rows, "key": command_list.moveset_key(exe, args.style)}))
+        own = {name: row for name, row in command_list.own_records(moveset, args.style).items()
+               if name not in rows}
+        rows.update(own)
+        own = {name: damage for name, (_, damage) in own.items()}
+        print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}), "basic": basic,
+                          "own": own, "records": rows, "key": command_list.moveset_key(exe, args.style)}))
         return
     if args.command == "ownportrait":
         if args.file is None or args.out is None:

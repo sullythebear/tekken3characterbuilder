@@ -328,6 +328,22 @@ class BasicDamageTests(unittest.TestCase):
         self.assertEqual(b, b"T3MV" + struct.pack("<HHH", 1, 5, 1) + struct.pack("<HHH", 110, 25, 60))
         c = server.validate_character({"name": "A", "donor": 5, "move_damage": {"3": 999, "df+2": "12", "x": 3}})
         self.assertEqual(c["move_damage"], {"3": 200, "df+2": 12})
+        c = server.validate_character({"name": "A", "donor": 4, "move_damage": {"D+3+4": 9, "d+1+4": 70}})
+        self.assertEqual(c["move_damage"], {"D+3+4": 9, "d+1+4": 70})
+
+    def test_own_records(self):
+        import command_list as M
+        # header: +8 records at 16, +12 alias table after 3 records; record 2 has damage 0x4060
+        moveset = bytearray(16 + 3 * 56 + 4)
+        struct.pack_into("<III", moveset, 4, 0, 16, 16 + 3 * 56)
+        struct.pack_into("<I", moveset, 16 + 56 + 20, 60)
+        struct.pack_into("<I", moveset, 16 + 2 * 56 + 20, 0x4060)
+        saved = M.OWN_MOVES.get(99)
+        M.OWN_MOVES[99] = {"d+1+4": 1, "b+1+4": 0, "D+3+4": 2, "f+1+2": 7}
+        try:
+            self.assertEqual(M.own_records(bytes(moveset), 99), {"d+1+4": (1, 60), "D+3+4": (2, 0x60)})
+        finally:
+            M.OWN_MOVES.pop(99) if saved is None else M.OWN_MOVES.__setitem__(99, saved)
 
     def test_notation(self):
         import command_list as M
@@ -428,6 +444,27 @@ class KitColourTests(unittest.TestCase):
         self.assertEqual(server.clean_kit_colours([500, -5, 99, 0]), [180, 0, 40, False])
         with self.assertRaises(ValueError):
             server.clean_kit_colours(["red", 1, 2, 3])
+
+
+class StageModelTests(unittest.TestCase):
+    def test_triangles(self):
+        import stage_look as S
+        # one piece: 4 vertices, a flat quad (8 bytes), a textured triangle (20 bytes), then an
+        # unknown packet that ends the piece
+        verts = b"".join(struct.pack("<4h", x, -y, 0, 0) for x, y in ((0, 0), (10, 0), (0, 10), (10, 10)))
+        flat = bytes([200, 100, 50, 0x28, 0, 1, 2, 3])
+        tex = bytes([128, 128, 128, 0x26, 1, 2]) + struct.pack("<H", 0x7807) + bytes([3, 4]) + \
+            struct.pack("<H", 0x1A) + bytes([5, 6, 0, 0, 3, 2, 1, 0])
+        prims = flat + tex + bytes([0, 0, 0, 0x7C])
+        head = struct.pack("<3I", 65, 400, 1)
+        row_at = 28                                            # offsets count from +12
+        model = head + struct.pack("<7I", row_at + len(prims), 4, 0, 3, row_at, 3, 0) + prims + verts
+        tris = S.stage_triangles(model)
+        self.assertEqual(len(tris), 3)                         # the quad as two, the triangle, not the unknown one
+        self.assertEqual(tris[0][0], [(0, 0, 0), (10, 0, 0), (0, -10, 0)])
+        self.assertIsNone(tris[0][1])
+        self.assertEqual(tris[2][1:4], ([(1, 2), (3, 4), (5, 6)], 0x7807, 0x1A))
+        self.assertTrue(tris[2][5])                            # code bit 1: semi-transparent
 
 
 if __name__ == "__main__":

@@ -59,14 +59,14 @@
       : "The announcer calls the name in Practice, as Tekken 3 does for its own fighters.";
   }
 
-  // the stage's textures in the chosen colours (Stage Lab preview)
+  // the stage (or its textures) in the chosen colours (Stage Lab preview)
   let sheetFor = "";
   async function sheet() {
     const img = $("stage-sheet");
     if (state.current.donor === null || $("page-stage").hidden) return;
     $("stage-tint-row").hidden = $("stage-look").value !== "custom";
     const want = { donor: state.current.donor, stage: $("stage").value, look: $("stage-look").value,
-      tint: $("stage-tint").value, strength: Number($("stage-strength").value) };
+      tint: $("stage-tint").value, strength: Number($("stage-strength").value), view: $("stage-view").value };
     const key = JSON.stringify(want);
     if (key === sheetFor) return;
     sheetFor = key;
@@ -175,7 +175,7 @@
   function init() {
     fillLists();
     for (const id of ["stage", "music", "stage-look"]) $(id).addEventListener("change", markDirty);
-    for (const id of ["stage", "stage-look", "stage-tint", "stage-strength"]) $(id).addEventListener("change", sheet);
+    for (const id of ["stage", "stage-look", "stage-tint", "stage-strength", "stage-view"]) $(id).addEventListener("change", sheet);
     for (const id of ["stage-tint", "stage-strength"]) $(id).addEventListener("change", markDirty);
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });
     $("name-play").addEventListener("click", preview);

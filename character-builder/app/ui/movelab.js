@@ -5,19 +5,19 @@
 
   // the basic inputs grouped by direction, in Tekken order
   const ORDER = ["", "f", "b", "d", "df", "db", "u", "uf", "ub"];
-  function showBasic(basic) {
-    const grid = $("basic-list");
+  // basic: {input: damage}; titles (own moves): {input: move name}, kept in COMMAND LIST order
+  function showBasic(basic, gridId = "basic-list", titles = null) {
+    const grid = $(gridId);
     grid.textContent = "";
     const names = Object.keys(basic).filter((k) => basic[k]);
-    $("basic-field").hidden = !names.length;
     const dir = (k) => (k.includes("+") && isNaN(k.split("+")[0]) ? k.split("+")[0] : "");
-    names.sort((a, b) => ORDER.indexOf(dir(a)) - ORDER.indexOf(dir(b)) || a.length - b.length || a.localeCompare(b));
+    if (!titles) names.sort((a, b) => ORDER.indexOf(dir(a)) - ORDER.indexOf(dir(b)) || a.length - b.length || a.localeCompare(b));
     const own = state.current.move_damage || {};
     for (const k of names) {
       const cell = document.createElement("label");
       const input = document.createElement("span"), value = document.createElement("input");
       input.className = "move-input";
-      input.textContent = k;
+      input.textContent = titles && titles[k] ? `${titles[k]}  ${k}` : k;
       value.type = "number"; value.min = "0"; value.max = "200";
       value.dataset.move = k; value.dataset.original = basic[k];
       value.value = own[k] ?? basic[k];
@@ -28,12 +28,13 @@
       cell.append(input, value);
       grid.append(cell);
     }
+    return names.length;
   }
 
   // the changed damage for the save (only values that differ from Tekken 3's)
   function body() {
     const out = {};
-    for (const v of document.querySelectorAll("#basic-list input")) {
+    for (const v of document.querySelectorAll("#basic-list input, #own-list input")) {
       const n = Math.max(0, Math.min(200, Math.round(Number(v.value))));
       if (Number.isFinite(n) && n !== Number(v.dataset.original)) out[v.dataset.move] = n;
     }
@@ -72,13 +73,18 @@
         }
         list.append(row);
       }
-      showBasic(r.basic || {});
+      const titles = {};
+      for (const m of r.moves) if (m.command) titles[m.command.replace(/ /g, "")] ??= m.name;
+      const basic = showBasic(r.basic || {});
+      const own = showBasic(r.own || {}, "own-list", titles);
+      $("own-moves").hidden = !own;
+      $("basic-field").hidden = !basic && !own;
     } catch (e) { note.textContent = e.message; shown = null; }
   }
 
   function resetDamage() {
     let changed = false;
-    for (const v of document.querySelectorAll("#basic-list input")) {
+    for (const v of document.querySelectorAll("#basic-list input, #own-list input")) {
       if (v.value !== v.dataset.original) { v.value = v.dataset.original; v.parentElement.classList.remove("changed"); changed = true; }
     }
     if (changed) markDirty();

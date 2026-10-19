@@ -460,6 +460,8 @@ def name_call_preview(data: dict) -> dict:
 STAGE_ARENA = {0: 0, 1: 1, 2: 5, 3: 11, 4: 2, 5: 9, 6: 4, 7: 3, 8: 10, 9: 8, 10: 12, 11: 1, 12: 0, 13: 12,
                14: 6, 15: 2, 16: 9, 17: 13, 18: 9, 19: 14, 20: 6}
 STAGE_LOOKS = ("night", "sunset", "dusk", "mono", "ice", "inferno", "custom")
+STAGE_VIEWS = ("front", "right", "back", "left", "textures")
+STAGE_MODELS = 15                                        # arenas with a scenery model (stage_look.py)
 
 
 def stage_look_args(look: str, tint, strength) -> tuple[list[str], str]:
@@ -493,7 +495,7 @@ def stage_arena(fighter: dict) -> int:
 
 
 def write_moves(root: Path, key: str, fighter: dict) -> str | None:
-    """<Key>-T3-moves.bin (patch 20): the fighter's changed damage of basic moves (or none)."""
+    """<Key>-T3-moves.bin (patch 20): the fighter's changed move damage (or none)."""
     name = f"{custom_page.file_prefix(key)}-moves.bin"
     data = None
     if fighter.get("move_damage"):
@@ -546,7 +548,8 @@ def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
 
 
 def stage_preview(data: dict) -> dict:
-    """PNG (base64) of a stage's largest textures, with a look or as the game colours them."""
+    """PNG (base64) of the stage seen from the fighters' place (view front/right/back/left), or of
+    its largest textures (view "textures"), with a look or as the game colours them."""
     root = project_root()
     if not root or creator_patch.project_kind(root) != "expanded":
         raise ValueError("The Stage Lab needs Tekken 3 Expanded.")
@@ -557,14 +560,20 @@ def stage_preview(data: dict) -> dict:
     look = data.get("look") or None
     if look and look not in STAGE_LOOKS:
         raise ValueError("That stage colour does not exist.")
+    view = data.get("view") or "front"
+    if view not in STAGE_VIEWS:
+        raise ValueError("That stage view does not exist.")
+    if arena >= STAGE_MODELS:                            # no scenery model known: the textures
+        view = "textures"
     args, label = stage_look_args(look, data.get("tint"), data.get("strength")) if look else ([], "original")
-    out = CACHE / f"stage-{arena}-{label}.png"
+    out = CACHE / f"stage-{arena}-{label}-{view}.png"
     if not out.is_file():
         CACHE.mkdir(exist_ok=True)
-        problem = run_stage_tool(root, ["--arena", str(arena), *args, "--preview", str(out)])
+        extra = [] if view == "textures" else ["--view", view]
+        problem = run_stage_tool(root, ["--arena", str(arena), *args, "--preview", str(out), *extra])
         if problem:
             raise ValueError(problem)
-    return {"png": base64.b64encode(out.read_bytes()).decode()}
+    return {"png": base64.b64encode(out.read_bytes()).decode(), "view": view}
 
 
 def write_name_call(root: Path, key: str, fighter: dict) -> str | None:
@@ -625,11 +634,11 @@ def validate_character(data: dict) -> dict:
     voice = str(data.get("name_call_voice") or "").strip()
     if voice and name_call.VOICE_RE.fullmatch(voice):   # an installed Windows voice (auto mode)
         clean["name_call_voice"] = voice
-    moves = data.get("move_damage")                      # Move Lab: {basic input: damage}
+    moves = data.get("move_damage")                      # Move Lab: {input: damage}
     if isinstance(moves, dict) and moves:
         clean_moves = {}
         for k, v in list(moves.items())[:command_list_module.MOVES_FILE_MAX]:
-            if re.fullmatch(r"(?:(?:u|uf|ub|f|b|d|df|db)\+)?[1-4](?:\+[1-4]){0,3}", str(k)):
+            if re.fullmatch(r"(?:(?:u|uf|ub|f|b|d|df|db|U|UF|UB|F|B|D|DF|DB)\+)?[1-4](?:\+[1-4]){0,3}", str(k)):
                 try:
                     clean_moves[str(k)] = max(0, min(200, int(v)))
                 except (TypeError, ValueError):
@@ -1422,7 +1431,7 @@ def command_list(donor) -> dict:
     models = donors["donors"].get(str(donor))
     if not models:
         raise ValueError("That style does not exist.")
-    path = CACHE / f"commandlist3-{models[0]}-{donor}.json"   # 3: damage, records and key
+    path = CACHE / f"commandlist4-{models[0]}-{donor}.json"   # 4: own moves too
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)
@@ -1431,7 +1440,8 @@ def command_list(donor) -> dict:
         CACHE.mkdir(exist_ok=True)
         path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {"donor": donor, "moves": data["moves"], "basic": data["basic"], "records": data["records"],
+    return {"donor": donor, "moves": data["moves"], "basic": data["basic"], "own": data.get("own", {}),
+            "records": data["records"],
             "key": data["key"]}
 
 
