@@ -255,3 +255,9 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   Launch traced 242 (0x4000, no damage) → 346 (35), Twist & Shout 244 → 344 (40), exactly the
   health drops. So a throw goes into `OWN_MOVES` with that follow-up record, kept only when its
   damage equals the measured drop in both passes, and patch 20 can change it like any move.
+- **tested** Two passes over all styles: 20 throws in 13 styles (each kept only when its
+  follow-up record's damage equals the measured drop; a pass where the CPU dodged leaves it to
+  the other pass, and the passes never disagreed). `OWN_MOVES` now holds 95 entries.
+- **tested** Patch 20 on a throw: KITTEST (Nina) with "df, DF+1" (record 434, 50) set to 20 in
+  its moves file, Arcade: the throw traced 293 → 434 and the CPU's health fell by **20**, not
+  50. The file was put back afterwards.

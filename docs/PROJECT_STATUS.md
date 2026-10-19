@@ -10,7 +10,7 @@ Updated: 2026-10-19.
   56 + arena decoded), with the colour look and four views; the floor from the stage's own
   tiles (layout approximate). Browser-tested.
 - Move Lab: the style's own moves (COMMAND LIST lines of one input, motions such as d, df, f+2,
-  and During crouch / While rising / During side step), 75 records measured in game per style, damage from the disc, changeable with patch 20. A few basic inputs turned out to
+  During crouch / While rising / During side step, and 20 throws), 95 records measured in game per style, damage from the disc, changeable with patch 20. A few basic inputs turned out to
   start the style's own move; they are corrected.
 - Builder: a mix still too big for its slot is simplified a little (95..80 % of its triangles).
   Body, head and arm mixes: 0 of 1028 fail (body was 34 in 0.6.0). Tested in game.
@@ -92,6 +92,5 @@ Updated: 2026-10-19.
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
 1. Stage Lab: editing the scenery within its byte size; the floor routine and collision are
    not known (`knowledge/stages.md`).
-2. Move Lab: stance moves (marks such as (*)), strings, throws (damage is not in the first
-   record).
+2. Move Lab: stance moves (marks such as (*); 5 lines measurable, script ready), strings.
 3. Push and publish only with the owner's permission.
