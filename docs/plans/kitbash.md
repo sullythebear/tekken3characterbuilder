@@ -188,4 +188,5 @@ all 6 the same).
 - Slot size, last try (2026-10-19): when coarser normals are not enough, the quad pairing runs
   too, since quads take fewer bytes. Model 7 with head 37 went from 24504 to 23844 bytes (slot
   24488) and builds. Model 30 with head 0 still fails (19004 bytes for 18412). kitregress: all
-  the same.
+  the same. Body mixes after this: 29 of 1028 fail (was 34); 28 of them on the small base
+  models 30 and 31 (slots 18412 and 19136 bytes), one on model 51.
