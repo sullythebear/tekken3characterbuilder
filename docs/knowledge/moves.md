@@ -243,3 +243,8 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   "Kittest has 2 changed moves (moveset 5)", "P1 Kittest changed moves in (2)". Set back to
   15 afterwards (KITTEST keeps only 3 = 60). Browser: King's six own moves show with their
   names (Jaguar Lariat 50, Leg Breaker 21, Deadly Boomerang 60, ...).
+- **open** Throws: their records carry 0x4000 and damage 0 (the damage is applied elsewhere,
+  perhaps in the victim's reaction). Measuring it as the opponent's health drop needs the
+  health address: actor + 0x50 / 0x58 / 0x5A / 0x5C (P2 actor = 0x800A9228 + 0x188C) changed
+  in ways that are not health (6 → 50 after a throw), and the Practice dummy refills. Not in
+  the Move Lab.
