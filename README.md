@@ -12,6 +12,7 @@ Unofficial fan project. Works with your own Tekken 3 (USA) disc and builds on:
 
 | Version | What works |
 | --- | --- |
+| 0.7.0 | **Measured moves and stages.** Builder: every body, head and arm mix builds (a mix too big for its slot is simplified a little; 0 of 1028 fail). Stage Lab: the stage itself as a picture from the fighters' place, four views, in your colours. Portrait Lab: background "My home stage". Move Lab: the style's own moves, motions, crouch / side step / stance moves, 20 throws and 10 strings with damage, measured in game, all changeable per fighter (patch 20, tested in game). |
 | 0.6.0 | **Studio round.** Builder: body shape (head, arms, legs, body; presets), saved looks, mixes that did not fit now build (textures at half size; body mixes failing 354 → 34 of 1028). Model Importer: face/body detail for big models, a check list before import, a separate texture image. Portrait Lab: saved portraits. Voice Lab: choice of Windows voice, pitch and echo. Move Lab: damage of every basic input read from your disc, and **changed damage per fighter** (patch T3CB-PATCH-20, tested in game). Licence register, asset library, check library, backup of all fighters. |
 | 0.5.1 | Body parts keep their colours where Tekken 3's own fighters keep theirs (fight HUD text stays clean). |
 | 0.5.0 | Studio modules: Builder (body parts from Tekken 3's fighters, body colours), Model Importer, Portrait Lab, Voice Lab (name call), Stage Lab (own stage and music, stage colour looks; patches 17-19), Move Lab (command list), restore points. |
