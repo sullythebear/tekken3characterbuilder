@@ -238,3 +238,8 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   single inputs: 75 entries over 20 styles. Keys are the command without spaces
   ("Duringcrouch,df+1"); the server accepts them (`server.MOVE_KEY`).
 - Not measured: strings ("1, 2"), stance moves (marks such as (*)), "or" alternatives, throws.
+- **tested** Patch 20 with an own move: KITTEST (Nina) Liftshot "During side step, 2" 15 → 50
+  in the Move Lab wrote record 239 next to record 110 (3 = 60). Arcade against Tommy (King):
+  "Kittest has 2 changed moves (moveset 5)", "P1 Kittest changed moves in (2)". Set back to
+  15 afterwards (KITTEST keeps only 3 = 60). Browser: King's six own moves show with their
+  names (Jaguar Lariat 50, Leg Breaker 21, Deadly Boomerang 60, ...).
