@@ -12,7 +12,8 @@ Updated: 2026-10-19.
 - Move Lab: the style's own moves (COMMAND LIST lines of one input), records measured in game
   per style, damage from the disc, changeable with patch 20. A few basic inputs turned out to
   start the style's own move; they are corrected.
-- Body mixes failing: 34 → 29 of 1028.
+- Builder: a mix still too big for its slot is simplified a little (95..80 % of its triangles).
+  Body, head and arm mixes: 0 of 1028 fail (body was 34 in 0.6.0). Tested in game.
 
 ## In 0.6.0
 

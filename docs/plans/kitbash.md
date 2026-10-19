@@ -190,3 +190,10 @@ all 6 the same).
   24488) and builds. Model 30 with head 0 still fails (19004 bytes for 18412). kitregress: all
   the same. Body mixes after this: 29 of 1028 fail (was 34); 28 of them on the small base
   models 30 and 31 (slots 18412 and 19136 bytes), one on model 51.
+- Simplify, the very last try (2026-10-19): a mix still too big for the slot after all of the
+  above is simplified by edge collapses (`decimate.py`, `alive_out` keeps each corner's texel)
+  to 95, 90, 85 or 80 % of its triangles, never joining two body parts, then paired again.
+  Mokujin (models 30/31, slots 18412/19136) with Paul's head: 887 → 797 triangles, 17832
+  bytes. In game: KITTEST's mix forced through it (limit 21500: 1025 → 973 triangles) fought
+  900 frames, 0 of 4874 words differing, HUD intact. kitregress: the six mixes the same, a
+  seventh (body 35 on model 30) approved. Head, arm and body mixes: **0 of 1028 fail** each.
