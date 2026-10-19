@@ -261,3 +261,8 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - **tested** Patch 20 on a throw: KITTEST (Nina) with "df, DF+1" (record 434, 50) set to 20 in
   its moves file, Arcade: the throw traced 293 → 434 and the CPU's health fell by **20**, not
   50. The file was put back afterwards.
+- **tested** Stance moves "During (*) , X" (scratch `measure5.py`): the entry whose name holds
+  that mark is done first (Lei's Phoenix Illusion (**) = B+1+4), 14 frames, then X. Two passes,
+  the same: Lei During (*), 1 → 195 (25) and During (**), 4 → 224 (70); Yoshimitsu During (**),
+  2 → 230 (10); Eddy During (**), 4 → 256 (12). Eddy During (**), D+3+4 gave his basic d+3+4
+  and is left out. 99 entries in `OWN_MOVES`.
