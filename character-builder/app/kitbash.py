@@ -179,6 +179,7 @@ def _row_models(base: int, parts: dict) -> dict:
 
 PART_OF_ROW = {r: name for name, rows in PARTS.items() if name not in FINE for r in rows}
 MIN_PIECE = 4                          # fewer polygons than this: a detail, not offered as a piece
+SAME_PIECE = 40                        # RGB distance under which two tables of a part are one piece
 
 
 def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
@@ -201,7 +202,9 @@ def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
             if mat is None or mat & 0x8000:            # 8-bit areas: skin and faces, kept as they are
                 continue
             key = (mdl, mat & 0x7EFF)
-            part = PART_OF_ROW.get(SECOND.get(top, top), "body")
+            main = SECOND.get(top, top)
+            fine = next((n for n in FINE if n in parts and main in PARTS[n]), None)   # chosen gloves: "hands"
+            part = fine or PART_OF_ROW.get(main, "body")
             use.setdefault(key, {})
             use[key][part] = use[key].get(part, 0) + 1
     out = []
@@ -214,7 +217,19 @@ def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
                     "polygons": sum(by_part.values()), "colour": "#%02x%02x%02x" % tuple(rgb)})
     order = list(PARTS)
     out.sort(key=lambda p: (order.index(p["part"]) if p["part"] in order else 99, -p["polygons"]))
-    return out
+    # tables of one fighter with nearly the same colour are one piece for the player (the shades
+    # of one jacket, the same trim on arms and legs): keys lists them all, the biggest first
+    rgb = lambda h: [int(h[k:k + 2], 16) for k in (1, 3, 5)]
+    merged = []
+    for p in out:
+        home = next((q for q in merged if q["model"] == p["model"]
+                     and sum((a_ - b_) ** 2 for a_, b_ in zip(rgb(q["colour"]), rgb(p["colour"]))) < SAME_PIECE ** 2), None)
+        if home:
+            home["keys"].append(p["key"])
+            home["polygons"] += p["polygons"]
+        else:
+            merged.append({**p, "keys": [p["key"]]})
+    return merged
 
 
 def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None, accessories=True, pieces=None):

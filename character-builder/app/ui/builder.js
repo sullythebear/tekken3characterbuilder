@@ -87,7 +87,7 @@
       pieces = (await api("/api/kit/pieces", { id: state.current.id, costume, parts })).pieces;
     } catch (e) { list.textContent = e.message; return; }
     if (key !== piecesFor) return;
-    for (const k of Object.keys(pieceColours)) if (!pieces.some((p) => p.key === k)) delete pieceColours[k];
+    for (const k of Object.keys(pieceColours)) if (!pieces.some((p) => (p.keys || [p.key]).includes(k))) delete pieceColours[k];
     list.textContent = "";
     const count = {};
     for (const p of pieces) {
@@ -107,7 +107,8 @@
       light.setAttribute("aria-label", `Lightness of ${name.textContent}`);
       const show = () => {
         const h = Number(hue.value), l = Number(light.value);
-        if (h || l) pieceColours[p.key] = [h, 100, l]; else delete pieceColours[p.key];
+        for (const k of p.keys || [p.key])         // the shades of one piece change together
+          if (h || l) pieceColours[k] = [h, 100, l]; else delete pieceColours[k];
         sw.style.background = hsl(p.colour, h, l);
         row.classList.toggle("changed", Boolean(h || l));
       };

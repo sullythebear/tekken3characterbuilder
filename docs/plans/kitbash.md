@@ -232,3 +232,6 @@ all 6 the same).
 - Browser: KITTEST's list (Head 1-5, Body 1-2, arms, legs), Body 1 hue +150 showed in the 3D
   preview (not saved). In game: KITTEST's mix with the hip piece and the hair recoloured fought
   600 frames, 0 data words differing; KITTEST's model restored.
+- Shorter list: tables of one fighter whose average colours lie within `SAME_PIECE` = 40 (RGB)
+  are one piece (`keys`; the shades of a jacket, the same trim on arms and legs), named after
+  the part with the most polygons; the UI sets them together. KITTEST: 17 -> 7 pieces.
