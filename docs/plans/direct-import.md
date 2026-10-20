@@ -240,3 +240,19 @@ Seven CC0 test models, each downloaded into its own folder `testmodels/dl-*/` (n
   - Seed-san then: body, arms and folded ponytail clean, robot arm gone; Crowley and Seed-san
     fought 600 frames on KITTEST with 0 data words differing (KITTEST's model restored).
 - `regress --all`: every earlier model the same; Crowley and Seed-san approved.
+
+### Round 3: wings and tails (2026-10-20, with the owner's permission to download)
+
+100Avatars R3 (CC0, licence also in each file's meta): MegaAngel, CuteMoth, MushroomFairy,
+MeganTheFox, Two-Tails, Buffedwolf.
+- CuteMoth: a chibi (hips at 15 %): refused, as designed.
+- MushroomFairy: both wings found (two "Chest" parts) and folded down by default.
+- MeganTheFox: the tail found ("Hips: a piece 66 % of the height long, pointing backwards") and
+  folded down behind the legs.
+- MegaAngel: the wings are not listed (they hang on the arms; only head, chest and hips are
+  searched) and stay spread as modelled. Two-Tails: the scarf sticks out at the shoulders as
+  modelled. Buffedwolf: clean.
+- In game on KITTEST (600 frames each): MegaAngel, MeganTheFox, Buffedwolf, 0 data words
+  differing; KITTEST's model restored. All five approved in `regress --all`.
+- Open: MeganTheFox (633 s) and Two-Tails (408 s) import slowly; wings on the arms cannot be
+  folded or removed yet.
