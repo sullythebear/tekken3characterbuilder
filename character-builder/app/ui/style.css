@@ -483,3 +483,7 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .kit-piece .swatch { width: 1.2rem; height: 1.2rem; border: 1px solid var(--line); border-radius: 2px; }
 .kit-piece.changed .swatch { outline: 2px solid var(--ember); }
 .kit-piece input[type=range] { width: 100%; }
+
+/* Move Lab: moves on other buttons */
+.basic-grid select { max-width: 11rem; background: var(--panel); color: var(--paper); border: 1px solid var(--line); font: inherit; }
+.basic-grid label.changed select { color: var(--ember); border-color: var(--ember); }

@@ -298,3 +298,28 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
   d, db, B+1+4 gave basic moves in Practice (the throw missed). In Arcade the CPU breaks or
   wins before the long sequences finish. Left out; the chains' first throws (Betrayer 15,
   Elbow Smash 50) are in `OWN_MOVES`.
+
+## Moves on other buttons: patch 21 (2026-10-20, tested in game)
+
+- **tested** (scratch `combot.py`, Practice) A basic input starts the record its alias slot
+  points at (`*(header + 12) + 4 * slot`, a RAM pointer). Writing another record of the same
+  moveset there puts that move on the input:
+  - Nina f+2 (slot 303, record 116) → 237 Panther Claw, → 239 Liftshot (a side-step move);
+  - → 120 (b+2): f+2, 2 then gave 120, 121, the whole string;
+  - King f+1 → 117 (his crouching df+1) went 117, then a common-moveset record, then standing;
+  - every case went back to record 0; writing the old pointer back restored the input.
+- Throws are left out: their records carry no flag here (the 0x4000 bit is not set on the
+  measured ones), and a grab only makes sense on its own input; the app filters COMMAND LIST
+  names with "[Throw]".
+- **T3CB-PATCH-21**: `<prefix>-moves.bin` version 2 = version 1 + u16 swaps, then per swap u16
+  slot, u16 original record, u16 new record. The same rules as patch 20 (own buffer only, not in
+  a mirror match, back when the buffer is someone else's). Version 1 files are unchanged.
+- **tested** Arcade, KITTEST (Nina, key 5) against Law (key 1), f+2 → Liftshot: P1's slot 303 →
+  239, Law's slot 303 untouched (his 111); f+2 started 239 and hit (P2 130 → 108); P1 seen as
+  stock Nina for a moment: back to 116, then 239 again. Log "Kittest has 1 changed moves,
+  1 moved".
+- Slots come from the shared lists' unconditional entries whose slot holds the input's record
+  (`command_list.basic_slots`); inputs whose own move is measured (OWN_MOVES) have no slot.
+- Moves of other styles are not possible: their records use the style's own animations.
+- Note: t3live runs `build-opt-dbg`; after a patch change build both (`t3cb build` and
+  `t3cb build --debug`).

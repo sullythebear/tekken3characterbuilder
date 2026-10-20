@@ -31,6 +31,43 @@
     return names.length;
   }
 
+  // moves on buttons: each basic input with alias slots, a choice of the style's other moves
+  function showButtons(r, titles) {
+    const grid = $("buttons-list"), own = state.current.move_buttons || {};
+    grid.textContent = "";
+    const inputs = Object.keys(r.slots || {}).filter((k) => (r.basic || {})[k]);
+    const dir = (k) => (k.includes("+") && isNaN(k.split("+")[0]) ? k.split("+")[0] : "");
+    inputs.sort((a, b) => ORDER.indexOf(dir(a)) - ORDER.indexOf(dir(b)) || a.length - b.length || a.localeCompare(b));
+    const name = (k) => titles[k] || k;
+    const dmg = (k) => ((r.records || {})[k] || [])[1];
+    const label = (k) => (dmg(k) > 0 ? `${name(k)}  (${dmg(k)} dmg)` : name(k));
+    const movable = r.movable || [];
+    const ownFirst = movable.filter((m) => !(m in (r.basic || {}))).sort((a, b) => name(a).localeCompare(name(b)));
+    const basicToo = movable.filter((m) => m in (r.basic || {}));
+    for (const k of inputs) {
+      const cell = document.createElement("label");
+      const input = document.createElement("span"), pick = document.createElement("select");
+      input.className = "move-input";
+      input.textContent = k;
+      pick.dataset.move = k;
+      pick.setAttribute("aria-label", `Move on ${k}`);
+      pick.append(new Option(`its own: ${label(k)}`, ""));
+      for (const [title, list] of [["The style's own moves", ownFirst], ["Other basic inputs", basicToo]]) {
+        const group = document.createElement("optgroup");
+        group.label = title;
+        for (const m of list) if (m !== k) group.append(new Option(label(m), m));
+        if (group.children.length) pick.append(group);
+      }
+      pick.value = own[k] && movable.includes(own[k]) ? own[k] : "";
+      const mark = () => cell.classList.toggle("changed", pick.value !== "");
+      pick.addEventListener("change", () => { mark(); markDirty(); });
+      mark();
+      cell.append(input, pick);
+      grid.append(cell);
+    }
+    $("buttons-field").hidden = !inputs.length;
+  }
+
   // the changed damage for the save (only values that differ from Tekken 3's)
   function body() {
     const out = {};
@@ -38,8 +75,12 @@
       const n = Math.max(0, Math.min(200, Math.round(Number(v.value))));
       if (Number.isFinite(n) && n !== Number(v.dataset.original)) out[v.dataset.move] = n;
     }
-    if (shown !== state.current.donor) return { move_damage: state.current.move_damage || null };
-    return { move_damage: Object.keys(out).length ? out : null };
+    if (shown !== state.current.donor)
+      return { move_damage: state.current.move_damage || null, move_buttons: state.current.move_buttons || null };
+    const buttons = {};
+    for (const s of document.querySelectorAll("#buttons-list select")) if (s.value) buttons[s.dataset.move] = s.value;
+    return { move_damage: Object.keys(out).length ? out : null,
+             move_buttons: Object.keys(buttons).length ? buttons : null };
   }
 
   async function show() {
@@ -84,6 +125,7 @@
       const own = showBasic(r.own || {}, "own-list", titles);
       $("own-moves").hidden = !own;
       $("basic-field").hidden = !basic && !own;
+      showButtons(r, titles);
     } catch (e) { note.textContent = e.message; shown = null; }
   }
 
@@ -95,6 +137,13 @@
     if (changed) markDirty();
   }
   document.getElementById("basic-reset").addEventListener("click", resetDamage);
+  document.getElementById("buttons-reset").addEventListener("click", () => {
+    let changed = false;
+    for (const s of document.querySelectorAll("#buttons-list select")) {
+      if (s.value) { s.value = ""; s.parentElement.classList.remove("changed"); changed = true; }
+    }
+    if (changed) markDirty();
+  });
 
   window.T3MoveLab = { show, body, reset: () => { shown = null; } };
 })();

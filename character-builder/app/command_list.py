@@ -218,6 +218,24 @@ def basic_records(moveset: bytes, exe: bytes) -> dict[str, tuple[int, int]]:
     return out
 
 
+def basic_slots(moveset: bytes, exe: bytes) -> dict[str, list[int]]:
+    """{notation: [alias slot]} of the basic inputs: the slots of the shared lists' unconditional
+    entries that start the input's record (basic_records). Pointing a slot at another record of
+    the moveset puts that move on the input (patch 21, tested in game)."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    alias = word(12)
+    rows = basic_records(moveset, exe)
+    out = {}
+    for a in range(SHARED_LISTS[0], SHARED_LISTS[1] + 12, 12):
+        cmd, cond, _, dest = struct.unpack_from("<4H", exe, a - 0x80010000 + 0x800)
+        name = notation(cmd)
+        if cond or name not in rows or alias + 4 * dest + 4 > len(moveset):
+            continue
+        if word(alias + 4 * dest) == rows[name][0] and dest not in out.setdefault(name, []):
+            out[name].append(dest)
+    return {name: slots for name, slots in out.items() if slots}
+
+
 # The style's own moves (COMMAND LIST lines of one input that are not basic inputs): the record
 # each one started in game, measured per style with t3live (docs/knowledge/moves.md). Their list
 # entries carry conditions that the static data alone does not settle, so these are measured.
@@ -294,19 +312,35 @@ def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
 MOVES_FILE_MAX = 32
 
 
-def moves_file(key: int, records: dict, changes: dict) -> bytes | None:
+BUTTONS_MAX = 16
+
+
+def moves_file(key: int, records: dict, changes: dict, buttons: dict | None = None,
+               slots: dict | None = None) -> bytes | None:
     """<prefix>-moves.bin for patch 20 ("T3MV"): {notation: new damage} over the style's basic
-    records {notation: [record, damage]}; None when nothing changes."""
+    records {notation: [record, damage]}; None when nothing changes. buttons {basic input: move}
+    puts another move of the style on a basic input through its alias slots {input: [slot]}
+    (version 2, patch 21: u16 count, then per slot u16 slot, u16 original record, u16 new)."""
+    swaps = []
+    for name, move in sorted((buttons or {}).items()):
+        if name in records and move in records and name != move:
+            for slot in (slots or {}).get(name, []):
+                if not any(s[0] == slot for s in swaps):
+                    swaps.append((slot, records[name][0], records[move][0]))
+    swaps = swaps[:2 * BUTTONS_MAX]
     rows = []
     for name, new in sorted(changes.items()):
         if name in records and 0 <= int(new) <= 200 and int(new) != records[name][1]:
             record, old = records[name]
             if (record, old, int(new)) not in rows and not any(r[0] == record for r in rows):
                 rows.append((record, old, int(new)))
-    if not rows:
+    if not rows and not swaps:
         return None
     rows = rows[:MOVES_FILE_MAX]
-    return b"T3MV" + struct.pack("<HHH", 1, key, len(rows)) + b"".join(struct.pack("<HHH", *r) for r in rows)
+    out = b"T3MV" + struct.pack("<HHH", 2 if swaps else 1, key, len(rows)) + b"".join(struct.pack("<HHH", *r) for r in rows)
+    if swaps:
+        out += struct.pack("<H", len(swaps)) + b"".join(struct.pack("<HHH", *s) for s in swaps)
+    return out
 
 
 def with_damage(entries: list[dict], damage: dict[str, int], strings: dict[str, list[int]] | None = None) -> list[dict]:

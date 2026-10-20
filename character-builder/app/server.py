@@ -503,15 +503,17 @@ def stage_arena(fighter: dict) -> int:
 
 
 def write_moves(root: Path, key: str, fighter: dict) -> str | None:
-    """<Key>-T3-moves.bin (patch 20): the fighter's changed move damage (or none)."""
+    """<Key>-T3-moves.bin (patches 20, 21): the fighter's changed move damage and moves on other
+    buttons (or none)."""
     name = f"{custom_page.file_prefix(key)}-moves.bin"
     data = None
-    if fighter.get("move_damage"):
+    if fighter.get("move_damage") or fighter.get("move_buttons"):
         try:
             moves = command_list(fighter["donor"])
         except ValueError as error:
             return f"Move damage: {error}"
-        data = command_list_module.moves_file(moves["key"], moves["records"], fighter["move_damage"])
+        data = command_list_module.moves_file(moves["key"], moves["records"], fighter.get("move_damage") or {},
+                                              fighter.get("move_buttons"), moves.get("slots"))
     try:
         for folder in custom_page.FOLDERS:
             target = root / folder
@@ -659,6 +661,13 @@ def validate_character(data: dict) -> dict:
                     raise ValueError("Invalid move damage.") from None
         if clean_moves:
             clean["move_damage"] = clean_moves
+    buttons = data.get("move_buttons")                   # Move Lab: {basic input: move it starts}
+    if isinstance(buttons, dict) and buttons:
+        clean_buttons = {str(k): str(v) for k, v in list(buttons.items())[:command_list_module.BUTTONS_MAX]
+                         if MOVE_KEY.fullmatch(str(k)) and MOVE_KEY.fullmatch(str(v)) and "#" not in str(v)
+                         and k != v}
+        if clean_buttons:
+            clean["move_buttons"] = clean_buttons
     credits = clean_credits(data.get("credits"))
     if credits:
         clean["credits"] = credits
@@ -769,8 +778,8 @@ def check_library() -> dict:
                 add("warn", "The name call is not in the game yet.")
             if c.get("stage_look") and not game_file(key, f"{prefix}-stage.bin"):
                 add("warn", "The stage colours are not in the game yet.")
-            if c.get("move_damage") and not game_file(key, f"{prefix}-moves.bin"):
-                add("warn", "The changed move damage is not in the game yet.")
+            if (c.get("move_damage") or c.get("move_buttons")) and not game_file(key, f"{prefix}-moves.bin"):
+                add("warn", "The changed moves are not in the game yet.")
         out.append({"id": c["id"], "name": c["name"], "issues": issues})
     return {"general": general, "fighters": out}
 
@@ -1455,7 +1464,7 @@ def command_list(donor) -> dict:
         raise ValueError("That style does not exist.")
     own = zlib.crc32(repr((sorted(command_list_module.OWN_MOVES.get(donor, {}).items()),
                            sorted(command_list_module.STRINGS.get(donor, {}).items()))).encode())
-    path = CACHE / f"commandlist5-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
+    path = CACHE / f"commandlist6-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)
@@ -1465,8 +1474,8 @@ def command_list(donor) -> dict:
         path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
     data = json.loads(path.read_text(encoding="utf-8"))
     return {"donor": donor, "moves": data["moves"], "basic": data["basic"], "own": data.get("own", {}),
-            "records": data["records"],
-            "key": data["key"]}
+            "records": data["records"], "key": data["key"], "slots": data.get("slots", {}),
+            "movable": data.get("movable", [])}
 
 
 # --------------------------------------------------- character builder --
@@ -1914,7 +1923,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits", "move_damage")
+                  "costumes", "credits", "move_damage", "move_buttons")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:

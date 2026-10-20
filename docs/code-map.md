@@ -49,11 +49,15 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `T3MoveLab.body()`.
 - Move Lab damage: `command_list.basic_damage` / `moveset_key` / `with_damage` (BNS record 280 + key, shared
   lists in SLUS_004.02); `model_export commandlist --style` prints {moves, basic, own, records, key}; server
-  cache `commandlist5-<model>-<style>-<crc of its OWN_MOVES>.json`; UI `movelab.js showBasic` (grids `#basic-list`, `#own-list`).
+  cache `commandlist6-<model>-<style>-<crc of its OWN_MOVES>.json`; UI `movelab.js showBasic` (grids `#basic-list`, `#own-list`).
 - Builder pieces: `kitbash.list_pieces` / `build(pieces=)`, server `clean_kit_pieces` `kit_pieces` (`/api/kit/pieces`), UI `builder.js loadPieces`. Accessories: `kitbash._accessories`, `_row_models`.
 - Own moves: `command_list.OWN_MOVES` {style: {COMMAND LIST command: record}} measured in game (scratch
   method in `knowledge/moves.md`), `own_records` reads their damage from the disc; patch 20 changes them
   like basic ones (the keys go into `records`; server accepts upper-case held directions).
+- Moves on buttons (patch 21): `command_list.basic_slots` {input: [alias slot]}, `moves_file(..., buttons,
+  slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
+  by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
+  (`#buttons-list`). Cache `commandlist6-...`.
 - Voice Lab: `name_call.shape(samples, pitch, echo)` (`ECHOES`, `announcer` = shape -18 hall),
   `voices()` / `speak(name, voice)` (System.Speech, `VOICE_RE`), field `name_call_voice` (auto cache key
   name|voice), route `/api/namecall/voices`; UI `arena.js` `#name-voice`, `#name-pitch`, `#name-echo`.

@@ -663,8 +663,12 @@ def main() -> None:
                 rows[f"{name}#{n}"] = (record, damage)
                 own[f"{name}#{n}"] = damage
         strings = {name: [d for _, d in hits] for name, hits in strings.items()}
+        slots = {name: s for name, s in command_list.basic_slots(moveset, exe).items() if name in basic}
+        throws = {e["command"].replace(" ", "") for e in entries if "[Throw]" in e.get("name", "") and e.get("command")}
+        movable = [name for name in rows if "#" not in name and name not in throws]   # a basic input can take these
         print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}, strings), "basic": basic,
-                          "own": own, "records": rows, "key": command_list.moveset_key(exe, args.style)}))
+                          "own": own, "records": rows, "key": command_list.moveset_key(exe, args.style),
+                          "slots": slots, "movable": movable}))
         return
     if args.command == "ownportrait":
         if args.file is None or args.out is None:

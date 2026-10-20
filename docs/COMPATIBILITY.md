@@ -14,6 +14,7 @@
 | Home stage and music | **tested** (patch 17) | no |
 | Stage colour looks | **tested** (patch 19, night and sunset on Gon's stage) | no |
 | Changed move damage per fighter | **tested** (patch 20: KITTEST's 3 from 25 to 60 in its own moveset buffer, opponent untouched; skipped in a mirror match, which shares one buffer) | no |
+| Moves on other buttons per fighter | **tested** (patch 21: KITTEST's f+2 alias slot 303 pointed at Liftshot, record 239, in Arcade; it hit, the opponent's slot untouched, back to 116 when the buffer is someone else's) | no |
 | Name call | **tested** in log, Practice only (as Tekken 3 itself) | no |
 | Move Lab: style's command list | **tested** (read from the disc) | **code** (same disc data; Recompiled not tried) |
 | CPU opponents | **tested** (patch 15) | no |

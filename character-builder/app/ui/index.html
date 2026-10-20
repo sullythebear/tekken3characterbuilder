@@ -360,7 +360,7 @@
       <div class="editor-page" id="page-moves" role="tabpanel" aria-labelledby="tab-moves" hidden>
         <fieldset class="field">
           <legend>Moves</legend>
-          <p class="hint">The moves your fighter gets from its fighting style, as Tekken 3's COMMAND LIST shows them. 1 left punch, 2 right punch, 3 left kick, 4 right kick; d, df, f, b, u: directions (capitals: hold); N: neutral; (*): the move other entries refer to. Changing single moves is not possible yet.</p>
+          <p class="hint">The moves your fighter gets from its fighting style, as Tekken 3's COMMAND LIST shows them. 1 left punch, 2 right punch, 3 left kick, 4 right kick; d, df, f, b, u: directions (capitals: hold); N: neutral; (*): the move other entries refer to. Below: change the damage, or put other moves of this style on the basic inputs.</p>
           <p class="hint" id="move-note"></p>
           <table class="move-table"><tbody id="move-list"></tbody></table>
         </fieldset>
@@ -373,6 +373,12 @@
             <div class="basic-grid own-grid" id="own-list"></div>
           </div>
           <div class="portrait-buttons"><button class="btn btn-ghost mini" type="button" id="basic-reset">Tekken 3's damage everywhere</button></div>
+        </fieldset>
+        <fieldset class="field" id="buttons-field" hidden>
+          <legend>Moves on buttons</legend>
+          <p class="hint">Put another move of this style on a basic input: the input then starts that move (a string's first hit brings the rest of the string along). Moves of this style only, as its animations are the style's own; throws stay on their own inputs. Like the damage: your fighter only, not in a mirror match.</p>
+          <div class="basic-grid own-grid" id="buttons-list"></div>
+          <div class="portrait-buttons"><button class="btn btn-ghost mini" type="button" id="buttons-reset">Every input its own move</button></div>
         </fieldset>
       </div>
 

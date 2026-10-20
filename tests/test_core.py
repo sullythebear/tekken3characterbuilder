@@ -326,6 +326,15 @@ class BasicDamageTests(unittest.TestCase):
         self.assertIsNone(M.moves_file(5, records, {"3": 25}))           # unchanged
         b = M.moves_file(5, records, {"3": 60, "9": 1})
         self.assertEqual(b, b"T3MV" + struct.pack("<HHH", 1, 5, 1) + struct.pack("<HHH", 110, 25, 60))
+        records["f+2"], records["Duringsidestep,2"] = [116, 12], [239, 15]       # patch 21: moves on buttons
+        slots = {"f+2": [303], "3": [300]}
+        b = M.moves_file(5, records, {}, {"f+2": "Duringsidestep,2", "3": "3", "x": "1"}, slots)
+        self.assertEqual(b, b"T3MV" + struct.pack("<HHHH", 2, 5, 0, 1) + struct.pack("<HHH", 303, 116, 239))
+        b = M.moves_file(5, records, {"3": 60}, {"f+2": "Duringsidestep,2"}, slots)
+        self.assertEqual(b[4:12], struct.pack("<HHHH", 2, 5, 1, 110))
+        c = server.validate_character({"name": "A", "donor": 5, "move_buttons": {
+            "f+2": "Duringsidestep,2", "3": "3", "1": "b+2,2#2", "x;y": "1"}})
+        self.assertEqual(c["move_buttons"], {"f+2": "Duringsidestep,2"})
         c = server.validate_character({"name": "A", "donor": 5, "move_damage": {"3": 999, "df+2": "12", "x": 3}})
         self.assertEqual(c["move_damage"], {"3": 200, "df+2": 12})
         c = server.validate_character({"name": "A", "donor": 4, "move_damage": {"D+3+4": 9, "d+1+4": 70}})

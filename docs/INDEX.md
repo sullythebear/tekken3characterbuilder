@@ -31,7 +31,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 - `portraits.md` – portrait and name plate `.jui`.
 - `moves.md` – move format, COMMAND LIST.
 - `stages.md` – stage records, CLUTs, colour looks (patch 19).
-- `moves.md` – move records, cancel lists, damage on the disc, changed damage (patch 20).
+- `moves.md` – move records, cancel lists, damage on the disc, changed damage (patch 20), moves on other buttons (patch 21).
 - `testing.md` – Test button, report, helper scripts in `tools/`, regression check of the model import (`t3cb.py regress`).
 - `lessons.md` – mistakes not to repeat.
 
