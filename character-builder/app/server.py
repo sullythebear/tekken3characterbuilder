@@ -802,6 +802,49 @@ def duplicate_character(cid: str) -> dict:
     return import_character(base64.b64encode(out.getvalue()).decode())
 
 
+SHARE_PREFIX, SHARE_MAX = "T3C1-", 6000
+
+
+def share_code(cid: str) -> str:
+    """A fighter's settings as a short text to paste anywhere: name, style, stage, music, colours,
+    moves, credits and a Character Builder body (its parts, rebuilt on import). No files: no
+    portrait, recording or imported model."""
+    info = DATA / safe_id(cid) / "character.json"
+    if not info.is_file():
+        raise ValueError("Character not found.")
+    record = json.loads(info.read_text(encoding="utf-8"))
+    keep = {k: record[k] for k in (*RESTORE_FIELDS, "stage_tint", "stage_strength", "fairness") if k in record}
+    own = record.get("own_model") or {}
+    if own.get("file") == "Character Builder":
+        keep["own_model"] = {k: own[k] for k in ("file", "costume", "kit", "colours", "shape", "pieces") if k in own}
+    if keep.get("name_call") == "own":
+        keep["name_call"] = "auto"                      # the recording stays home
+    raw = zlib.compress(json.dumps(keep, separators=(",", ":")).encode("utf-8"), 9)
+    return SHARE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def import_share_code(code: str) -> dict:
+    """A new fighter from a share code (through a package holding only its character.json)."""
+    code = re.sub(r"\s+", "", str(code or ""))
+    if not code.startswith(SHARE_PREFIX) or len(code) > SHARE_MAX:
+        raise ValueError("This is not a Dizzy share code.")
+    body = code[len(SHARE_PREFIX):]
+    try:
+        unzip = zlib.decompressobj()
+        raw = unzip.decompress(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)), 256 * 1024)
+        if unzip.unconsumed_tail:
+            raise ValueError
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, zlib.error, UnicodeDecodeError):
+        raise ValueError("This share code is damaged.") from None
+    if not isinstance(data, dict):
+        raise ValueError("This share code is damaged.")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("character.json", json.dumps(data))
+    return import_character(base64.b64encode(out.getvalue()).decode())
+
+
 def backup_all() -> tuple[str, bytes]:
     """Every fighter as its .t3char package, in one .t3backup zip (Import package reads it)."""
     buffer = io.BytesIO()
@@ -2474,6 +2517,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/remove":
                 saved = remove_model(str(data.get("id", "")))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
+            if path == "/api/share/code":
+                return self._json({"code": share_code(str(data.get("id", "")))})
+            if path == "/api/share/import":
+                copy = import_share_code(data.get("code"))
+                model_warnings = copy.pop("model_warnings", [])
+                return self._json({**copy, "warnings": model_warnings + sync_customs(changed=copy["id"])})
             if path == "/api/duplicate":
                 copy = duplicate_character(str(data.get("id", "")))
                 model_warnings = copy.pop("model_warnings", [])

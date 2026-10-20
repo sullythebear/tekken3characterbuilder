@@ -58,6 +58,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
   by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
   (`#buttons-list`). Cache `commandlist6-...`.
+- Share codes: server `share_code` / `import_share_code` (`SHARE_PREFIX` T3C1-, zlib + base64url of character.json
+  fields, imported as a package holding only character.json), `/api/share/code`, `/api/share/import`; UI
+  `app.js showShareCode`, `enterShareCode`, `#share-dialog`. "Surprise me": `app.js surprise`, `surpriseName`.
 - Fairness: `fairness.py` (`yardstick`, `check`), `model_export.py cast` (damage per style, cache
   `cast1.json`), server `cast_damage`, `fairness_check`, `/api/fairness`, `fairness` stored by `save_character`;
   UI `movelab.js fair` (`#fair-field`).

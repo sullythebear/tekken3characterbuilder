@@ -47,6 +47,8 @@
     </section>
     <div class="menu-actions">
       <button class="menu-item" id="new-character" type="button">New fighter</button>
+      <button class="menu-item" id="share-enter" type="button" title="Make a fighter from a share code someone gave you">Enter share code</button>
+      <button class="menu-item" id="surprise" type="button" title="A new fighter with a random name, style, stage, music and stage colours">Surprise me</button>
       <label class="menu-item">Import package<input type="file" id="import-file" accept=".t3char,.t3backup,.zip" hidden></label>
       <button class="menu-item" id="check-button" type="button">Check library</button>
       <button class="menu-item" id="library-button" type="button">Asset library</button>
@@ -391,6 +393,7 @@
       <div class="form-actions">
         <button class="btn btn-primary" type="submit" id="save">Save fighter</button>
         <button class="btn btn-ghost" type="button" id="export" hidden>Export</button>
+        <button class="btn btn-ghost" type="button" id="share" hidden title="This fighter's settings as a short text to paste anywhere (no images or imported models)">Share code</button>
         <button class="btn btn-ghost" type="button" id="duplicate" hidden title="A copy of this fighter (name + 2), to make a variant">Duplicate</button>
         <button class="btn btn-danger" type="button" id="delete" hidden>Delete</button>
       </div>
@@ -439,6 +442,17 @@
       <button class="btn btn-primary" type="button" id="root-save">Use folder</button>
       <button class="btn btn-ghost" type="button" id="sync-customs" hidden>Refresh Custom page files</button>
       <button class="btn btn-ghost" type="button" id="support-remove">Remove the creator's changes</button>
+      <button class="btn btn-ghost" value="close">Close</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="share-dialog">
+  <form method="dialog" class="dialog-body">
+    <h2 id="share-title">Share code</h2>
+    <p class="hint" id="share-hint"></p>
+    <textarea class="share-code" id="share-code" rows="5" spellcheck="false" autocomplete="off"></textarea>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="button" id="share-go">Copy</button>
       <button class="btn btn-ghost" value="close">Close</button>
     </div>
   </form>

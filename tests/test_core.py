@@ -291,6 +291,21 @@ class CreditsAndBackupTests(CharacterTests):
         long = server.save_character({"name": "ABCDEGHIJKLMNOP", "donor": 1, "costumes": []})
         self.assertEqual(server.duplicate_character(long["id"])["name"], "ABCDEGHIJKLMN 2")
 
+    def test_share_code(self):
+        red = PortraitVariantTests.image((255, 0, 0, 255))
+        c = server.save_character({"name": "KAZUMI", "donor": 9, "costumes": [], "portrait_ps1": red, "stage": 3,
+                                   "move_damage": {"3": 40}, "move_buttons": {"f+2": "f+1"}})
+        code = server.share_code(c["id"])
+        self.assertTrue(code.startswith("T3C1-") and len(code) < 400)
+        copy = server.import_share_code(code[:20] + "\n " + code[20:])        # pasted with a line break
+        self.assertNotEqual(copy["id"], c["id"])
+        self.assertEqual((copy["name"], copy["donor"], copy["stage"], copy["move_damage"], copy["move_buttons"]),
+                         ("KAZUMI", 9, 3, {"3": 40}, {"f+2": "f+1"}))
+        self.assertFalse((server.DATA / copy["id"] / "portrait-ps1.png").is_file())   # no files in a code
+        for bad in ("hello", "T3C1-!!!", "T3C1-" + "A" * 7000):
+            with self.assertRaises(ValueError):
+                server.import_share_code(bad)
+
     def test_backup_round_trip(self):
         import base64
         server.save_character({"name": "A", "donor": 1, "costumes": []})

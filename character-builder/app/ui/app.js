@@ -280,6 +280,32 @@ function renderStage() {
 
 function markDirty() { state.dirty = true; renderSteps(); }
 
+// "Surprise me": a new fighter with a random name (Tekken 3's name font: no F or Q), style, home
+// stage, music and stage colours; the body comes from the Builder tab's Randomize after saving
+const SYLLABLE = { start: "BDGHJKLMNRSTVZ", vowel: "AEIOU", end: ["", "", "", "N", "R", "S", "K", "X"] };
+function surpriseName() {
+  const any = (s) => s[Math.floor(Math.random() * s.length)];
+  let name = "";
+  for (let n = 2 + Math.floor(Math.random() * 2); n; n--) name += any(SYLLABLE.start) + any(SYLLABLE.vowel);
+  return (name + any(SYLLABLE.end)).slice(0, 15);
+}
+async function surprise() {
+  await selectCharacter(null);
+  if (state.current.id !== null || state.dirty) return;         // switching was cancelled
+  const any = (list) => list[Math.floor(Math.random() * list.length)];
+  $("name").value = surpriseName();
+  $("name").dispatchEvent(new Event("input"));
+  state.current.donor = any(DONORS).id;
+  renderDonors(); renderStage(); T3Arena.styleLabels(); T3Costumes.refresh();
+  for (const id of ["stage", "music", "stage-look"]) {
+    const options = [...$(id).options].filter((o) => !o.disabled && o.value !== "custom");
+    if (options.length) $(id).value = any(options).value;
+    $(id).dispatchEvent(new Event("change"));
+  }
+  markDirty();
+  toast(`Meet ${state.current.name || $("name").value}! Save, then Randomize on the Builder tab for a body of mixed fighters.`);
+}
+
 // the licence register of the fighter's own assets (server clean_credits)
 function creditsBody() {
   const out = {};
@@ -357,6 +383,54 @@ async function duplicateFighter() {
   } catch (e) { toast(e.message); }
 }
 
+// share codes: a fighter's settings as text (/api/share/code), and a new fighter from one
+let shareMode = "show";
+async function showShareCode() {
+  if (!state.current.id) return;
+  if (state.dirty) { toast("Save your changes first."); return; }
+  try {
+    const r = await api("/api/share/code", { id: state.current.id });
+    shareMode = "show";
+    $("share-title").textContent = `Share code: ${state.current.name}`;
+    $("share-hint").textContent = "Paste this anywhere. Whoever enters it gets this fighter's style, stage, music, colours, " +
+      "moves and Character Builder body. Portraits, recordings and imported 3D models stay with you: send the package (Export) for those.";
+    $("share-code").value = r.code;
+    $("share-code").readOnly = true;
+    $("share-go").textContent = "Copy";
+    $("share-dialog").showModal();
+    $("share-code").select();
+  } catch (e) { toast(e.message); }
+}
+async function enterShareCode() {
+  if (state.dirty && !confirm("You have unsaved changes. Continue anyway?")) return;
+  shareMode = "enter";
+  $("share-title").textContent = "Enter share code";
+  $("share-hint").textContent = "Paste a code that starts with T3C1-. It makes a new fighter; nothing else is changed.";
+  $("share-code").value = "";
+  $("share-code").readOnly = false;
+  $("share-go").textContent = "Make fighter";
+  $("share-dialog").showModal();
+  $("share-code").focus();
+}
+async function shareGo() {
+  if (shareMode === "show") {
+    try { await navigator.clipboard.writeText($("share-code").value); toast("Share code copied"); }
+    catch { $("share-code").select(); toast("Press Ctrl+C to copy"); }
+    return;
+  }
+  $("share-go").disabled = true;
+  toast("Making the fighter… (a Character Builder body takes up to a minute)");
+  try {
+    const made = await api("/api/share/import", { code: $("share-code").value });
+    $("share-dialog").close();
+    state.dirty = false;
+    await loadCharacters();
+    await selectCharacter(made);
+    if (!showWarnings(made)) toast(`${made.name} made from the share code`);
+  } catch (e) { toast(e.message); }
+  finally { $("share-go").disabled = false; }
+}
+
 async function exportFighter() {
   if (!state.current.id) return;
   if (state.dirty) { toast("Save your changes first."); return; }
@@ -373,7 +447,7 @@ function fillForm() {
   const credits = state.current.credits || {};
   for (const input of document.querySelectorAll("#credits [data-credit]"))
     input.value = (credits[input.dataset.credit] || {})[input.dataset.field] || (input.dataset.field === "licence" ? "unknown" : "");
-  $("export").hidden = $("delete").hidden = $("duplicate").hidden = !state.current.id;
+  $("export").hidden = $("delete").hidden = $("duplicate").hidden = $("share").hidden = !state.current.id;
   $("form-error").textContent = "";
   renderDonors();
   renderStage();
@@ -809,9 +883,13 @@ function wire() {
   });
   $("author").addEventListener("input", markDirty);
   $("new-character").addEventListener("click", () => selectCharacter(null));
+  $("surprise").addEventListener("click", surprise);
   $("delete").addEventListener("click", removeCharacter);
   $("export").addEventListener("click", exportFighter);
   $("duplicate").addEventListener("click", duplicateFighter);
+  $("share").addEventListener("click", showShareCode);
+  $("share-enter").addEventListener("click", enterShareCode);
+  $("share-go").addEventListener("click", shareGo);
   $("library-button").addEventListener("click", showLibrary);
   $("check-button").addEventListener("click", showCheck);
   $("check-fix").addEventListener("click", async () => {

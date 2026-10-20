@@ -25,6 +25,8 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 | Duplicate a fighter (name + 2, through its package: everything travels) | **done** (unit test; browser: KITTEST 2 got parts, shape, damage, credits, 2 saved portraits; deleted again) |
 | Backup of all fighters (.t3backup, read back by Import package) | **done** (download tested: 4 fighters, 7.2 MB; import round trip unit-tested; the import takes up to ~24 MB) |
 | Project versions / restore points per fighter | **done** (settings before each save, last 20, Restore on the Fighter page; restoring is itself undoable; 3D model: its own Undo) |
+| Share codes: a fighter's settings as text (T3C1-..., no files) and a new fighter from one | **done** (browser: KITTEST's code, 960 characters, made a copy whose rebuilt Builder body was byte-identical; deleted again; unit test with a pasted line break and damaged codes) |
+| "Surprise me": a new fighter with a random name, style, stage, music and stage colours | **done** (browser-tested, not saved; the body: Builder tab, Randomize) |
 
 ## Modules
 

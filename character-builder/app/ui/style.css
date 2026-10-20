@@ -497,3 +497,6 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .fair-light.amber { background: #f0a020; }
 .fair-light.red { background: #e03030; }
 .fair-list small { display: block; color: var(--muted, #9aa0b0); }
+
+/* share codes */
+.share-code { width: 100%; box-sizing: border-box; background: #08090d; color: var(--paper); border: 2px solid #3a4052; padding: .5rem; font: .8rem/1.3 monospace; word-break: break-all; resize: vertical; }
