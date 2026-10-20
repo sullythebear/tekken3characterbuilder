@@ -79,8 +79,23 @@ def read(path: Path) -> dict:
             while up is not None and up not in index:
                 up = parent.get(up)
             bones.append({"name": human.get(nd) or j["nodes"][nd].get("name", f"joint{k}"), "parent": index.get(up, -1),
+                          "human": nd in human, "node": nd,
                           "matrix": np.linalg.inv(ibm[k]).tolist()})
         skin_of[si] = base
+    # a skin's root may hang on a joint of another skin (Seed-san's backpack and robot arm are a
+    # skin of their own under her chest): link it there instead of leaving it a second root
+    first = {}
+    for i, b in enumerate(bones):
+        first.setdefault(b["node"], i)
+    node_up = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}
+    for b in bones:
+        if b["parent"] >= 0:
+            continue
+        up = node_up.get(b["node"])
+        while up is not None and up not in first:
+            up = node_up.get(up)
+        if up is not None and first[up] is not bones.index(b):
+            b["parent"] = first[up]
     # a mesh without a skin under a joint node (a hat or an armour piece that hangs on a bone,
     # as KayKit's characters have) moves rigidly with that bone
     node_parent = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}

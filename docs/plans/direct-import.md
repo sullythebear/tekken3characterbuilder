@@ -218,3 +218,25 @@ Seven CC0 test models, each downloaded into its own folder `testmodels/dl-*/` (n
     19-23 % of the height). Models with the hips below 30 % are now refused with a clear reason
     ("Chibi build"); 30-35 % gets a warning.
 - `regress --all`: every earlier model the same, except "test" as above; the four VRMs approved.
+
+### Round 2 (2026-10-20, with the owner's permission to download)
+
+- VRM 1.0 samples of the VRM Consortium (`vrm-c/vrm-specification/samples`, VRM Public License
+  1.0; the files' own settings allow modification and redistribution): Seed-san, and
+  VRM1_Constraint_Twist_Sample, which turned out to be byte-identical to `VRM_Sample.vrm`
+  already in use (the duplicate download was removed). 100Avatars R3 (CC0): Vladi (a chibi at
+  25 %: refused, as designed) and Crowley (a long hooded coat: imports, fights, approved).
+- Seed-san carries a robot arm on her backpack, a skin of its own with bones such as
+  "robo_hand.L". Fixed:
+  - `glb.read`: a skin's root that hangs on a joint of another skin is linked to it (the backpack
+    was a second root);
+  - `direct_import._vrm_extras`: in a VRM, a bone that names a body part but hangs on the body
+    through bones that name none gets a neutral name (the robot hand had become her left hand);
+    twist/roll bones beside a human bone and fingers keep their names (a first, broader rule
+    changed every VRM and was replaced);
+  - `protrusions`: a piece hanging down far beside the body (more than 12 % of the height) is
+    listed; pieces carried by the same extra bone are one part, the whole prop, removed by
+    default ("a piece in 6 parts"); folding broke it up.
+  - Seed-san then: body, arms and folded ponytail clean, robot arm gone; Crowley and Seed-san
+    fought 600 frames on KITTEST with 0 data words differing (KITTEST's model restored).
+- `regress --all`: every earlier model the same; Crowley and Seed-san approved.

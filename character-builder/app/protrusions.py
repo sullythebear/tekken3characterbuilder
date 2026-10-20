@@ -140,22 +140,69 @@ def find(src) -> list[dict]:
             if length < 0.08 * H:
                 continue
             axis /= length
-            if axis[1] < -np.cos(np.radians(35)):        # already hangs down: nothing to do
-                continue
+            side = np.linalg.norm((P[g] - attach)[:, [0, 2]], axis=1).max()
+            if axis[1] < -np.cos(np.radians(35)) and side < 0.12 * H:   # hangs down along the body: nothing to do
+                continue                                 # (Seed-san's robot arm hangs far beside her: listed)
             where = {"head": "Head", "spine": "Chest", "pelvis": "Hips"}[part]
             out.append({"where": where, "vertices": g, "attach": attach, "axis": axis, "length": length / H,
                         "label": f"{where}: a piece {round(100 * length / H)} % of the height long, "
                                  f"pointing {_direction_words(axis)}"})
+    out = _merge_carried(src, out, H)
     out.sort(key=lambda p: -p["length"])
     for i, p in enumerate(out):
         p["id"] = i + 1
     return out
 
 
+def _carrier(bones, b):
+    """The extra bone through which bone b hangs on the human skeleton (a VRM's backpack), or None
+    when b is human or hangs on it directly."""
+    last = None
+    while b >= 0 and not bones[b].get("human"):
+        last, b = b, bones[b]["parent"]
+    return last if b >= 0 and last is not None and MI._part(bones[last]["name"])[0] is None else None
+
+
+def _merge_carried(src, parts, H):
+    """Pieces that hang on the body through the same extra bone are one part (Seed-san's robot
+    arm: six separate segments on her backpack), so it can be removed at once."""
+    bones = src["bones"]
+    if not any(b.get("human") for b in bones):
+        return parts
+    dom = [max(w, key=w.get) if w else -1 for w in src["weights"]]
+    groups, rest = {}, []
+    for p in parts:
+        cs = {_carrier(bones, dom[v]) for v in p["vertices"]} - {None}
+        if len(cs) == 1:
+            groups.setdefault((p["where"], cs.pop()), []).append(p)
+        else:
+            rest.append(p)
+    P = src["P"]
+    carried = {}
+    for v, d in enumerate(dom):
+        carried.setdefault(_carrier(bones, d) if d >= 0 else None, []).append(v)
+    for (where, carrier), ps in groups.items():
+        if len(ps) == 1:
+            rest += ps
+            continue
+        g = np.array(sorted(carried[carrier]))      # the whole prop, also what stays close to the body
+        attach = max(ps, key=lambda p: p["length"])["attach"]
+        tip = P[g[np.argmax(np.linalg.norm(P[g] - attach, axis=1))]]
+        axis = tip - attach
+        length = float(np.linalg.norm(axis)) or 1e-9
+        axis = axis / length
+        rest.append({"where": where, "vertices": g, "attach": attach, "axis": axis, "length": length / H,
+                     "default": {"mode": "remove", "angle": None},    # a carried prop: folding breaks it up
+                     "label": f"{where}: a piece in {len(ps)} parts, {round(100 * length / H)} % of the height long, "
+                              f"pointing {_direction_words(axis)}"})
+    return rest
+
+
 def summary(parts) -> list[dict]:
     """What the builder shows (JSON-safe)."""
     return [{"id": p["id"], "label": p["label"], "where": p["where"], "length": round(p["length"], 3),
-             "colour": "#%02x%02x%02x" % COLOURS[(p["id"] - 1) % len(COLOURS)], **DEFAULT} for p in parts]
+             "colour": "#%02x%02x%02x" % COLOURS[(p["id"] - 1) % len(COLOURS)], **DEFAULT, **p.get("default", {})}
+            for p in parts]
 
 
 def _rotate(V, centre, axis, angle):
@@ -221,7 +268,7 @@ def apply(src, choices: dict | None = None, log=print) -> dict:
     N /= np.linalg.norm(N, axis=1, keepdims=True) + 1e-12
     used, drop = {}, np.zeros(len(P), bool)
     for p in parts:
-        c = {**DEFAULT, **choices.get(p["id"], {})}
+        c = {**DEFAULT, **p.get("default", {}), **choices.get(p["id"], {})}
         if c["mode"] == "remove":
             drop[p["vertices"]] = True
             log(f"part {p['id']} ({p['label']}): removed")

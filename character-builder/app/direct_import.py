@@ -53,9 +53,32 @@ def _external_texture(src: dict) -> None:
 def load(path: Path) -> dict:
     out = _load(path)
     if out.get("bones"):
+        _vrm_extras(out)
         _name_by_shape(out)
         _upright(out)
     return out
+
+
+def _vrm_extras(src: dict) -> None:
+    """A VRM marks its human bones. A bone that names a body part but hangs on the body through
+    bones that name none (Seed-san's robot arm: "robo_hand.L" <- robo_root_pole <- bagpack <-
+    chest) gets a neutral name, so it follows its parent instead of becoming a second hand.
+    Twist and roll bones beside a human bone (J_Roll_L_UpperLeg) and fingers keep their names."""
+    bones = src["bones"]
+    if not any(b.get("human") for b in bones):
+        return
+    rename = []
+    for i, b in enumerate(bones):
+        if b.get("human") or MI._part(b["name"])[0] is None:
+            continue
+        up = b["parent"]
+        while up >= 0 and not bones[up].get("human"):
+            if MI._part(bones[up]["name"])[0] is None:
+                rename.append(i)
+                break
+            up = bones[up]["parent"]
+    for i in rename:
+        bones[i]["name"] = f"extra_{i}"
 
 
 def _name_by_shape(src: dict) -> None:

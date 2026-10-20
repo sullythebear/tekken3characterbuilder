@@ -477,6 +477,21 @@ class BoneNameTests(unittest.TestCase):
             self.assertEqual(MI._part(helper), (None, None), helper)  # rig helpers are no body part
 
 
+class VrmExtraBoneTests(unittest.TestCase):
+    def test_carried_bones_lose_body_part_names(self):
+        import direct_import as DI
+        bones = [{"name": "Hips", "parent": -1, "human": True}, {"name": "Chest", "parent": 0, "human": True},
+                 {"name": "bagpack", "parent": 1}, {"name": "robo_hand.L", "parent": 2},
+                 {"name": "J_Roll_L_UpperLeg", "parent": 0}, {"name": "LeftHand", "parent": 1, "human": True},
+                 {"name": "J_Bip_L_Index1", "parent": 5}]
+        src = {"bones": bones}
+        DI._vrm_extras(src)
+        names = [b["name"] for b in bones]
+        self.assertEqual(names[3], "extra_3")                 # hangs on the chest through the backpack
+        self.assertEqual(names[4], "J_Roll_L_UpperLeg")      # a twist bone beside the hips keeps its name
+        self.assertEqual(names[6], "J_Bip_L_Index1")         # a finger under the hand too
+
+
 class DecimateTests(unittest.TestCase):
     def test_alive_out(self):
         import numpy as np
