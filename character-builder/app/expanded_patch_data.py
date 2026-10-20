@@ -707,6 +707,31 @@ ROSTER = [
  "        }\n"
  "    }\n"
  "    if(nb && boss_one_in && !draw(boss_one_in)) {", 1),
+("static void opponents_tick(unsigned state) {\n",
+ "/* T3CB-PATCH-22: a custom fighter's rival. <prefix>-rival.txt, written by the builder: the ID\n"
+ " * (0-21) of the stock fighter who meets the custom fighter at stage 9 in Arcade and Time\n"
+ " * Attack, where Tekken 3 puts Heihachi (0x800AFB18, 4 bytes per stage). */\n"
+ "static int custom_rival_id[CUSTOM_MAX],custom_rival_tried[CUSTOM_MAX];\n"
+ "static int custom_rival(unsigned id) {\n"
+ "    int k=tekken3_guest_character(id);\n"
+ "    if(k<0 || (unsigned)k<tag_count || (unsigned)k-tag_count>=CUSTOM_MAX || !roster[k].custom)return -1;\n"
+ "    unsigned c=(unsigned)k-tag_count;\n"
+ "    if(!custom_rival_tried[c]) {\n"
+ "        custom_rival_tried[c]=1;custom_rival_id[c]=-1;\n"
+ "        const char *root=tekken3_ttt1_asset_root();char path[4096];int v;\n"
+ "        FILE *f=root && snprintf(path,sizeof path,\"%s/%s-rival.txt\",root,roster[k].prefix)<(int)sizeof path?fopen(path,\"r\"):NULL;\n"
+ "        if(f){if(fscanf(f,\"%d\",&v)==1 && v>=0 && v<=21)custom_rival_id[c]=v;fclose(f);}\n"
+ "        if(custom_rival_id[c]>=0)fprintf(stderr,\"Custom fighters: %s has rival %d\\n\",roster[k].name,custom_rival_id[c]);\n"
+ "    }\n"
+ "    return custom_rival_id[c];\n"
+ "}\n"
+ "static void opponents_tick(unsigned state) {\n", 1),
+("    for(unsigned i=0;i<sizeof list;i++)psx_mod_write_byte(OPPONENTS+i,list[i]);\n",
+ "    int rival=custom_rival(player);                                   /* T3CB-PATCH-22 */\n"
+ "    if(rival>=0){list[8*4]=(unsigned char)rival;list[8*4+1]=0;\n"
+ "        for(unsigned i=0;i<8;i++)if(list[i*4]==rival)list[i*4]=13;   /* met first at stage 9: Heihachi takes its place */\n"
+ "        fprintf(stderr,\"Custom fighters: rival %d at stage 9\\n\",rival);}\n"
+ "    for(unsigned i=0;i<sizeof list;i++)psx_mod_write_byte(OPPONENTS+i,list[i]);\n", 1),
 ]
 
 MOD = [

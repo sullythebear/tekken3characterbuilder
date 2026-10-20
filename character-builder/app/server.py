@@ -529,6 +529,24 @@ def write_moves(root: Path, key: str, fighter: dict) -> str | None:
     return None
 
 
+def write_rival(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-rival.txt (patch 22): the stock fighter met at stage 9 in Arcade (or none)."""
+    name = f"{custom_page.file_prefix(key)}-rival.txt"
+    rival = fighter.get("rival")
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if rival is None:
+                (target / name).unlink(missing_ok=True)
+            else:
+                (target / name).write_text(f"{int(rival)}\n", encoding="ascii")
+    except OSError as error:
+        return f"Rival: {error}"
+    return None
+
+
 def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
     """<Key>-T3-stage.bin: the home stage's colour variant (or none), cached per stage and look."""
     name = f"{custom_page.file_prefix(key)}-stage.bin"
@@ -626,7 +644,7 @@ def validate_character(data: dict) -> dict:
         raise ValueError("That donor does not exist.")
     author = re.sub(r"[^\w .\-]", "", str(data.get("author", ""))).strip()[:32]
     clean = {"name": name, "donor": donor, "author": author}
-    for key in ("stage", "music"):          # the Tekken 3 fighter whose stage / music it takes
+    for key in ("stage", "music", "rival"):  # the Tekken 3 fighter whose stage / music it takes, its rival
         value = data.get(key)
         if value not in (None, "", -1, "-1"):
             try:
@@ -781,6 +799,8 @@ def check_library() -> dict:
                 add("warn", "The stage colours are not in the game yet.")
             if (c.get("move_damage") or c.get("move_buttons")) and not game_file(key, f"{prefix}-moves.bin"):
                 add("warn", "The changed moves are not in the game yet.")
+            if c.get("rival") is not None and not game_file(key, f"{prefix}-rival.txt"):
+                add("warn", "The rival is not in the game yet.")
         out.append({"id": c["id"], "name": c["name"], "issues": issues})
     return {"general": general, "fighters": out}
 
@@ -1018,7 +1038,8 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
         problem = write_palettes(root, key, c) or write_own_model(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
-        for problem in (write_name_call(root, key, c), write_stage_look(root, key, c), write_moves(root, key, c)):
+        for problem in (write_name_call(root, key, c), write_stage_look(root, key, c), write_moves(root, key, c),
+                        write_rival(root, key, c)):
             if problem:
                 warnings.append(f"{c['name']}: {problem}")
     if left_out:
@@ -1993,7 +2014,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits", "move_damage", "move_buttons")
+                  "costumes", "credits", "move_damage", "move_buttons", "rival")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:

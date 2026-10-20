@@ -16,7 +16,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 ## knowledge/ (what we know)
 
 - `character-ids.md` – stock character IDs, model numbers, guest IDs 23+.
-- `roster-tables.md` – roster tables in Tekken3Recompiled, names on screen.
+- `roster-tables.md` – roster tables in Tekken3Recompiled, names on screen, Arcade opponents and the rival (patch 22).
 - `donors.md` – donor principle, style layer, donor tests (Ogre, Gon, Dr. B, True Ogre, Anna,
   Kuma), the ID 43 strip-tile bug and patch 8.
 - `mokujin.md` – Mokujin's round-start draw and sword (patches 5, 6).

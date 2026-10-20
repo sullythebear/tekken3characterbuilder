@@ -291,6 +291,21 @@ class CreditsAndBackupTests(CharacterTests):
         long = server.save_character({"name": "ABCDEGHIJKLMNOP", "donor": 1, "costumes": []})
         self.assertEqual(server.duplicate_character(long["id"])["name"], "ABCDEGHIJKLMN 2")
 
+    def test_rival(self):
+        self.assertEqual(server.validate_character({"name": "A", "donor": 5, "rival": "13"})["rival"], 13)
+        self.assertNotIn("rival", server.validate_character({"name": "A", "donor": 5, "rival": ""}))
+        with self.assertRaises(ValueError):
+            server.validate_character({"name": "A", "donor": 5, "rival": 44})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for folder in server.custom_page.FOLDERS:
+                (root / folder).mkdir(parents=True)
+            self.assertIsNone(server.write_rival(root, "kit", {"rival": 13}))
+            path = root / server.custom_page.FOLDERS[0] / f"{server.custom_page.file_prefix('kit')}-rival.txt"
+            self.assertEqual(path.read_text(), "13\n")
+            server.write_rival(root, "kit", {})
+            self.assertFalse(path.exists())
+
     def test_share_code(self):
         red = PortraitVariantTests.image((255, 0, 0, 255))
         c = server.save_character({"name": "KAZUMI", "donor": 9, "costumes": [], "portrait_ps1": red, "stage": 3,

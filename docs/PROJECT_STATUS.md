@@ -51,6 +51,7 @@ Updated: 2026-10-20.
   the opponent is untouched.
 - Moves on other buttons per fighter ("Moves on buttons"): patch 21, tested in game. KITTEST's f+2
   starts Liftshot (the style's side-step 2).
+- Rival per fighter (Stage Lab, patch 22, tested in game): KITTEST meets Paul at Arcade stage 9.
 - Share codes (Fighter page "Share code", menu "Enter share code") and "Surprise me" in the menu.
 - Fairness check in the Move Lab: traffic lights against the cast's damage (KITTEST: Just for fun,
   its 3 = 60 where the cast goes up to 30), saved with the fighter.
@@ -90,7 +91,7 @@ Updated: 2026-10-20.
   Remove or change it as you like.
 - Your fighters (Tommy, Medea, Test) were not changed. Check library and Asset library list
   their unknown licences.
-- The game in the test folder is built with patch 21 (release and debug builds).
+- The game in the test folder is built with patch 22 (release and debug builds).
 
 ## Next
 

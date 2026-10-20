@@ -24,3 +24,19 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
 - The VS screen spells the name from the character descriptor's string (+0 pointer).
 - The name above the life bar and on the select screen is a 4bpp bitmap from the fighter's
   interface pack, not the descriptor string.
+
+## Arcade opponents and the rival: patch 22 (2026-10-20, tested in game)
+
+- **code** (Expanded `opponents_tick`, roster.c) 0x800B1FCC draws the ten Arcade / Time Attack
+  opponents into 0x800AFB18, 4 bytes each (fighter, costume, stage number): stages 1-4 among the
+  first ten fighters, 5-8 the rest, 9 Heihachi (Jin for a Heihachi player), 10 Ogre. Expanded
+  rewrites the list once while stage 1 loads: 1-2 guests at stages 5-8, and one game in four
+  Devil, Angel or Unknown at stage 9.
+- **tested** (scratch `arcade.py`: t3live Arcade, P2's health written to 0 in every fight)
+  KITTEST: stages 1-8 differ per run, stage 9 was 40 (a hidden boss) or Heihachi, stage 10
+  Ogre (14), then True Ogre (20). Xiaoyu: stage 9 Heihachi (13).
+- **T3CB-PATCH-22**: `<prefix>-rival.txt` (one ID, 0-21) puts that fighter at stage 9 for the
+  custom fighter, costume 0; where the draw also had it at stages 1-8, Heihachi takes that place.
+  Tested: rival Paul (0) at stage 9 in three runs, Ogre and True Ogre after it; log "Kittest has
+  rival 0", "rival 0 at stage 9".
+- Not changed: stage 10 (Ogre, then True Ogre); replacing it is not tried (the transformation).
