@@ -1,4 +1,4 @@
-DIZZY CHARACTER CREATOR 0.7.0
+DIZZY CHARACTER CREATOR 0.7.1
 =============================
 
 Works with Tekken 3 Expanded (recommended) and with Tekken3Recompiled 0.1.4.
