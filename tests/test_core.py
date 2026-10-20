@@ -320,6 +320,21 @@ class VoiceShapeTests(unittest.TestCase):
 
 
 class BasicDamageTests(unittest.TestCase):
+    def test_fairness(self):
+        import fairness as F
+        self.assertEqual(F.yardstick([100, 35, 30]), 35)            # one outlier sets no bar
+        cast = {"basic": {"3": [30, 30, 25], "f+2": [28, 28, 12]}, "own": [60, 50, 15], "hits": [21, 20]}
+        style = {"basic": {"3": 25, "f+2": 12}, "records": {"3": [110, 25], "f+2": [116, 12],
+                                                            "Duringsidestep,2": [239, 15]}}
+        self.assertEqual(F.check(cast, style, None, None)["label"], "Fair")
+        self.assertEqual(F.check(cast, style, {"3": 30}, {"f+2": "Duringsidestep,2"})["light"], "green")
+        self.assertEqual(F.check(cast, style, {"3": 36}, None)["light"], "amber")
+        r = F.check(cast, style, {"3": 60}, None)
+        self.assertEqual((r["light"], r["label"]), ("red", "Just for fun"))
+        self.assertEqual(r["parts"][0]["notes"], ["3: 60 (cast up to 30)"])
+        r = F.check(cast, style, {"Duringsidestep,2": 40}, {"f+2": "Duringsidestep,2"})
+        self.assertEqual([p["light"] for p in r["parts"][:3]], ["green", "green", "red"])
+
     def test_moves_file(self):
         import command_list as M
         records = {"3": [110, 25], "1": [99, 5]}

@@ -51,6 +51,8 @@ Updated: 2026-10-20.
   the opponent is untouched.
 - Moves on other buttons per fighter ("Moves on buttons"): patch 21, tested in game. KITTEST's f+2
   starts Liftshot (the style's side-step 2).
+- Fairness check in the Move Lab: traffic lights against the cast's damage (KITTEST: Just for fun,
+  its 3 = 60 where the cast goes up to 30), saved with the fighter.
 - Research in `knowledge/moves.md`: records, cancel lists, input bits, strings.
 
 **Studio**

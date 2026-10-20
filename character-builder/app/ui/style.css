@@ -487,3 +487,13 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 /* Move Lab: moves on other buttons */
 .basic-grid select { max-width: 11rem; background: var(--panel); color: var(--paper); border: 1px solid var(--line); font: inherit; }
 .basic-grid label.changed select { color: var(--ember); border-color: var(--ember); }
+
+/* Move Lab: fairness check */
+.fair-label { font-size: 1.1rem; color: var(--gold); margin: .2rem 0; }
+.fair-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; font-size: .9rem; }
+.fair-list li { display: grid; grid-template-columns: 1rem 1fr; gap: .5rem; align-items: start; }
+.fair-light { width: .8rem; height: .8rem; border-radius: 50%; margin-top: .25rem; background: var(--line); }
+.fair-light.green { background: #3cb44b; }
+.fair-light.amber { background: #f0a020; }
+.fair-light.red { background: #e03030; }
+.fair-list small { display: block; color: var(--muted, #9aa0b0); }

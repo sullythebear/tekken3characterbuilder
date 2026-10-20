@@ -58,6 +58,9 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
   by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
   (`#buttons-list`). Cache `commandlist6-...`.
+- Fairness: `fairness.py` (`yardstick`, `check`), `model_export.py cast` (damage per style, cache
+  `cast1.json`), server `cast_damage`, `fairness_check`, `/api/fairness`, `fairness` stored by `save_character`;
+  UI `movelab.js fair` (`#fair-field`).
 - Voice Lab: `name_call.shape(samples, pitch, echo)` (`ECHOES`, `announcer` = shape -18 hall),
   `voices()` / `speak(name, voice)` (System.Speech, `VOICE_RE`), field `name_call_voice` (auto cache key
   name|voice), route `/api/namecall/voices`; UI `arena.js` `#name-voice`, `#name-pitch`, `#name-echo`.

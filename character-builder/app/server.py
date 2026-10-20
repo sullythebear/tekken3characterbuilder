@@ -18,6 +18,7 @@ import creator_patch  # noqa: E402
 import custom_page  # noqa: E402
 import name_call  # noqa: E402
 import command_list as command_list_module  # noqa: E402   (stdlib only: struct)
+import fairness  # noqa: E402
 
 APP_VERSION = "0.8.0"
 APP = Path(__file__).resolve().parent
@@ -1478,6 +1479,26 @@ def command_list(donor) -> dict:
             "movable": data.get("movable", [])}
 
 
+def cast_damage() -> dict:
+    """The cast's damage per style, the fairness check's yardstick (model_export cast, cached)."""
+    path = CACHE / "cast1.json"
+    if not path.is_file():
+        root = project_root()
+        if not root:
+            raise ValueError("The cast's damage needs the game folder.")
+        problem, out = run_model_tool(root, ["cast"], timeout=120)
+        if problem:
+            raise ValueError(problem)
+        CACHE.mkdir(exist_ok=True)
+        path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def fairness_check(donor, move_damage=None, move_buttons=None) -> dict:
+    """The traffic lights of a fighter's moves (fairness.check) against Tekken 3's cast."""
+    return fairness.check(cast_damage(), command_list(donor), move_damage, move_buttons)
+
+
 # --------------------------------------------------- character builder --
 
 KIT_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r", "hands")   # kitbash.PARTS
@@ -1905,6 +1926,12 @@ def save_character(data: dict) -> dict:
               "costumes": validate_costumes(data["costumes"]) if "costumes" in data else old.get("costumes", [])}
     if old.get("own_model") and (folder / "model.bin").is_file():
         record["own_model"] = old["own_model"]          # set only by import_model / remove_model
+    if record.get("donor") is not None:                 # the fairness status, carried in packages
+        try:
+            check = fairness_check(record["donor"], record.get("move_damage"), record.get("move_buttons"))
+            record["fairness"] = {"light": check["light"], "label": check["label"]}
+        except ValueError:
+            pass                                        # no disc data: no status
     recording = decode_wav(data.get("name_call_wav"))
     if recording:
         (folder / "namecall.wav").write_bytes(recording)
@@ -2404,6 +2431,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(stage_preview(data))
             if path == "/api/moves":
                 return self._json(command_list(data.get("donor")))
+            if path == "/api/fairness":
+                clean = validate_character({"name": "x", "donor": data.get("donor"),
+                                            "move_damage": data.get("move_damage"),
+                                            "move_buttons": data.get("move_buttons")})
+                return self._json(fairness_check(clean["donor"], clean.get("move_damage"), clean.get("move_buttons")))
             if path == "/api/kit/models":
                 donors = donor_models()
                 if not donors.get("available"):

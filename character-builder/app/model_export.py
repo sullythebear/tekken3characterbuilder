@@ -616,7 +616,7 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756), look
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait", "commandlist"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait", "commandlist", "cast"))
     parser.add_argument("--look", help='ownportrait: JSON {"angle", "frame", "light", "backdrop"}')
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
@@ -635,6 +635,19 @@ def main() -> None:
             fail("ownjson needs --file and --out.")
         args.out.write_text(json.dumps(export_own(args.root, args.file)), encoding="utf-8")
         print(f"OK {args.out}")
+        return
+    if args.command == "cast":                     # the cast's damage, the fairness check's yardstick
+        import command_list
+        exe = exe_bytes(args.root)
+        basic, own, hits = {}, [], []                 # damage per style (fairness.yardstick)
+        for style in range(21):
+            mid = command_list.MOVESET_FIRST + command_list.moveset_key(exe, style)
+            moveset = records(args.root, [mid])[mid]
+            for name, (_, damage) in command_list.basic_records(moveset, exe).items():
+                basic.setdefault(name, []).append(damage)
+            own += [damage for _, damage in command_list.own_records(moveset, style).values()]
+            hits += [d for row in command_list.string_records(moveset, style).values() for _, d in row[1:]]
+        print(json.dumps({"basic": basic, "own": own, "hits": hits}))
         return
     if args.command == "commandlist":              # the COMMAND LIST of a costume model, JSON
         if args.model is None:

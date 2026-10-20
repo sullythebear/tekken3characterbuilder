@@ -23,7 +23,7 @@
       value.value = own[k] ?? basic[k];
       value.title = `Tekken 3: ${basic[k]}`;
       const mark = () => cell.classList.toggle("changed", Number(value.value) !== basic[k]);
-      value.addEventListener("input", () => { mark(); markDirty(); });
+      value.addEventListener("input", () => { mark(); markDirty(); fairSoon(); });
       mark();
       cell.append(input, value);
       grid.append(cell);
@@ -60,12 +60,38 @@
       }
       pick.value = own[k] && movable.includes(own[k]) ? own[k] : "";
       const mark = () => cell.classList.toggle("changed", pick.value !== "");
-      pick.addEventListener("change", () => { mark(); markDirty(); });
+      pick.addEventListener("change", () => { mark(); markDirty(); fairSoon(); });
       mark();
       cell.append(input, pick);
       grid.append(cell);
     }
     $("buttons-field").hidden = !inputs.length;
+  }
+
+  // fairness check: traffic lights against the cast (/api/fairness), refreshed after each change
+  let fairTimer = null, fairRun = 0;
+  function fairSoon() { clearTimeout(fairTimer); fairTimer = setTimeout(fair, 400); }
+  async function fair() {
+    if (shown === null) return;
+    const run = ++fairRun;
+    let r;
+    try { r = await api("/api/fairness", { donor: shown, ...body() }); } catch (e) { $("fair-field").hidden = true; return; }
+    if (run !== fairRun) return;
+    $("fair-label").textContent = r.label;
+    const list = $("fair-list");
+    list.textContent = "";
+    for (const p of r.parts) {
+      const li = document.createElement("li"), dot = document.createElement("span"), text = document.createElement("span");
+      dot.className = `fair-light ${p.light || ""}`;
+      dot.title = p.light || "not measured";
+      text.textContent = p.part;
+      const notes = document.createElement("small");
+      notes.textContent = p.notes.join("; ");
+      text.append(notes);
+      li.append(dot, text);
+      list.append(li);
+    }
+    $("fair-field").hidden = false;
   }
 
   // the changed damage for the save (only values that differ from Tekken 3's)
@@ -126,6 +152,7 @@
       $("own-moves").hidden = !own;
       $("basic-field").hidden = !basic && !own;
       showButtons(r, titles);
+      fair();
     } catch (e) { note.textContent = e.message; shown = null; }
   }
 
@@ -134,7 +161,7 @@
     for (const v of document.querySelectorAll("#basic-list input, #own-list input")) {
       if (v.value !== v.dataset.original) { v.value = v.dataset.original; v.parentElement.classList.remove("changed"); changed = true; }
     }
-    if (changed) markDirty();
+    if (changed) { markDirty(); fairSoon(); }
   }
   document.getElementById("basic-reset").addEventListener("click", resetDamage);
   document.getElementById("buttons-reset").addEventListener("click", () => {
@@ -142,7 +169,7 @@
     for (const s of document.querySelectorAll("#buttons-list select")) {
       if (s.value) { s.value = ""; s.parentElement.classList.remove("changed"); changed = true; }
     }
-    if (changed) markDirty();
+    if (changed) { markDirty(); fairSoon(); }
   });
 
   window.T3MoveLab = { show, body, reset: () => { shown = null; } };

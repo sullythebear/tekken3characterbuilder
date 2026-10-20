@@ -31,3 +31,10 @@ Important technical choices and why. Newest last.
 - **D9 (2026-10-16) Stage Lab = colour looks of existing stages.** CLUT rows from the disc,
   recoloured by the builder, written by the patch only over the stage's own colours. New stage
   geometry needs the model and collision formats, which are not known: documented, not built.
+- **D10 (2026-10-20) Fairness check = damage against the cast.** Only what the builder changes is
+  measured: move damage (patch 20) and moves on other buttons (patch 21), each against the
+  strongest but one of Tekken 3's 21 styles on that input (one outlier, King's b+1+2 = 100, sets
+  no bar); green within, amber up to 25 % above, red beyond. Labels Fair / Fair, a little strong
+  / Just for fun, saved as `fairness` in character.json (packages carry it; recomputed on save).
+  Speed, launchers, punishment and lows stay the style's own and are shown as not measured:
+  frame data is not decoded.
