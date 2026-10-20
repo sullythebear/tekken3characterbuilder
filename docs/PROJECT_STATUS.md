@@ -1,8 +1,8 @@
 # Project status
 
 Updated: 2026-10-20.
-- Released: builder 0.7.1 (tag v0.7.1, 2026-10-20), 0.7.0 and 0.6.0, all with the owner's permission.
-- Pushed: `main` up to a78422b (2026-10-20). Later commits are local.
+- Released: builder 0.8.0 (tag v0.8.0, 2026-10-20), 0.7.1, 0.7.0 and 0.6.0, all with the owner's permission.
+- Pushed: `main` up to the 0.8.0 release (2026-10-20).
 
 ## In 0.7.0
 
@@ -91,7 +91,7 @@ Updated: 2026-10-20.
 
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
 The roadmap's items with clear value are done (2026-10-20). Left:
-1. A release (0.8.0: Builder accessories and pieces of clothing) and a user play test.
+1. A user play test of 0.8.0: KITTEST was rebuilt in the test folder (Julia head with braids, 1055 triangles; sanity fight 0 words differing).
 2. Research with an uncertain result: Stage Lab floor routine and collision; Move Lab's other
    strings and chain throws (not reliable with scripted input); TTT1 styles as donors (when
    Expanded adds more).
