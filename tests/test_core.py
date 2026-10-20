@@ -291,6 +291,23 @@ class CreditsAndBackupTests(CharacterTests):
         long = server.save_character({"name": "ABCDEGHIJKLMNOP", "donor": 1, "costumes": []})
         self.assertEqual(server.duplicate_character(long["id"])["name"], "ABCDEGHIJKLMN 2")
 
+    def test_commands_file(self):
+        import command_list as M
+        self.assertEqual((M.encode("f+2"), M.encode("1+2"), M.encode("DF+1"), M.encode("x")),
+                         (bytes([0x84, 0x93]), bytes([0x94]), bytes([0x8A, 0x92]), None))
+        side2 = b"\x0A\x0B side step," + bytes([0x93])            # "During side step, 2"-like
+        original = bytes([3]) + b"Liftshot\0" + side2 + b"\0" + b"Jab\0" + bytes([0x84, 0x93]) + b"\0" \
+            + b"Kick\0" + bytes([0x95]) + b"\0"
+        key = M.command(side2).replace(" ", "")
+        self.assertIsNone(M.commands_file([original], {}))
+        b = M.commands_file([original], {"f+2": key})
+        self.assertEqual(b[:8], b"T3CL" + struct.pack("<HH", 1, 1))
+        so, sn = struct.unpack_from("<HH", b, 8)
+        self.assertEqual(b[12:12 + so], original)
+        new = M.parse(b[12 + so:12 + so + sn] + bytes(1), 0)
+        self.assertEqual([(n, M.command(c)) for n, c in new],          # f+2's old entry left out
+                         [(b"Liftshot", M.command(side2)), (b"Liftshot", "f+2"), (b"Kick", "3")])
+
     def test_rival(self):
         self.assertEqual(server.validate_character({"name": "A", "donor": 5, "rival": "13"})["rival"], 13)
         self.assertNotIn("rival", server.validate_character({"name": "A", "donor": 5, "rival": ""}))

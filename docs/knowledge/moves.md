@@ -323,3 +323,19 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - Moves of other styles are not possible: their records use the style's own animations.
 - Note: t3live runs `build-opt-dbg`; after a patch change build both (`t3cb build` and
   `t3cb build --debug`).
+
+## The COMMAND LIST of moved moves: patch 22 (2026-10-20, tested in game)
+
+- **tested** (scratch `cmdlist.py`) In a fight P1's buffer at 0x800A3628 is byte for byte the
+  disc's list (ARC member 4 of the costume model; Nina's models 10 and 11 share one, model 36 has
+  its own, 384 bytes). A list written there (one entry more, 410 of 416 bytes) shows in the
+  pause menu's COMMAND LIST, the new entry with the f+2 icons.
+- **T3CB-PATCH-22** `<prefix>-commands.bin`: "T3CL", u16 version 1, u16 pairs; per pair u16
+  sizes (original, new), the original list, the new one. Every frame of a fight, the custom
+  fighter's buffer (0x800A3628 + 0x1A0 * player) still holding an original gets the new list.
+  Built by `command_list.commands_file`: a moved move gets a second entry (same name, the new
+  input) right after its own, since its old input still works; an entry whose command is the
+  moved input itself is left out.
+- **tested** KITTEST (f+2 → Liftshot), Arcade: log "Kittest has its own COMMAND LIST",
+  "P1 Kittest COMMAND LIST in"; the pause menu shows Liftshot twice: "During side step, 2" and
+  the f+2 icons.

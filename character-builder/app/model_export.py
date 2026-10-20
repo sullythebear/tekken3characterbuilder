@@ -616,11 +616,12 @@ def own_portrait(root: Path, path: Path, yaw: float = 0.3, size=(504, 756), look
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait", "commandlist", "cast"))
+    parser.add_argument("command", choices=("donors", "model", "ownmodel", "ownjson", "ownportrait", "commandlist", "cast", "rawlists"))
     parser.add_argument("--look", help='ownportrait: JSON {"angle", "frame", "light", "backdrop"}')
     parser.add_argument("--file", type=Path, help="ownjson: the T3CM model file")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--model", type=int)
+    parser.add_argument("--models", help="rawlists: costume models, comma separated")
     parser.add_argument("--style", type=int, help="commandlist: the style (0..20) for the damage column")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--scale-rows", default="", help="ownmodel test: rows whose own vertices are scaled")
@@ -635,6 +636,19 @@ def main() -> None:
             fail("ownjson needs --file and --out.")
         args.out.write_text(json.dumps(export_own(args.root, args.file)), encoding="utf-8")
         print(f"OK {args.out}")
+        return
+    if args.command == "rawlists":                 # the COMMAND LIST bytes of costume models (hex)
+        if not args.models:
+            fail("rawlists needs --models.")
+        out = []
+        for m in (int(x) for x in args.models.split(",")):
+            rid = FIRST_MODEL_RECORD + 4 * m + 2
+            data = records(args.root, [rid])[rid]
+            off, size = struct.unpack_from("<II", data, 4 + 8 * 4)
+            raw = data[off:off + size].hex()
+            if raw not in out:
+                out.append(raw)
+        print(json.dumps(out))
         return
     if args.command == "cast":                     # the cast's damage, the fairness check's yardstick
         import command_list

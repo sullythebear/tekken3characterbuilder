@@ -343,6 +343,55 @@ def moves_file(key: int, records: dict, changes: dict, buttons: dict | None = No
     return out
 
 
+def encode(notation: str) -> bytes | None:
+    """A basic input in the list's bytes ("f+2" -> 0x84 0x93; "1+2" -> 0x94), or None."""
+    parts = notation.split("+")
+    out = bytearray()
+    if parts[0].lower() in DIRECTIONS:
+        d = parts.pop(0)
+        out.append(0x80 + DIRECTIONS.index(d.lower()) + (8 if d.isupper() else 0))
+    mask = 0
+    for p in parts:
+        if p not in ("1", "2", "3", "4"):
+            return None
+        mask |= {"1": 1, "2": 2, "3": 4, "4": 8}[p]
+    if mask:
+        out.append(0x91 + mask)
+    return bytes(out) or None
+
+
+COMMANDS_PAIRS_MAX = 8
+
+
+def commands_file(lists: list[bytes], buttons: dict | None) -> bytes | None:
+    """<prefix>-commands.bin for patch 22 ("T3CL"): the style's COMMAND LIST (one per distinct
+    costume list) and the same list with each moved move also on its new input (an entry right
+    after the move's own; patch 21 leaves the move on its old input too). An entry whose command
+    is a moved input itself is left out: that input starts the other move now. None: no change."""
+    pairs = []
+    for original in lists[:COMMANDS_PAIRS_MAX]:
+        entries = parse(original + bytes(1), 0)
+        if not entries or not buttons:
+            continue
+        key = lambda c: command(c).replace(" ", "")
+        moved = {inp: move for inp, move in buttons.items() if encode(inp)}
+        out = []
+        for n, c in entries:
+            if key(c) in moved and any(0x80 <= b <= 0x9F for b in c):
+                continue
+            out.append((n, c))
+            for inp, move in sorted(moved.items()):
+                if key(c) == move and text(n):
+                    out.append((n, encode(inp)))
+        new = bytes([len(out)]) + b"".join(n + b"\0" + c + b"\0" for n, c in out)
+        if out != entries and len(out) <= 48 and len(new) <= BUFFER:
+            pairs.append((original, new))
+    if not pairs:
+        return None
+    return b"T3CL" + struct.pack("<HH", 1, len(pairs)) + b"".join(
+        struct.pack("<HH", len(o), len(n)) + o + n for o, n in pairs)
+
+
 def with_damage(entries: list[dict], damage: dict[str, int], strings: dict[str, list[int]] | None = None) -> list[dict]:
     """The COMMAND LIST with "damage" on lines whose command is a known input, and for strings
     "hits" (damage per hit) with their sum as "damage"."""

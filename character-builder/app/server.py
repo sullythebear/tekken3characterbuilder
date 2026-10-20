@@ -529,6 +529,42 @@ def write_moves(root: Path, key: str, fighter: dict) -> str | None:
     return None
 
 
+def style_lists(donor: int) -> list[bytes]:
+    """The style's COMMAND LIST bytes, one per distinct costume list (cached)."""
+    models = donor_models()["donors"].get(str(donor), [])
+    path = CACHE / f"rawlists1-{'_'.join(map(str, models))}.json"
+    if not path.is_file():
+        problem, out = run_model_tool(project_root(), ["rawlists", "--models", ",".join(map(str, models))], timeout=120)
+        if problem:
+            raise ValueError(problem)
+        CACHE.mkdir(exist_ok=True)
+        path.write_text(out.strip().splitlines()[-1], encoding="utf-8")
+    return [bytes.fromhex(h) for h in json.loads(path.read_text(encoding="utf-8"))]
+
+
+def write_commands(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-commands.bin (patch 22): the COMMAND LIST with moved moves on their new inputs."""
+    name = f"{custom_page.file_prefix(key)}-commands.bin"
+    data = None
+    if fighter.get("move_buttons"):
+        try:
+            data = command_list_module.commands_file(style_lists(fighter["donor"]), fighter["move_buttons"])
+        except ValueError as error:
+            return f"Command list: {error}"
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            if not target.is_dir():
+                continue
+            if data:
+                (target / name).write_bytes(data)
+            else:
+                (target / name).unlink(missing_ok=True)
+    except OSError as error:
+        return f"Command list: {error}"
+    return None
+
+
 def write_rival(root: Path, key: str, fighter: dict) -> str | None:
     """<Key>-T3-rival.txt (patch 22): the stock fighter met at stage 9 in Arcade (or none)."""
     name = f"{custom_page.file_prefix(key)}-rival.txt"
@@ -1039,7 +1075,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
         if problem:
             warnings.append(f"{c['name']}: {problem}")
         for problem in (write_name_call(root, key, c), write_stage_look(root, key, c), write_moves(root, key, c),
-                        write_rival(root, key, c)):
+                        write_rival(root, key, c), write_commands(root, key, c)):
             if problem:
                 warnings.append(f"{c['name']}: {problem}")
     if left_out:

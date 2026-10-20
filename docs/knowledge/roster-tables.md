@@ -39,4 +39,9 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   custom fighter, costume 0; where the draw also had it at stages 1-8, Heihachi takes that place.
   Tested: rival Paul (0) at stage 9 in three runs, Ogre and True Ogre after it; log "Kittest has
   rival 0", "rival 0 at stage 9".
-- Not changed: stage 10 (Ogre, then True Ogre); replacing it is not tried (the transformation).
+- **tested** (scratch `arcade2.py`) Stage 10 (`0x800AFB18 + 36`) written to Heihachi (13) while
+  stage 1 loads: KITTEST met Heihachi at stage 10 in his own arena, then the cutscene, True
+  Ogre and the ending, no crash. But the cutscene (Ogre grabs Heihachi and turns into True Ogre;
+  both cutscene actors are reloaded, P1 = 13) then plays Ogre's animation on the stage 10
+  fighter's model with a misplaced camera. So an own final boss is not offered; stage 10 stays
+  Ogre.
