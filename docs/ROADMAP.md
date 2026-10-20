@@ -39,4 +39,4 @@ Six modules over one local app (`character-builder/`). Status words: **done** (t
 
 ## Release
 
-v0.7.0 and v0.6.0 released 2026-10-19; v0.5.1 released 2026-10-16 (kitbash HUD text fix); v0.5.0 the same day (patches 17-19, Studio modules, name call Silent by default) (`knowledge/testing.md` "Releases").
+v0.7.1 released 2026-10-20 (Model Importer: more model kinds); v0.7.0 and v0.6.0 released 2026-10-19; v0.5.1 released 2026-10-16 (kitbash HUD text fix); v0.5.0 the same day (patches 17-19, Studio modules, name call Silent by default) (`knowledge/testing.md` "Releases").

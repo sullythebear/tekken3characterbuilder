@@ -1,8 +1,8 @@
 # Project status
 
 Updated: 2026-10-19.
-- Released: builder 0.7.0 (tag v0.7.0, 2026-10-19) and 0.6.0, both with the owner's permission.
-- Pushed: `main` up to 4cbe908 (0.7.0). Later commits are local.
+- Released: builder 0.7.1 (tag v0.7.1, 2026-10-20), 0.7.0 and 0.6.0, all with the owner's permission.
+- Pushed: `main` up to a050038 (0.7.1). Later commits are local.
 
 ## In 0.7.0
 
