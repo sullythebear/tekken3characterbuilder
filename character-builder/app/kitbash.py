@@ -127,19 +127,21 @@ def recolour(colour: int, hue: float, sat: float, light: float, keep_skin: bool 
     return out if out & 0x7FFF else 0x8000 | (colour & 0x8000)   # black, not see-through
 
 
-def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None, shape: dict | None = None):
+def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None, shape: dict | None = None,
+          pieces: dict | None = None):
     """parts: {part name: model}; missing parts come from the base. shape: body shape factors
     (SHAPES). -> (stock base model bytes, new model bytes, texture dict for own_model_file, report).
     Accessories (rows 21-26: Nina's ponytail, Julia's braid) come with the part they hang on; a
-    mix that does not fit with them is built again without them."""
+    mix that does not fit with them is built again without them. pieces: {"model:clut": [hue,
+    saturation, lightness]}, one piece of clothing recoloured (list_pieces names them)."""
     import model_import as MI
     try:
-        return _build(root, base, parts, log, tint, shape, accessories=True)
+        return _build(root, base, parts, log, tint, shape, accessories=True, pieces=pieces)
     except MI.Budget as error:
         if "its fighter is" in str(error):            # the height gate: accessories change nothing
             raise
         log(f"{error}: built again without the accessories (ponytails, braids)")
-        return _build(root, base, parts, log, tint, shape, accessories=False)
+        return _build(root, base, parts, log, tint, shape, accessories=False, pieces=pieces)
 
 
 def _accessories(sm, roots) -> list:
@@ -164,7 +166,58 @@ def _accessories(sm, roots) -> list:
     return out
 
 
-def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None, accessories=True):
+def _row_models(base: int, parts: dict) -> dict:
+    """{row: model} of a mix: each part's rows from its model, the rest from the base."""
+    out = {}
+    for name, rows in PARTS.items():
+        if name in FINE and name not in parts:
+            continue                           # a finer part only when chosen
+        for r in rows:
+            out[r] = parts.get(name, base)
+    return out
+
+
+PART_OF_ROW = {r: name for name, rows in PARTS.items() if name not in FINE for r in rows}
+MIN_PIECE = 4                          # fewer polygons than this: a detail, not offered as a piece
+
+
+def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
+    """The pieces of clothing of a mix: one per colour table of a source model, with the body part
+    that uses it most, how many polygons and its average colour (#rrggbb)."""
+    from fmt import row, block, parse_c_ps1
+    src = {m: Source(root, m) for m in {base, *parts.values()}}
+    row_model = _row_models(base, parts)
+    use = {}
+    rows = [(r, row_model[r], r) for r in range(1, 21)]
+    for mdl in set(row_model.values()):
+        mine = {r for r, m_ in row_model.items() if m_ == mdl}
+        rows += [(r, mdl, top) for r, top in _accessories(src[mdl], mine)]
+    for r, mdl, top in rows:
+        sm = src[mdl]
+        w = row(sm.m, r)
+        if w[1] <= 2 or w[2] <= 2:
+            continue
+        for _, mat, _ in parse_c_ps1(block(sm.m, w[2])):
+            if mat is None or mat & 0x8000:            # 8-bit areas: skin and faces, kept as they are
+                continue
+            key = (mdl, mat & 0x7EFF)
+            part = PART_OF_ROW.get(SECOND.get(top, top), "body")
+            use.setdefault(key, {})
+            use[key][part] = use[key].get(part, 0) + 1
+    out = []
+    for (mdl, clut), by_part in use.items():
+        cols = [c for c in src[mdl].cluts.get(clut, []) if c & 0x7FFF]
+        if not cols or sum(by_part.values()) < MIN_PIECE:
+            continue
+        rgb = [round(sum((c >> k) & 31 for c in cols) / len(cols) * 255 / 31) for k in (0, 5, 10)]
+        out.append({"key": f"{mdl}:{clut}", "model": mdl, "part": max(by_part, key=by_part.get),
+                    "polygons": sum(by_part.values()), "colour": "#%02x%02x%02x" % tuple(rgb)})
+    order = list(PARTS)
+    out.sort(key=lambda p: (order.index(p["part"]) if p["part"] in order else 99, -p["polygons"]))
+    return out
+
+
+def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None, accessories=True, pieces=None):
     scale = shape_scale(clean_shape(shape))
     import anim_model as A
     from fmt import row, block, parse_b, parse_c_ps1
@@ -179,12 +232,11 @@ def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None,
         if abs(ratio - 1) > FIT:
             raise MI.Budget(f"the {name} of model {mdl} does not fit: its fighter is {ratio * 100 - 100:+.0f} % "
                             f"of the base's height (at most {FIT * 100:.0f} %)")
-    row_model = {}
-    for name, rows in PARTS.items():
-        if name in FINE and name not in parts:
-            continue                           # a finer part only when chosen
-        for r in rows:
-            row_model[r] = parts.get(name, base)
+    for key, (h, s_, l) in (pieces or {}).items():      # one piece of clothing in its own colours
+        mdl, clut = (int(x) for x in key.split(":"))
+        if mdl in src and clut in src[mdl].cluts:
+            src[mdl].cluts[clut] = [recolour(c, h, s_, l, keep_skin=False) for c in src[mdl].cluts[clut]]
+    row_model = _row_models(base, parts)
     frame_of = lambda r: SECOND.get(r, r)
     acc = []                                   # (model, accessory row, main row it hangs on)
     if accessories:
@@ -744,12 +796,14 @@ def main():
     ap.add_argument("--colours", type=lambda v: (lambda h, s, l, k: (float(h), float(s), float(l), k == "1"))(*v.split(",")),
                     help="hue,saturation,lightness,keep skin (1/0): e.g. 120,100,0,1")
     ap.add_argument("--shape", type=json.loads, default=None, help='body shape JSON, e.g. {"head": 1.2, "arms": 1.1}')
+    ap.add_argument("--pieces", type=json.loads, default=None, help='piece colours JSON, e.g. {"20:64": [120, 100, 0]}')
+    ap.add_argument("--list-pieces", action="store_true", help="print the mix's pieces of clothing as JSON")
     a = ap.parse_args()
     X.setup(a.root)
     if a.heights is not None:
         print(json.dumps({m: round(Source(a.root, m).height(), 1) for m in a.heights}))
         return
-    if a.base is None or a.out is None:
+    if a.base is None or (a.out is None and not a.list_pieces):
         raise SystemExit("ERROR: --base and --out are needed to build")
     parts = {}
     for p in a.part:
@@ -757,9 +811,12 @@ def main():
         if n not in PARTS:
             raise SystemExit(f"unknown part {n}")
         parts[n] = int(v)
+    if a.list_pieces:
+        print(json.dumps(list_pieces(a.root, a.base, parts)))
+        return
     import model_import as MI
     try:
-        stock, new, tx, report = build(a.root, a.base, parts, tint=a.colours, shape=a.shape)
+        stock, new, tx, report = build(a.root, a.base, parts, tint=a.colours, shape=a.shape, pieces=a.pieces)
     except MI.Budget as error:
         text = str(error)
         if "GPU packets" in text:               # the writer's budget, said for a player

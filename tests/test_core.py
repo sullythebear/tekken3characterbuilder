@@ -458,6 +458,13 @@ class StageLabTests(unittest.TestCase):
 
 
 class KitColourTests(unittest.TestCase):
+    def test_clean_pieces(self):
+        self.assertEqual(server.clean_kit_pieces(None), {})
+        self.assertEqual(server.clean_kit_pieces({"20:64": [500, 100, -99], "10:65": [0, 100, 0], "x:1": [1, 1, 1],
+                                                  "4:72": [10, 50]}), {"20:64": [180, 100, -40]})
+        with self.assertRaises(ValueError):
+            server.clean_kit_pieces({"20:64": ["red", 1, 2]})
+
     def test_clean(self):
         self.assertIsNone(server.clean_kit_colours(None))
         self.assertIsNone(server.clean_kit_colours([0, 100, 0, True]))          # the parts' own colours

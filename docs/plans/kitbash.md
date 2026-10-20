@@ -37,7 +37,8 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
 2. Builder UI: part pickers per body part with 3D preview, saves `characters/<id>/kit.json`
    and writes model.bin on sync.
 3. In-game test (8-bit CLUT ids 16/32 when two models' skin areas are used).
-4. Colour variants (existing Clothing tab) on kitbash fighters.
+4. Done 2026-10-20 as "Pieces of clothing" in the Builder (see below): a costume variant cannot
+   show on an own model (models-costumes.md), so the mix itself takes per-piece colours.
 
 ## CLUT space (tested 2026-10-16, user report "text glitches" in fights)
 
@@ -215,3 +216,19 @@ all 6 the same).
   Xiaoyu's whole skin on Nina (pigtails), 600 frames each, 0 data words differing.
 - kitregress: the mixes now carry their accessories (re-approved); body35-on-model30 the same.
 - Body, head and arm mixes with accessories: 0 of 1028 fail each.
+
+## Pieces of clothing (2026-10-20, tested in game)
+
+- `kitbash.list_pieces(root, base, parts)` (CLI `--list-pieces`): one piece per 4-bit colour
+  table of a source model in the mix (8-bit tables are skin and faces: left out; fewer than
+  `MIN_PIECE` = 4 polygons: a detail, left out), with the body part that uses it most, polygon
+  count and average colour. KITTEST's mix: 17 pieces.
+- `build(..., pieces={"model:clut": [hue, saturation, lightness]})` recolours those tables in the
+  sources before the mix is assembled (`recolour`, skin not kept: a piece is chosen on purpose);
+  the mix's overall colours apply on top.
+- Server: `clean_kit_pieces`, `/api/kit/pieces` (cached `cache/kit/pieces-*.json`), `pieces`
+  through preview (cache key), build (`own_model.pieces`), saved looks and package rebuilds.
+  UI (`builder.js`): "Pieces of clothing" with a swatch, hue and lightness per piece and a reset.
+- Browser: KITTEST's list (Head 1-5, Body 1-2, arms, legs), Body 1 hue +150 showed in the 3D
+  preview (not saved). In game: KITTEST's mix with the hip piece and the hair recoloured fought
+  600 frames, 0 data words differing; KITTEST's model restored.

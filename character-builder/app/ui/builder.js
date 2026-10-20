@@ -4,6 +4,7 @@
   const PART_NAMES = { head: "Head", body: "Body", arm_l: "Left arm", arm_r: "Right arm",
     leg_l: "Left leg", leg_r: "Right leg", hands: "Hands (gloves)" };
   let models = null, fit = 0.07, busy = false, previewTimer = null, previewRun = 0;
+  let pieceColours = {}, piecesFor = "";    // {"model:clut": [hue, saturation, lightness]}
 
   // colour presets: [hue, saturation, lightness]
   // body shape presets: head, arms, legs, body in % (the sliders' ranges)
@@ -62,7 +63,63 @@
     const sh = own.file === "Character Builder" ? own.shape || {} : {};
     for (const input of document.querySelectorAll(".kit-shape input"))
       input.value = String(Math.round((sh[input.dataset.shape] || 1) * 100));
+    pieceColours = own.file === "Character Builder" ? { ...(own.pieces || {}) } : {};
     matchBuild();
+    loadPieces();
+  }
+
+  // pieces of clothing of the current mix (kitbash.list_pieces): a swatch, hue and lightness each
+  const hsl = (hex, h, l) => {                  // the swatch with the piece's hue and lightness
+    const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    let H = 0, L = (mx + mn) / 2, S = mx === mn ? 0 : (L > 0.5 ? (mx - mn) / (2 - mx - mn) : (mx - mn) / (mx + mn));
+    if (mx !== mn) H = mx === r ? (g - b) / (mx - mn) + (g < b ? 6 : 0) : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4;
+    return `hsl(${(H * 60 + h + 360) % 360} ${Math.round(S * 100)}% ${Math.max(0, Math.min(100, Math.round(L * 100 + l)))}%)`;
+  };
+  async function loadPieces() {
+    const parts = chosen(), costume = Number($("kit-costume").value);
+    const key = JSON.stringify([state.current.id, costume, parts]);
+    if (key === piecesFor || !state.current.id) return;
+    piecesFor = key;
+    const list = $("kit-pieces");
+    let pieces;
+    try {
+      pieces = (await api("/api/kit/pieces", { id: state.current.id, costume, parts })).pieces;
+    } catch (e) { list.textContent = e.message; return; }
+    if (key !== piecesFor) return;
+    for (const k of Object.keys(pieceColours)) if (!pieces.some((p) => p.key === k)) delete pieceColours[k];
+    list.textContent = "";
+    const count = {};
+    for (const p of pieces) {
+      count[p.part] = (count[p.part] || 0) + 1;
+      const model = models.find((m) => m.model === p.model);
+      const row = document.createElement("div");
+      row.className = "kit-piece";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      const name = document.createElement("span");
+      name.textContent = `${PART_NAMES[p.part] || p.part} ${count[p.part]}`;
+      name.title = model ? `${label(model)}, ${p.polygons} polygons` : `${p.polygons} polygons`;
+      const [h0, , l0] = pieceColours[p.key] || [0, 100, 0];
+      const hue = Object.assign(document.createElement("input"), { type: "range", min: -180, max: 180, value: h0, title: "Hue" });
+      const light = Object.assign(document.createElement("input"), { type: "range", min: -40, max: 40, value: l0, title: "Lightness" });
+      hue.setAttribute("aria-label", `Hue of ${name.textContent}`);
+      light.setAttribute("aria-label", `Lightness of ${name.textContent}`);
+      const show = () => {
+        const h = Number(hue.value), l = Number(light.value);
+        if (h || l) pieceColours[p.key] = [h, 100, l]; else delete pieceColours[p.key];
+        sw.style.background = hsl(p.colour, h, l);
+        row.classList.toggle("changed", Boolean(h || l));
+      };
+      for (const input of [hue, light]) {
+        input.addEventListener("input", show);
+        input.addEventListener("change", schedulePreview);
+      }
+      show();
+      row.append(sw, name, hue, light);
+      list.append(row);
+    }
+    $("kit-pieces-box").hidden = !pieces.length;
   }
 
   // only parts of fighters with a similar build (the server checks it too)
@@ -91,7 +148,8 @@
     return out;
   }
 
-  const nothing = () => !Object.keys(chosen()).length && !colours() && !Object.keys(shape()).length;
+  const nothing = () => !Object.keys(chosen()).length && !colours() && !Object.keys(shape()).length &&
+    !Object.keys(pieceColours).length;
 
   // saved looks (server looks.json): parts, colours and shape under a name, for any fighter
   let looks = [];
@@ -121,6 +179,8 @@
     [$("kit-hue").value, $("kit-sat").value, $("kit-light").value, $("kit-skin").checked] = c;
     for (const input of document.querySelectorAll(".kit-shape input"))
       input.value = String(Math.round(((look.shape || {})[input.dataset.shape] || 1) * 100));
+    pieceColours = { ...(look.pieces || {}) };
+    piecesFor = "";
     const left = Object.keys(look.kit).filter((p) => !chosen()[p]);
     if (left.length) toast(`Not for this style's build: ${left.join(", ")}`);
     schedulePreview();
@@ -129,7 +189,8 @@
     const name = prompt("Name for this look:", "");
     if (!name) return;
     try {
-      looks = (await api("/api/looks/save", { name, donor: state.current.donor, parts: chosen(), colours: colours(), shape: shape() })).looks;
+      looks = (await api("/api/looks/save", { name, donor: state.current.donor, parts: chosen(), colours: colours(), shape: shape(),
+        pieces: pieceColours })).looks;
       showLooks(name.trim());
       toast("Look saved");
     } catch (e) { toast(e.message); }
@@ -165,6 +226,7 @@
     [$("kit-hue").value, $("kit-sat").value, $("kit-light").value] = [hue, 100, 0];
     // sometimes another build too (never the extremes)
     setShape(Math.random() < 0.3 ? SHAPE_PRESETS[1 + Math.floor(Math.random() * 3)][1] : SHAPE_PRESETS[0][1]);
+    pieceColours = {};
     schedulePreview();
   }
 
@@ -176,12 +238,13 @@
 
   async function preview() {
     const parts = chosen(), note = $("kit-progress"), run = ++previewRun;
+    loadPieces();
     if (!state.current.id || nothing()) return;
     note.hidden = false;
     note.textContent = "Preview: building the mix…";
     try {
       const json = await api("/api/kit/preview", { id: state.current.id, costume: Number($("kit-costume").value), parts,
-        colours: colours(), shape: shape() });
+        colours: colours(), shape: shape(), pieces: pieceColours });
       if (run !== previewRun) return;
       showView(true);
       T3Costumes.preview(json, "Preview of the chosen parts: not built yet. Build puts it in the game.");
@@ -208,7 +271,7 @@
     note.textContent = "Building the fighter from the chosen parts…";
     try {
       const saved = await api("/api/kit/build", { id: state.current.id, costume: Number($("kit-costume").value), parts,
-        colours: colours(), shape: shape() });
+        colours: colours(), shape: shape(), pieces: pieceColours });
       state.current = copyFighter(saved);
       await loadCharacters();
       fillForm();
@@ -230,6 +293,7 @@
     $("kit-look-delete").addEventListener("click", deleteLook);
     loadLooks();
     $("kit-random").addEventListener("click", () => { randomize(); retries = 1; });
+    $("kit-pieces-reset").addEventListener("click", () => { pieceColours = {}; piecesFor = ""; loadPieces(); schedulePreview(); });
     $("kit-costume").addEventListener("change", () => { matchBuild(); schedulePreview(); });
     for (const id of ["kit-hue", "kit-sat", "kit-light", "kit-skin"]) $(id).addEventListener("change", schedulePreview);
     for (const input of document.querySelectorAll(".kit-shape input")) {

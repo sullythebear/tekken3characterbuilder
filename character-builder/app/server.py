@@ -1535,6 +1535,28 @@ def clean_kit_colours(value) -> list | None:
     return None if (h, s_, l) == (0, 100, 0) else [h, s_, l, keep]
 
 
+PIECES_MAX = 40
+
+
+def clean_kit_pieces(value) -> dict:
+    """Pieces of clothing in their own colours: {"model:clut": [hue -180..180, saturation 0..200,
+    lightness -40..40]} (kitbash.list_pieces names the keys); unchanged pieces are left out."""
+    out = {}
+    for key, v in (value or {}).items() if isinstance(value, dict) else ():
+        if not re.fullmatch(r"\d{1,2}:\d{1,3}", str(key)) or not isinstance(v, (list, tuple)) or len(v) != 3:
+            continue
+        try:
+            h, s_, l = int(v[0]), int(v[1]), int(v[2])
+        except (TypeError, ValueError):
+            raise ValueError("Invalid piece colours.") from None
+        h, s_, l = max(-180, min(180, h)), max(0, min(200, s_)), max(-40, min(40, l))
+        if (h, s_, l) != (0, 100, 0):
+            out[str(key)] = [h, s_, l]
+        if len(out) >= PIECES_MAX:
+            break
+    return out
+
+
 # body shape: {name: (lowest, highest)} factor, as kitbash.SHAPES (head on all axes; arms, legs
 # and body across the bone)
 KIT_SHAPES = {"head": (0.85, 1.3), "arms": (0.8, 1.3), "legs": (0.8, 1.3), "body": (0.85, 1.25)}
@@ -1558,9 +1580,11 @@ def clean_kit_shape(value) -> dict:
 
 
 def run_kitbash(root: Path, base: int, kit: dict, out: Path, colours: list | None = None,
-                shape: dict | None = None) -> tuple[str | None, str]:
+                shape: dict | None = None, pieces: dict | None = None) -> tuple[str | None, str]:
     """kitbash.py: the style's model with body parts of other fighters -> own model file."""
     args = [venv_python(root), str(APP / "kitbash.py"), "--root", str(root), "--base", str(base), "--out", str(out)]
+    if pieces:
+        args.append("--pieces=" + json.dumps(pieces, separators=(",", ":")))
     if shape:
         args.append("--shape=" + json.dumps(shape, separators=(",", ":")))
     if colours:
@@ -1592,7 +1616,7 @@ def list_looks() -> list[dict]:
     return [l for l in looks if isinstance(l, dict) and isinstance(l.get("name"), str)][:LOOKS_MAX]
 
 
-def save_look(name: str, donor, parts, colours=None, shape=None) -> list[dict]:
+def save_look(name: str, donor, parts, colours=None, shape=None, pieces=None) -> list[dict]:
     name = re.sub(r"[^\w .\-]", "", str(name or "")).strip()[:32]
     if not name:
         raise ValueError("Give the look a name.")
@@ -1600,7 +1624,7 @@ def save_look(name: str, donor, parts, colours=None, shape=None) -> list[dict]:
     if not kit and not colours and not shape:
         raise ValueError("Choose body parts, colours or a body shape first.")
     look = {"name": name, "donor": donor if isinstance(donor, int) and 0 <= donor <= 20 else None,
-            "kit": kit, "colours": colours, "shape": shape}
+            "kit": kit, "colours": colours, "shape": shape, "pieces": clean_kit_pieces(pieces)}
     looks = [l for l in list_looks() if l["name"] != name]
     if len(looks) >= LOOKS_MAX:
         raise ValueError(f"At most {LOOKS_MAX} saved looks: delete one first.")
@@ -1615,7 +1639,7 @@ def delete_look(name: str) -> list[dict]:
     return looks
 
 
-def kit_preview(cid: str, costume: int, parts, colours=None, shape=None) -> bytes:
+def kit_preview(cid: str, costume: int, parts, colours=None, shape=None, pieces=None) -> bytes:
     """Mesh JSON of a body-part mix for the 3D view, built in the cache only: the fighter's own
     model is not touched. Refusals (build, colours, texture page) come back as the error."""
     root = project_root()
@@ -1628,13 +1652,15 @@ def kit_preview(cid: str, costume: int, parts, colours=None, shape=None) -> byte
     models = donor_models()["donors"].get(str(character["donor"]), [])
     if not 0 <= costume < len(models):
         raise ValueError("This style has no such costume.")
-    key = "-".join(f"{k}{v}" for k, v in sorted(kit.items())) + ("-c" + "_".join(map(str, colours)) if colours else "")         + ("-s" + "_".join(f"{k}{v}" for k, v in sorted(shape.items())) if shape else "")
+    pieces = clean_kit_pieces(pieces)
+    key = "-".join(f"{k}{v}" for k, v in sorted(kit.items())) + ("-c" + "_".join(map(str, colours)) if colours else "")
+    key += f"-p{zlib.crc32(json.dumps(pieces, sort_keys=True).encode()):08x}" if pieces else ""         + ("-s" + "_".join(f"{k}{v}" for k, v in sorted(shape.items())) if shape else "")
     out = CACHE / "kit" / f"{models[costume]}-{key}.bin"
     js = out.with_suffix(".json")
     with model_lock:
         if not js.is_file():
             out.parent.mkdir(parents=True, exist_ok=True)
-            problem, text = run_kitbash(root, models[costume], kit, out, colours, shape)
+            problem, text = run_kitbash(root, models[costume], kit, out, colours, shape, pieces)
             if problem or not out.is_file():
                 raise ValueError(problem or "The character builder failed.")
             problem, _ = run_model_tool(root, ["ownjson", "--file", str(out), "--out", str(js)])
@@ -1647,7 +1673,34 @@ def kit_preview(cid: str, costume: int, parts, colours=None, shape=None) -> byte
     return js.read_bytes()
 
 
-def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=None, shape=None) -> dict:
+def kit_pieces(cid: str, costume: int, parts) -> list[dict]:
+    """The pieces of clothing of a body-part mix (kitbash --list-pieces, cached)."""
+    root = project_root()
+    if not root or creator_patch.project_kind(root) != "expanded":
+        raise ValueError("The character builder needs Tekken 3 Expanded.")
+    kit = clean_kit(parts)
+    character = get_character(safe_id(cid))
+    models = donor_models()["donors"].get(str(character["donor"]), [])
+    if not 0 <= costume < len(models):
+        raise ValueError("This style has no such costume.")
+    key = "-".join(f"{k}{v}" for k, v in sorted(kit.items()))
+    path = CACHE / "kit" / f"pieces-{models[costume]}-{key}.json"
+    if not path.is_file():
+        args = [venv_python(root), str(APP / "kitbash.py"), "--root", str(root), "--base", str(models[costume]),
+                "--list-pieces"] + [a for name, model in kit.items() for a in ("--part", f"{name}={model}")]
+        try:
+            done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=120, creationflags=NO_WINDOW, cwd=str(APP))
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ValueError(f"The character builder could not run: {error}") from None
+        if done.returncode:
+            raise ValueError("The pieces of clothing could not be read.")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(done.stdout.strip().splitlines()[-1], encoding="utf-8")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=None, shape=None, pieces=None) -> dict:
     """A model built from Tekken 3's own fighters' body parts (read from the player's disc) over
     the style's costume: characters/<id>/model.bin, own_model {"kit": {...}}. Like an import, the
     model it replaces can be restored with Undo."""
@@ -1663,8 +1716,9 @@ def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=Non
     if not 0 <= costume < len(models):
         raise ValueError("This style has no such costume.")
     out = folder / "model-new.bin"
+    pieces = clean_kit_pieces(pieces)
     with model_lock:
-        problem, text = run_kitbash(root, models[costume], kit, out, colours, shape)
+        problem, text = run_kitbash(root, models[costume], kit, out, colours, shape, pieces)
     if problem or not out.is_file():
         out.unlink(missing_ok=True)
         raise ValueError(problem or "The character builder failed.")
@@ -1684,7 +1738,7 @@ def build_kit(cid: str, costume: int, parts, keep_undo: bool = True, colours=Non
         old.unlink()
     out.replace(folder / "model.bin")
     made = re.findall(r"(\d+) triangles", text.strip().splitlines()[-1]) if text.strip() else []
-    data["own_model"] = {"file": "Character Builder", "kit": kit, "colours": colours, "shape": shape,
+    data["own_model"] = {"file": "Character Builder", "kit": kit, "colours": colours, "shape": shape, "pieces": pieces,
                          "half_textures": "textures at half size" in text, "costume": costume,
                          "model": models[costume],
                          "triangles": int(made[-1]) if made else None, "textured": True,
@@ -2107,10 +2161,10 @@ def import_character(payload: str) -> dict:
             path.write_bytes(raw)
     name = next((n for n in ("source.fbx", "source.glb", "source.vrm") if n in files), None)
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
-    if not name and (own.get("kit") or own.get("colours") or own.get("shape")):   # a Character Builder model: rebuilt from the choices
+    if not name and (own.get("kit") or own.get("colours") or own.get("shape") or own.get("pieces")):   # a Character Builder model: rebuilt from the choices
         try:
             built = build_kit(saved["id"], int(own.get("costume", 0) or 0), own.get("kit") or {}, keep_undo=False,
-                              colours=own.get("colours"), shape=own.get("shape"))
+                              colours=own.get("colours"), shape=own.get("shape"), pieces=own.get("pieces"))
             return {**built, "model_warnings": []}
         except ValueError as error:
             return {**saved, "model_warnings": [f"The package's body parts could not be built: {error}"]}
@@ -2353,16 +2407,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"looks": list_looks()})
             if path == "/api/looks/save":
                 return self._json({"looks": save_look(data.get("name"), data.get("donor"), data.get("parts"),
-                                                      data.get("colours"), data.get("shape"))})
+                                                      data.get("colours"), data.get("shape"), data.get("pieces"))})
             if path == "/api/looks/delete":
                 return self._json({"looks": delete_look(str(data.get("name", "")))})
             if path == "/api/kit/preview":
                 return self._send(200, kit_preview(str(data.get("id", "")), int(data.get("costume", 0)),
-                                                   data.get("parts"), data.get("colours"), data.get("shape")),
+                                                   data.get("parts"), data.get("colours"), data.get("shape"),
+                                                   data.get("pieces")),
                                   "application/json")
+            if path == "/api/kit/pieces":
+                return self._json({"pieces": kit_pieces(str(data.get("id", "")), int(data.get("costume", 0)),
+                                                        data.get("parts"))})
             if path == "/api/kit/build":
                 saved = build_kit(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"),
-                                  colours=data.get("colours"), shape=data.get("shape"))
+                                  colours=data.get("colours"), shape=data.get("shape"), pieces=data.get("pieces"))
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/namecall/preview":
                 return self._json(name_call_preview(data))

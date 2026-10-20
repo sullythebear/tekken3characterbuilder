@@ -50,6 +50,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Move Lab damage: `command_list.basic_damage` / `moveset_key` / `with_damage` (BNS record 280 + key, shared
   lists in SLUS_004.02); `model_export commandlist --style` prints {moves, basic, own, records, key}; server
   cache `commandlist5-<model>-<style>-<crc of its OWN_MOVES>.json`; UI `movelab.js showBasic` (grids `#basic-list`, `#own-list`).
+- Builder pieces: `kitbash.list_pieces` / `build(pieces=)`, server `clean_kit_pieces` `kit_pieces` (`/api/kit/pieces`), UI `builder.js loadPieces`. Accessories: `kitbash._accessories`, `_row_models`.
 - Own moves: `command_list.OWN_MOVES` {style: {COMMAND LIST command: record}} measured in game (scratch
   method in `knowledge/moves.md`), `own_records` reads their damage from the disc; patch 20 changes them
   like basic ones (the keys go into `records`; server accepts upper-case held directions).
