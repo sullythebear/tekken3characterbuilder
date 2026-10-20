@@ -90,6 +90,10 @@ def find(src) -> list[dict]:
     P, T = src["P"], src["T"]
     H = float(np.ptp(P[:, 1])) or 1.0
     vpart = _parts_of_vertices(src)
+    # the core: vertices whose own bone is the part's (not wings or a tail on extra bones, which
+    # would make the radius they are measured against as big as themselves: MegaAngel's wings)
+    dom = [max(w, key=w.get) if w else -1 for w in src["weights"]]
+    own = np.array([d >= 0 and MI._part(src["bones"][d]["name"])[0] == p for d, p in zip(dom, vpart)])
     weld = _weld(P)
     out = []
     for part in BODY:
@@ -100,7 +104,8 @@ def find(src) -> list[dict]:
         if j is None:
             continue
         d = np.linalg.norm(P - j, axis=1)
-        r = float(np.median(d[on]))
+        core = on & own if (on & own).sum() >= 8 else on
+        r = float(np.median(d[core]))
         sel = on & (d > FAR * r)
         nb = {}
         for t in T:

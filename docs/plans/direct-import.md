@@ -260,4 +260,9 @@ MeganTheFox, Two-Tails, Buffedwolf.
   says "row 19 needs N texture coordinates"; `build` shrinks by 255 / N at once. MeganTheFox:
   352 s, same look (re-approved); Two-Tails' tries were the head-detail halvings (349 s, the same
   model); every other model byte-identical.
-- Open: wings on the arms (MegaAngel) cannot be folded or removed yet.
+- MegaAngel's wings were missed: they hang on extra bones on the spine, and the radius pieces
+  are measured against was the median over all chest vertices, wings included (0.35 vs. wing
+  tips at 0.88). `protrusions.find` now takes the radius from vertices on the part's own bones.
+  Newly listed and folded by default: MegaAngel's four wing halves, the tails of Buffedwolf,
+  Two-Tails and Crowley's coat; Seed-san unchanged. The five re-approved after a look (speckle
+  of Buffedwolf 0.40 % and Two-Tails 1.53 %, no visible change); every other model identical.
