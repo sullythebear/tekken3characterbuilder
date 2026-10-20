@@ -129,7 +129,42 @@ def recolour(colour: int, hue: float, sat: float, light: float, keep_skin: bool 
 
 def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = None, shape: dict | None = None):
     """parts: {part name: model}; missing parts come from the base. shape: body shape factors
-    (SHAPES). -> (stock base model bytes, new model bytes, texture dict for own_model_file, report)."""
+    (SHAPES). -> (stock base model bytes, new model bytes, texture dict for own_model_file, report).
+    Accessories (rows 21-26: Nina's ponytail, Julia's braid) come with the part they hang on; a
+    mix that does not fit with them is built again without them."""
+    import model_import as MI
+    try:
+        return _build(root, base, parts, log, tint, shape, accessories=True)
+    except MI.Budget as error:
+        if "its fighter is" in str(error):            # the height gate: accessories change nothing
+            raise
+        log(f"{error}: built again without the accessories (ponytails, braids)")
+        return _build(root, base, parts, log, tint, shape, accessories=False)
+
+
+def _accessories(sm, roots) -> list:
+    """[(row, main row it hangs on)] of model sm's drawn accessory rows (21-26) whose chain ends on
+    one of roots (rows 21-24: word 6 is the part they hang on, 25/26 a second layer of it)."""
+    import anim_model as A
+    from fmt import row, nrows
+    out = []
+    for r in range(21, min(27, nrows(sm.m))):
+        w = row(sm.m, r)
+        if not (w[10] and w[1] > 2) or r not in sm.bind:
+            continue
+        top, seen = r, 0
+        while top > 20 and seen < 8:
+            part = row(sm.m, top)[6] & 0xFF
+            if part >= len(A.P2R):
+                top = None
+                break
+            top, seen = A.P2R[part], seen + 1
+        if top in roots:
+            out.append((r, top))
+    return out
+
+
+def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None, accessories=True):
     scale = shape_scale(clean_shape(shape))
     import anim_model as A
     from fmt import row, block, parse_b, parse_c_ps1
@@ -151,6 +186,11 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         for r in rows:
             row_model[r] = parts.get(name, base)
     frame_of = lambda r: SECOND.get(r, r)
+    acc = []                                   # (model, accessory row, main row it hangs on)
+    if accessories:
+        for mdl in set(row_model.values()):
+            mine = {r for r, m_ in row_model.items() if m_ == mdl}
+            acc += [(mdl, r, top) for r, top in _accessories(src[mdl], mine)]
 
     def place(sm, r, local):
         """A local point of row r of source sm, in the base's standing world."""
@@ -176,6 +216,19 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
                 key[k] = len(pos)
                 pos.append(place(sm, r, sl[1]))
                 owner.append(frame_of(r))
+    for mdl, r, top in acc:                    # rigid on the main row they hang on
+        sm = src[mdl]
+        Rs, Ts = sm.W[r]
+        Rr, Tr = sm.W[frame_of(top)]
+        for sl in sm.bind.get(r, []):
+            if sl is None or sl[0] != r:
+                continue
+            k = (mdl, r, sl[1])
+            if k not in key:
+                local = Rr.T @ (Rs @ np.array(sl[1], float) + Ts - Tr)
+                key[k] = len(pos)
+                pos.append(place(sm, top, local))
+                owner.append(frame_of(top))
     pos = np.array(pos)
     owner = np.array(owner)
 
@@ -183,8 +236,10 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
         """Vertex id of a slot (owner row, local) used by a row of model sm."""
         o, loc = r_slot
         k = (sm.model, o, loc)
-        if k in key and row_model[o] == sm.model:
+        if k in key and (o > 20 or row_model.get(o) == sm.model):
             return key[k]
+        if o > 20:
+            return None
         # borrowed from a row that now comes from another model: snap onto that row's
         # nearest vertex (closes the seam at neck, shoulder, hip, elbow...)
         p = place(sm, o, loc)
@@ -195,8 +250,7 @@ def build(root: Path, base: int, parts: dict, log=print, tint: tuple | None = No
 
     # 2. polygons with their own UVs and CLUTs
     faces = []
-    for r in range(1, 21):
-        sm = src[row_model[r]]
+    for r, sm in [(r, src[row_model[r]]) for r in range(1, 21)] + [(r, src[mdl]) for mdl, r, _ in acc]:
         w = row(sm.m, r)
         if w[1] <= 2 or r not in sm.bind:
             continue

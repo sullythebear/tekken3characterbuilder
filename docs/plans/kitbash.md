@@ -33,7 +33,7 @@ Chosen 2026-10-03 after the FBX import could not reach Namco's look automaticall
 
 ## Next
 
-1. Accessory rows 21-26 (ponytail, feathers on other models) with their parts.
+1. Done 2026-10-20: accessory rows 21-26 come with their part (see "Accessories" below).
 2. Builder UI: part pickers per body part with 3D preview, saves `characters/<id>/kit.json`
    and writes model.bin on sync.
 3. In-game test (8-bit CLUT ids 16/32 when two models' skin areas are used).
@@ -197,3 +197,21 @@ all 6 the same).
   bytes. In game: KITTEST's mix forced through it (limit 21500: 1025 → 973 triangles) fought
   900 frames, 0 of 4874 words differing, HUD intact. kitregress: the six mixes the same, a
   seventh (body 35 on model 30) approved. Head, arm and body mixes: **0 of 1028 fail** each.
+
+## Accessories (2026-10-20, tested in game)
+
+- **tested** The builder dropped rows 21-26: every mix lost Nina's ponytail (base row 21, 20
+  polygons) and a Julia head lost her two braids (rows 21, 22). 27 of the 48 models use them.
+- Rows 21-24 hang on the row `A.P2R[word 6]` (Nina's 21: part 17 = row 19, the head; Julia's 22
+  hangs on her 21); 25/26 are second layers. `kitbash._accessories` follows the chain to a main
+  row; the accessory comes from the model that gives that main row (with the head, the body...).
+- Its vertices are taken from the source model's standing frames (`Source.W[r]`) into the main
+  row's frame and become rigid on it (Tekken 3 has no hair physics: same look). Faces and
+  texels go through the same path as the main rows.
+- A mix that does not fit with them (rows, packets, slot) is built again without them, with a
+  log line; the height gate is not retried. Mokujin with body 35 (slot 18412) builds that way.
+- Renders: Nina plain and Julia's head on Nina match the stock models (ponytail, braids) in the
+  standing and the fight pose. In game on KITTEST: its own mix (Julia head, braids) and
+  Xiaoyu's whole skin on Nina (pigtails), 600 frames each, 0 data words differing.
+- kitregress: the mixes now carry their accessories (re-approved); body35-on-model30 the same.
+- Body, head and arm mixes with accessories: 0 of 1028 fail each.
