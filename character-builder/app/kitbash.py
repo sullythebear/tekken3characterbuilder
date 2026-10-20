@@ -214,7 +214,7 @@ def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
             continue
         rgb = [round(sum((c >> k) & 31 for c in cols) / len(cols) * 255 / 31) for k in (0, 5, 10)]
         out.append({"key": f"{mdl}:{clut}", "model": mdl, "part": max(by_part, key=by_part.get),
-                    "polygons": sum(by_part.values()), "colour": "#%02x%02x%02x" % tuple(rgb)})
+                    "sides": set(by_part), "polygons": sum(by_part.values()), "colour": "#%02x%02x%02x" % tuple(rgb)})
     order = list(PARTS)
     out.sort(key=lambda p: (order.index(p["part"]) if p["part"] in order else 99, -p["polygons"]))
     # tables of one fighter with nearly the same colour are one piece for the player (the shades
@@ -227,8 +227,14 @@ def list_pieces(root: Path, base: int, parts: dict) -> list[dict]:
         if home:
             home["keys"].append(p["key"])
             home["polygons"] += p["polygons"]
+            home["sides"] |= p["sides"]
         else:
             merged.append({**p, "keys": [p["key"]]})
+    for q in merged:                              # on both sides: "arms", "legs"
+        sides = q.pop("sides")
+        for pair, name in ((("arm_l", "arm_r"), "arms"), (("leg_l", "leg_r"), "legs")):
+            if q["part"] in pair and set(pair) <= sides:
+                q["part"] = name
     return merged
 
 

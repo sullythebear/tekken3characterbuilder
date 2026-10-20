@@ -235,3 +235,4 @@ all 6 the same).
 - Shorter list: tables of one fighter whose average colours lie within `SAME_PIECE` = 40 (RGB)
   are one piece (`keys`; the shades of a jacket, the same trim on arms and legs), named after
   the part with the most polygons; the UI sets them together. KITTEST: 17 -> 7 pieces.
+  Pieces on both sides are named "Arms" / "Legs", chosen gloves "Hands".
