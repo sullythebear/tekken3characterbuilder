@@ -67,8 +67,11 @@ picks for you; "Build" puts it on the chosen costume. Undo is on the Model
 Importer tab. A costume with an own model keeps that model's colours.
 Body colours (hue, saturation, lightness, keep skin tones) and body shape
 (head size; arms, legs and body thicker or thinner; presets Slim, Athletic,
-Heavy, Big head) work on the same build. "Save this look" keeps the parts,
-colours and shape under a name, to use on any fighter. When a mix's textures
+Heavy, Big head) work on the same build. "Pieces of clothing" lists the mix's
+pieces (each colour table of a fighter's part, skin and faces left out): give
+each its own hue and lightness. Ponytails, braids and other accessories come
+with the part they hang on. "Save this look" keeps the parts, colours, pieces
+and shape under a name, to use on any fighter. When a mix's textures
 do not fit Tekken 3's one texture page, some parts get their textures at half
 size (the preview says so). Taller or shorter fighters are not possible: the
 animations set the height.
