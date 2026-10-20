@@ -14,6 +14,7 @@
 | Home stage and music | **tested** (patch 17) | no |
 | Stage colour looks | **tested** (patch 19, night and sunset on Gon's stage) | no |
 | Changed move damage per fighter | **tested** (patch 20: KITTEST's 3 from 25 to 60 in its own moveset buffer, opponent untouched; skipped in a mirror match, which shares one buffer) | no |
+| CPU personality per fighter | **tested** (patch 22: the CPU's behaviour block while it plays the custom fighter; see `knowledge/roster-tables.md`) | no |
 | Rival at Arcade stage 9 per fighter | **tested** (patch 22: KITTEST's rival Paul at stage 9 in three Arcade runs, Ogre and True Ogre after it) | no |
 | In-game COMMAND LIST with moved moves | **tested** (patch 22: KITTEST's pause menu lists Liftshot under f+2 as well) | no |
 | Moves on other buttons per fighter | **tested** (patch 21: KITTEST's f+2 alias slot 303 pointed at Liftshot, record 239, in Arcade; it hit, the opponent's slot untouched, back to 116 when the buffer is someone else's) | no |

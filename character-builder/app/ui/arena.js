@@ -32,6 +32,7 @@
     $("stage").value = state.current.stage ?? "";
     $("music").value = state.current.music ?? "";
     $("rival").value = state.current.rival ?? "";
+    $("cpu").value = state.current.cpu || "";
     $("name-call").value = state.current.name_call || "off";
     loadVoices().then(() => { $("name-voice").value = state.current.name_call_voice || ""; });
     $("stage-look").value = state.current.stage_look || "";
@@ -83,7 +84,7 @@
 
   function body() {
     const value = (id) => ($(id).value === "" ? null : Number($(id).value));
-    const b = { stage: value("stage"), music: value("music"), rival: value("rival"), name_call: $("name-call").value,
+    const b = { stage: value("stage"), music: value("music"), rival: value("rival"), cpu: $("cpu").value || null, name_call: $("name-call").value,
       name_call_voice: $("name-voice").value || null,
       stage_look: $("stage-look").value || null, stage_tint: $("stage-tint").value,
       stage_strength: Number($("stage-strength").value) };
@@ -177,7 +178,7 @@
 
   function init() {
     fillLists();
-    for (const id of ["stage", "music", "rival", "stage-look"]) $(id).addEventListener("change", markDirty);
+    for (const id of ["stage", "music", "rival", "cpu", "stage-look"]) $(id).addEventListener("change", markDirty);
     for (const id of ["stage", "stage-look", "stage-tint", "stage-strength", "stage-view"]) $(id).addEventListener("change", sheet);
     for (const id of ["stage-tint", "stage-strength"]) $(id).addEventListener("change", markDirty);
     $("name-call").addEventListener("change", () => { markDirty(); showMode(); });

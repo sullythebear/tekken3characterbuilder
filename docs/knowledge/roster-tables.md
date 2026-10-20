@@ -45,3 +45,28 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   both cutscene actors are reloaded, P1 = 13) then plays Ogre's animation on the stage 10
   fighter's model with a misplaced camera. So an own final boss is not offered; stage 10 stays
   Ogre.
+
+## CPU behaviour per fighter: patch 22 (2026-10-20, tested in game)
+
+- **code** (Expanded `tekken3_difficulty_mod.c`) 0x80061488 picks the CPU's behaviour from the
+  table at 0x800231AC: 3 difficulties x 10 stages, 110-byte blocks, copied into the player's AI
+  structure at +568 (the HARD / stage 10 block also at +678).
+- **tested** (scratch `aiprobe.py`, full RAM dump) The AI structures are at 0x8009F318 +
+  0x330 * player: in an Arcade stage 1 fight on MEDIUM, both +568 held block (1, 0), and the
+  HARD / stage 10 block was at +678 of both.
+- **tested** (scratch `aieffect.py`, `aieffect2.py`; Arcade stage 1, the CPU's Jun fixed with
+  TEKKEN3_CPU_STAGE1) The block written to P2's +568 every 10 frames:
+  - P1 standing still: the CPU dealt exactly the same (318) with EASY / stage 1 and HARD / stage
+    10: the block does not change its attacks on a still opponent;
+  - P1 pressing f+1 every 10 frames for 40 s: EASY / stage 1 let 46, 44 and 36 hits in and dealt
+    257-335; HARD / stage 10 let 5-7 in and dealt 374-490. The block sets blocking and
+    punishing.
+- **T3CB-PATCH-22** `<prefix>-cpu.txt` (one block number, 0-29): while the CPU plays the custom
+  fighter (the player who is not 0x800AE1F8's human), its +568 holds that block every frame of a
+  fight. The builder offers Calm (0, EASY stage 1), Steady (14, MEDIUM stage 5), Fierce (29,
+  HARD stage 10).
+- **tested** (scratch `aicpu.py`, `aicheck.py`) KITTEST as the CPU's stage 1 opponent (Xiaoyu
+  P1): P2's +568 held block (2, 9) with `-cpu.txt` 29, P1's its own (1, 0); log "Kittest has CPU
+  block 29". P1's f+1 every 10 frames for 40 s: Calm let 17 and 27 hits in and dealt 314 and
+  323; Fierce let 16 and 15 in and dealt 370 and 387. Smaller than with Jun, the same direction:
+  how much the block changes depends on the style.

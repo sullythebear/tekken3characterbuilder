@@ -565,22 +565,35 @@ def write_commands(root: Path, key: str, fighter: dict) -> str | None:
     return None
 
 
-def write_rival(root: Path, key: str, fighter: dict) -> str | None:
-    """<Key>-T3-rival.txt (patch 22): the stock fighter met at stage 9 in Arcade (or none)."""
-    name = f"{custom_page.file_prefix(key)}-rival.txt"
-    rival = fighter.get("rival")
+def _write_number(root: Path, key: str, suffix: str, value, what: str) -> str | None:
+    """<Key>-T3<suffix> holding one number (or no file)."""
+    name = f"{custom_page.file_prefix(key)}{suffix}"
     try:
         for folder in custom_page.FOLDERS:
             target = root / folder
             if not target.is_dir():
                 continue
-            if rival is None:
+            if value is None:
                 (target / name).unlink(missing_ok=True)
             else:
-                (target / name).write_text(f"{int(rival)}\n", encoding="ascii")
+                (target / name).write_text(f"{int(value)}\n", encoding="ascii")
     except OSError as error:
-        return f"Rival: {error}"
+        return f"{what}: {error}"
     return None
+
+
+def write_rival(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-rival.txt (patch 22): the stock fighter met at stage 9 in Arcade (or none)."""
+    return _write_number(root, key, "-rival.txt", fighter.get("rival"), "Rival")
+
+
+# CPU personality (patch 22): a block of the game's CPU behaviour table (difficulty * 10 + stage)
+CPU_BLOCKS = {"calm": 0, "steady": 14, "fierce": 29}
+
+
+def write_cpu(root: Path, key: str, fighter: dict) -> str | None:
+    """<Key>-T3-cpu.txt (patch 22): the CPU behaviour block while the CPU plays the fighter."""
+    return _write_number(root, key, "-cpu.txt", CPU_BLOCKS.get(fighter.get("cpu")), "CPU personality")
 
 
 def write_stage_look(root: Path, key: str, fighter: dict) -> str | None:
@@ -690,6 +703,8 @@ def validate_character(data: dict) -> dict:
             if not DONOR_MIN <= value <= DONOR_MAX:
                 raise ValueError(f"That {key} does not exist.")
             clean[key] = value
+    if data.get("cpu") in CPU_BLOCKS:         # CPU personality (patch 22)
+        clean["cpu"] = data["cpu"]
     look = data.get("stage_look")           # Stage Lab colours of the home stage (patch 19)
     if look not in (None, ""):
         if look not in STAGE_LOOKS:
@@ -835,6 +850,8 @@ def check_library() -> dict:
                 add("warn", "The stage colours are not in the game yet.")
             if (c.get("move_damage") or c.get("move_buttons")) and not game_file(key, f"{prefix}-moves.bin"):
                 add("warn", "The changed moves are not in the game yet.")
+            if c.get("cpu") and not game_file(key, f"{prefix}-cpu.txt"):
+                add("warn", "The CPU personality is not in the game yet.")
             if c.get("rival") is not None and not game_file(key, f"{prefix}-rival.txt"):
                 add("warn", "The rival is not in the game yet.")
         out.append({"id": c["id"], "name": c["name"], "issues": issues})
@@ -1075,7 +1092,7 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
         if problem:
             warnings.append(f"{c['name']}: {problem}")
         for problem in (write_name_call(root, key, c), write_stage_look(root, key, c), write_moves(root, key, c),
-                        write_rival(root, key, c), write_commands(root, key, c)):
+                        write_rival(root, key, c), write_commands(root, key, c), write_cpu(root, key, c)):
             if problem:
                 warnings.append(f"{c['name']}: {problem}")
     if left_out:
@@ -2050,7 +2067,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits", "move_damage", "move_buttons", "rival")
+                  "costumes", "credits", "move_damage", "move_buttons", "rival", "cpu")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:

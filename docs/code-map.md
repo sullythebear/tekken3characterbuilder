@@ -60,6 +60,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   (`#buttons-list`). Cache `commandlist6-...`.
 - COMMAND LIST with moved moves (patch 22): `command_list.encode`, `commands_file`; `model_export.py rawlists
   --models` (cache `rawlists1-<models>.json`), server `style_lists`, `write_commands` (`<prefix>-commands.bin`).
+- CPU personality (patch 22): field `cpu` (calm / steady / fierce), server `CPU_BLOCKS`, `write_cpu`
+  (`<prefix>-cpu.txt`, `_write_number`), UI `arena.js` `#cpu`; patch `custom_cpu`, `custom_cpu_tick`.
 - Rival (patch 22): field `rival` (0-20, validated with stage/music), server `write_rival` (`<prefix>-rival.txt`),
   UI `arena.js` `#rival`; patch text in `expanded_patch_data.ROSTER` (`custom_rival`, in `opponents_tick`).
 - Share codes: server `share_code` / `import_share_code` (`SHARE_PREFIX` T3C1-, zlib + base64url of character.json

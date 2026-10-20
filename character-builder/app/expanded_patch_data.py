@@ -386,6 +386,36 @@ ROSTER = [
  "    }\n"
  "    return custom_cl[c];\n"
  "}\n"
+ "/* T3CB-PATCH-22: a custom fighter's CPU personality. <prefix>-cpu.txt, written by the builder:\n"
+ " * a block (0-29) of the CPU behaviour table at 0x800231AC (3 difficulties x 10 stages, 110\n"
+ " * bytes). The game copies the fight's block to the player's AI structure (0x8009F318 + 0x330\n"
+ " * * player, +568; tested); while the CPU plays the custom fighter, its structure holds the\n"
+ " * chosen block instead (tested: EASY stage 1 let 40 of 240 jabs in, HARD stage 10 about 6). */\n"
+ "static int custom_cpu_block[CUSTOM_MAX],custom_cpu_tried[CUSTOM_MAX];\n"
+ "static int custom_cpu(unsigned k) {\n"
+ "    if(k<tag_count || k-tag_count>=CUSTOM_MAX || !roster[k].custom)return -1;\n"
+ "    unsigned c=k-tag_count;\n"
+ "    if(!custom_cpu_tried[c]) {\n"
+ "        custom_cpu_tried[c]=1;custom_cpu_block[c]=-1;\n"
+ "        const char *root=tekken3_ttt1_asset_root();char path[4096];int v;\n"
+ "        FILE *f=root && snprintf(path,sizeof path,\"%s/%s-cpu.txt\",root,roster[k].prefix)<(int)sizeof path?fopen(path,\"r\"):NULL;\n"
+ "        if(f){if(fscanf(f,\"%d\",&v)==1 && v>=0 && v<30)custom_cpu_block[c]=v;fclose(f);}\n"
+ "        if(custom_cpu_block[c]>=0)fprintf(stderr,\"Custom fighters: %s has CPU block %d\\n\",roster[k].name,custom_cpu_block[c]);\n"
+ "    }\n"
+ "    return custom_cpu_block[c];\n"
+ "}\n"
+ "static void custom_cpu_tick(void) {\n"
+ "    if(psx_mod_read_word(0x800ae204)!=8)return;\n"
+ "    unsigned human=psx_mod_read_half(0x800ae1f8)?0:1,p=human^1;\n"
+ "    int k=tekken3_guest_character(psx_mod_read_half(0x800a9240+p*0x188c));\n"
+ "    int block=k<0?-1:custom_cpu((unsigned)k);\n"
+ "    if(block<0)return;\n"
+ "    uint32_t from=0x800231ac+(uint32_t)block*110,to=0x8009f318+p*0x330+568;\n"
+ "    for(unsigned j=0;j<110;j++) {\n"
+ "        unsigned v=psx_mod_read_byte(from+j);\n"
+ "        if(psx_mod_read_byte(to+j)!=v)psx_mod_write_byte(to+j,(uint8_t)v);\n"
+ "    }\n"
+ "}\n"
  "static void custom_commands_tick(void) {\n"
  "    if(psx_mod_read_word(0x800ae204)!=8)return;\n"
  "    for(unsigned p=0;p<2;p++) {\n"
@@ -568,7 +598,7 @@ ROSTER = [
  "}\n"
  "void tekken3_ttt1_roster_tick(void) {\n", 1),
 ("    patch_tables();\n    unsigned state=psx_mod_read_word(0x800ae204);\n",
- "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    custom_strips();\n    custom_palette_tick();\n    custom_model_check();\n    custom_stage_tick();                    /* T3CB-PATCH-19 */\n    custom_moves_tick();                    /* T3CB-PATCH-20 */\n    custom_commands_tick();                 /* T3CB-PATCH-22 */\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
+ "    patch_tables();\n    custom_fight_probe();\n    copycat_sword();\n    custom_strips();\n    custom_palette_tick();\n    custom_model_check();\n    custom_stage_tick();                    /* T3CB-PATCH-19 */\n    custom_moves_tick();                    /* T3CB-PATCH-20 */\n    custom_commands_tick();                 /* T3CB-PATCH-22 */\n    custom_cpu_tick();\n    unsigned state=psx_mod_read_word(0x800ae204);\n", 1),
 # --- T3CB-PATCH-4: a custom fighter's move key (actor+0x16) is its donor's, not GUEST_ID ---
 ("            cpu->gpr[4]=GUEST_ID;",
  "            cpu->gpr[4]=guest_move_key((uint16_t)cpu->gpr[4]);", 1),

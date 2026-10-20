@@ -322,6 +322,13 @@ class CreditsAndBackupTests(CharacterTests):
             self.assertEqual(path.read_text(), "13\n")
             server.write_rival(root, "kit", {})
             self.assertFalse(path.exists())
+            server.write_cpu(root, "kit", {"cpu": "fierce"})                  # CPU personality
+            cpu = path.with_name(path.name.replace("-rival.txt", "-cpu.txt"))
+            self.assertEqual(cpu.read_text(), "29\n")
+            server.write_cpu(root, "kit", {"cpu": "odd"})
+            self.assertFalse(cpu.exists())
+        self.assertEqual(server.validate_character({"name": "A", "donor": 5, "cpu": "calm"})["cpu"], "calm")
+        self.assertNotIn("cpu", server.validate_character({"name": "A", "donor": 5, "cpu": "mad"}))
 
     def test_share_code(self):
         red = PortraitVariantTests.image((255, 0, 0, 255))
