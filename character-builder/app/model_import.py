@@ -956,9 +956,8 @@ def _write(m, G, Nrm, faces, vrows, chart_weight, F, J, row, tex=None, blend=Non
                     if e not in uvs:
                         uvs.append(e)
                     ui.append(uvs.index(e))
-                if len(uvs) > MAX_UVS:
-                    raise Budget(f"row {r} needs more than {MAX_UVS} texture coordinates")
-                tex_entries[k].append(bytes([mats.index(mat)] + ui))
+                if len(uvs) <= MAX_UVS:                     # past that: only counted, for the error below
+                    tex_entries[k].append(bytes([mats.index(mat)] + ui))
         if len(uvs) > MAX_UVS:
             raise Budget(f"row {r} needs {len(uvs)} texture coordinates")
         cb = struct.pack("<H", 2 + 2 * len(mats)) + b"".join(struct.pack("<H", x) for x in mats)

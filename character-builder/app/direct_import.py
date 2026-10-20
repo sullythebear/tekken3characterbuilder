@@ -9,6 +9,7 @@ room for).
 CLI: direct_import.py MODEL.fbx|.glb --model N --root GAME --out model.bin
      direct_import.py MODEL --root GAME --check     (JSON: triangles, texture, rigged, problems)"""
 from __future__ import annotations
+import re
 import argparse
 import io
 import json
@@ -744,7 +745,11 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
                 log(f"{target} triangles do not fit ({error}); trying {head:g}x detail on the head")
                 continue
             log(f"{target} triangles do not fit ({error}); trying fewer")
-            target = int(target * 0.93)
+            # a row over its texture coordinates says how many it needs: shrink by that share at
+            # once (MeganTheFox needed six 100 s tries of 7 % each)
+            need = re.search(r"needs (\d+) texture coordinates", str(error))
+            share = MI.MAX_UVS / int(need.group(1)) * 0.97 if need else 1.0
+            target = int(target * min(0.93, share))
     raise MI.Budget("The model does not fit this fighting style's slot.")
 
 

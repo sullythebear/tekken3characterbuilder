@@ -254,5 +254,10 @@ MeganTheFox, Two-Tails, Buffedwolf.
   modelled. Buffedwolf: clean.
 - In game on KITTEST (600 frames each): MegaAngel, MeganTheFox, Buffedwolf, 0 data words
   differing; KITTEST's model restored. All five approved in `regress --all`.
-- Open: MeganTheFox (633 s) and Two-Tails (408 s) import slowly; wings on the arms cannot be
-  folded or removed yet.
+- Slow imports: each try of a reduced model runs the whole shell/charts/bake pipeline (~100 s),
+  and a head row over its 255 texture coordinates used to shrink the target by 7 % per try
+  (MeganTheFox: six tries, 633 s). `MI._write` now counts the row's coordinates to the end and
+  says "row 19 needs N texture coordinates"; `build` shrinks by 255 / N at once. MeganTheFox:
+  352 s, same look (re-approved); Two-Tails' tries were the head-detail halvings (349 s, the same
+  model); every other model byte-identical.
+- Open: wings on the arms (MegaAngel) cannot be folded or removed yet.
