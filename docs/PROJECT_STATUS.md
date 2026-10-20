@@ -1,8 +1,8 @@
 # Project status
 
-Updated: 2026-10-19.
+Updated: 2026-10-20.
 - Released: builder 0.7.1 (tag v0.7.1, 2026-10-20), 0.7.0 and 0.6.0, all with the owner's permission.
-- Pushed: `main` up to a050038 (0.7.1). Later commits are local.
+- Pushed: `main` up to a78422b (2026-10-20). Later commits are local.
 
 ## In 0.7.0
 
@@ -90,8 +90,9 @@ Updated: 2026-10-19.
 ## Next
 
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
-1. Stage Lab: editing the scenery within its byte size; the floor routine and collision are
-   not known (`knowledge/stages.md`).
-2. Move Lab: the other strings (they look like separate moves from outside); chain throws tried
-   and not reliable with scripted input (`knowledge/moves.md`).
+The roadmap's items with clear value are done (2026-10-20). Left:
+1. A release (0.8.0: Builder accessories and pieces of clothing) and a user play test.
+2. Research with an uncertain result: Stage Lab floor routine and collision; Move Lab's other
+   strings and chain throws (not reliable with scripted input); TTT1 styles as donors (when
+   Expanded adds more).
 3. Push and publish only with the owner's permission.

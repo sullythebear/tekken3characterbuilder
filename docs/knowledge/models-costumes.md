@@ -160,7 +160,10 @@ costumes. Phase 0 proved the model can be shown from the user's own disc, withou
        - Tried: collarbones at their stance angle to the chest (like the head) hunched Bryan's
          shoulders; collarbones stay level. Seam-length fitting cannot decide the collarbone (the
          stretch keeps falling as it folds into the chest).
-       - Still open: True Ogre/Gon tails in the standing pose.
+       - True Ogre/Gon tails in the standing pose (looked at 2026-10-20, `compare.py 42,32`): the tail
+         rows (21-23, on the pelvis) take their rest rotation (words 7-9); Gon's sticks straight
+         back when standing and hangs in the stance. **inferred**: the game draws them rigid the
+         same way (no tail channels in the 18-bone pose); not checked in a fight, left as is.
     9. **Pieces of clothing (user: "choose every piece of clothing/accessory and recolour it").**
        The game can only swap whole palettes (CLUTs), so a piece is a set of CLUTs. Measured on
        Bryan (texels inside every UV triangle, scratch `texels.py`): nearly every 16-colour CLUT
