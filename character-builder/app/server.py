@@ -19,7 +19,7 @@ import custom_page  # noqa: E402
 import name_call  # noqa: E402
 import command_list as command_list_module  # noqa: E402   (stdlib only: struct)
 
-APP_VERSION = "0.7.1"
+APP_VERSION = "0.8.0"
 APP = Path(__file__).resolve().parent
 BASE = APP.parent
 UI = APP / "ui"
