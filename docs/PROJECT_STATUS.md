@@ -54,6 +54,7 @@ Updated: 2026-10-20.
 - Rival per fighter (Stage Lab, patch 22, tested in game): KITTEST meets Paul at Arcade stage 9.
   An own final boss was tried and left out (the Ogre cutscene breaks; `knowledge/roster-tables.md`).
 - The in-game COMMAND LIST shows moved moves on their new input (patch 22, tested in game).
+- TTT1 styles as donors: a fighter on a Tekken Tag guest's style (patch 23; KUNIKO on Kunimitsu, tested in game).
 - Intro and win pose per fighter (Move Lab; tested in game).
 - String endings: a string's later hit can be another move (Move Lab, 4 strings; tested in game).
 - CPU personality per fighter (Stage Lab: Calm, Steady, Fierce; patch 22, tested in game).
@@ -96,14 +97,14 @@ Updated: 2026-10-20.
   Remove or change it as you like.
 - Your fighters (Tommy, Medea, Test) were not changed. Check library and Asset library list
   their unknown licences.
-- The game in the test folder is built with patch 22 (release and debug builds).
+- The game in the test folder is built with patch 23 (release and debug builds).
 
 ## Next
 
 Module order (owner): Character Builder, Model Importer, Portrait Lab, Voice Lab, Stage Lab, Move Lab.
-The roadmap's items with clear value are done (2026-10-20). Left:
-1. A user play test of 0.8.0: KITTEST was rebuilt in the test folder (Julia head with braids, 1055 triangles; sanity fight 0 words differing).
+The roadmap's items with clear value are done (2026-10-21). Left:
+1. A user play test: KITTEST in the test folder carries every new option (rival Paul, CPU Fierce,
+   f+2 and b+2, 2 on Liftshot, intro 2 / win pose 3); KUNIKO is a fighter on Kunimitsu's style.
 2. Research with an uncertain result: Stage Lab floor routine and collision; Move Lab's other
-   strings and chain throws (not reliable with scripted input); TTT1 styles as donors (when
-   Expanded adds more).
+   strings and chain throws; new string steps; combo training; own animations.
 3. Push and publish only with the owner's permission.

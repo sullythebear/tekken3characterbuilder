@@ -81,6 +81,22 @@ function log(text) {
 
 /* ------------------------------------------------------------ donors -- */
 
+// patch 23: TTT1 guests whose style a fighter can take (their model and moves; /api/guest-styles)
+let GUEST_STYLES = [];
+async function loadGuestStyles() {
+  try { GUEST_STYLES = (await api("/api/guest-styles", {})).styles || []; } catch { GUEST_STYLES = []; }
+  renderDonors();
+}
+const guestStyle = () => GUEST_STYLES.find((g) => g.key === state.current.guest_style);
+// a fighter on a TTT1 style uses the guest's own model and moves: the Tekken 3 tools step aside
+function applyStyleKind() {
+  const guest = Boolean(state.current.guest_style);
+  for (const name of ["colours", "model", "moves"]) $(`tab-${name}`).hidden = guest;
+  $("arcade-row").hidden = guest;
+  if (guest && ["colours", "model", "moves"].some((n) => !$(`page-${n}`).hidden)) showPage("fighter");
+  showPortraitFromModel();
+}
+
 function renderDonors() {
   const grid = $("donor-grid");
   grid.replaceChildren();
@@ -97,7 +113,7 @@ function renderDonors() {
       button.className = "donor";
       button.dataset.initial = donor.style[0];
       button.setAttribute("role", "radio");
-      button.setAttribute("aria-checked", String(state.current.donor === donor.id));
+      button.setAttribute("aria-checked", String(state.current.donor === donor.id && !state.current.guest_style));
       button.dataset.id = donor.id;
       const style = document.createElement("span");
       style.className = "dn";
@@ -107,14 +123,43 @@ function renderDonors() {
       based.textContent = `based on ${donor.name}`;
       button.append(style, based);
       button.title = donorLabel(donor.id);
-      button.addEventListener("click", () => { state.current.donor = donor.id; markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Arena.sheet(); T3Costumes.refresh(); if (!$("page-moves").hidden) T3MoveLab.show(); });
+      button.addEventListener("click", () => { state.current.donor = donor.id; delete state.current.guest_style; applyStyleKind(); markDirty(); renderDonors(); renderStage(); T3Arena.styleLabels(); T3Arena.sheet(); T3Costumes.refresh(); if (!$("page-moves").hidden) T3MoveLab.show(); });
       cards.append(button);
     }
     section.append(title, cards);
     grid.append(section);
   }
-  const d = DONORS[state.current.donor];
-  $("donor-info").textContent = d ? `${donorLabel(d.id)}.${d.note ? ` ${d.note}` : ""}` : "";
+  if (GUEST_STYLES.length) {                    // patch 23: the TTT1 guests' styles
+    const section = document.createElement("div"), title = document.createElement("h4"), cards = document.createElement("div");
+    section.className = "style-group";
+    title.textContent = "Tekken Tag (their own body and moves)";
+    cards.className = "style-cards";
+    for (const g of GUEST_STYLES) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "donor";
+      button.dataset.initial = g.label[0];
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(state.current.guest_style === g.key));
+      const style = document.createElement("span");
+      style.className = "dn";
+      style.textContent = g.label;
+      const based = document.createElement("span");
+      based.className = "num";
+      based.textContent = "TTT1 style";
+      button.append(style, based);
+      button.addEventListener("click", () => {
+        state.current.guest_style = g.key; state.current.donor = 9;     // guests read Jin's tables
+        markDirty(); renderDonors(); renderStage(); applyStyleKind();
+      });
+      cards.append(button);
+    }
+    section.append(title, cards);
+    grid.append(section);
+  }
+  const d = DONORS[state.current.donor], gs = guestStyle();
+  $("donor-info").textContent = gs ? `${gs.label}'s style from Tekken Tag Tournament: ${gs.label}'s own body and moves, with your name, portrait, name plate and stage. The Builder, Model Importer and Move Lab work on Tekken 3 styles only.`
+    : d ? `${donorLabel(d.id)}.${d.note ? ` ${d.note}` : ""}` : "";
 }
 
 function donorLabel(id) {
@@ -275,7 +320,7 @@ function renderStage() {
   plate.textContent = shown;
   plate.classList.toggle("long", longest > 7 && longest <= 10);
   plate.classList.toggle("longer", longest > 10);
-  $("donor-line").textContent = donorLabel(state.current.donor);
+  $("donor-line").textContent = guestStyle() ? `${guestStyle().label}'s style (Tekken Tag)` : donorLabel(state.current.donor);
 }
 
 function markDirty() { state.dirty = true; renderSteps(); }
@@ -451,6 +496,7 @@ function fillForm() {
   $("form-error").textContent = "";
   renderDonors();
   renderStage();
+  applyStyleKind();
   T3Arena.fill();
   T3Builder.fill();
   loadHistory();
@@ -553,7 +599,8 @@ async function dropPortrait(variant) {
 
 function showPortraitFromModel() {
   // with an own model from that model, else from the style's first costume (Tekken 3 Expanded)
-  $("portrait-from-model").hidden = $("portrait-look").hidden = !(state.current.id && (state.current.has_model || (isExpanded() && state.current.donor !== null)));
+  $("portrait-from-model").hidden = $("portrait-look").hidden = Boolean(state.current.guest_style) ||
+    !(state.current.id && (state.current.has_model || (isExpanded() && state.current.donor !== null)));
 }
 
 async function selectCharacter(character) {
@@ -669,7 +716,8 @@ async function save(event) {
   const variantProblem = T3Costumes.problem();
   if (variantProblem) { error.textContent = variantProblem; return; }
   error.textContent = "";
-  const body = { id: state.current.id, name, donor: state.current.donor, author: $("author").value.trim(),
+  const body = { id: state.current.id, name, donor: state.current.donor, guest_style: state.current.guest_style || null,
+    author: $("author").value.trim(),
     costumes: T3Costumes.serialize(), ...T3Arena.body(), ...T3MoveLab.body(), credits: creditsBody() };
   if (state.portraitChanged && state.source) {
     body.portrait_ps1 = $("portrait-canvas").toDataURL("image/png");
@@ -1021,5 +1069,6 @@ for (const name of PAGES) $(`tab-${name}`).addEventListener("click", () => showP
 $("view-portrait").addEventListener("click", () => showView(false));
 $("view-model").addEventListener("click", () => showView(true));
 loadReport(false).catch(() => {});
+loadGuestStyles();
 refresh();
 setInterval(refresh, 1500);

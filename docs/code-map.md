@@ -58,6 +58,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
   by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
   (`#buttons-list`). Cache `commandlist6-...`.
+- TTT1 styles (patch 23): `custom_page.guest_styles`, `GUEST_STYLE_RE`; server field `guest_style`, `custom_entry` ("@key"),
+  `clear_tekken3_files`, `/api/guest-styles`; UI `app.js loadGuestStyles`, `applyStyleKind`, `guestStyle`.
 - Intro and win pose: `command_list.poses`, `pose_swaps`, `INTRO_SLOTS` / `WIN_SLOTS`; commandlist JSON `poses`,
   `pose_slots`; `moves_file(..., extra)`; field `poses`; UI `movelab.js showPoses` (`#poses-field`). Cache `commandlist8-...`.
 - String endings: `command_list.string_slots` (in the commandlist JSON `slots` under "<string>#<hit>"), UI

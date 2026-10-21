@@ -98,7 +98,11 @@ class CustomsListTests(unittest.TestCase):
         text = (self.root / custom_page.FOLDERS[0] / "customs.txt").read_text()
         self.assertEqual(text, "cbtommy 3 17 19\ncbmedea 5\n")
         with self.assertRaises(SystemExit):
-            expanded_custom.write_list(self.root, ["cbtommy 3 99"], ["cbmedea"])
+            expanded_custom.write_list(self.root, ["cbtommy 3 50"], ["cbmedea"])
+        with self.assertRaises(SystemExit):
+            expanded_custom.write_list(self.root, ["cbtommy @Jun"], ["cbmedea"])
+        expanded_custom.write_list(self.root, ["cbtommy @jun 4 99"], ["cbmedea"])     # patch 23
+        self.assertEqual((self.root / custom_page.FOLDERS[0] / "customs.txt").read_text(), "cbtommy @jun 4 99\n")
 
     def test_write_list_never_drops_silently(self):
         self.write("cbtommy 3\ncbmedea 5\n")
@@ -290,6 +294,26 @@ class CreditsAndBackupTests(CharacterTests):
         self.assertTrue((server.DATA / copy["id"] / "portrait-ps1.png").is_file())
         long = server.save_character({"name": "ABCDEGHIJKLMNOP", "donor": 1, "costumes": []})
         self.assertEqual(server.duplicate_character(long["id"])["name"], "ABCDEGHIJKLMN 2")
+
+    def test_guest_style(self):
+        c = server.validate_character({"name": "A", "donor": 9, "guest_style": "Kunimitsu"})
+        self.assertEqual(c["guest_style"], "kunimitsu")
+        for bad in ("cbkittest", "jun!", "x" * 30):
+            with self.assertRaises(ValueError):
+                server.validate_character({"name": "A", "donor": 9, "guest_style": bad})
+        self.assertEqual(server.custom_entry("cbkit", {"donor": 9, "guest_style": "jun"}), "cbkit @jun")
+        self.assertEqual(server.custom_entry("cbkit", {"donor": 9, "guest_style": "jun", "stage": 4}), "cbkit @jun 4 99")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / server.custom_page.FOLDERS[0]
+            folder.mkdir(parents=True)
+            (folder / "customs.txt").write_text("cbkit @jun 4 99\ncbold 5\ncbbad @Jun\n", encoding="ascii")
+            (folder / "guests.txt").write_text("jun 28 9\nkazuya 18 13\n", encoding="ascii")
+            (folder / "Jun-T3-label.txt").write_text("JUN\n", encoding="ascii")
+            entries, unreadable = server.custom_page.read_entries(root)
+            self.assertEqual((entries, unreadable), ([("cbkit", "@jun"), ("cbold", 5)], ["cbbad @Jun"]))
+            self.assertEqual(server.custom_page.guest_styles(root),
+                             [{"key": "jun", "label": "Jun"}, {"key": "kazuya", "label": "Kazuya"}])
 
     def test_commands_file(self):
         import command_list as M

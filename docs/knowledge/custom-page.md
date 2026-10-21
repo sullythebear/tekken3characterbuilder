@@ -165,3 +165,24 @@ Each entry says how it is known: **tested** (seen in game), **code** (read in th
   guest and a custom fighter showed one with the other's tile. Now a guest of the page not in VRAM
   gets the generic icon (`stock_icon_uv/page`). Builds; a normal fight passes (t3live has no Team
   Battle route). Proper fix (both pages' tiles in VRAM) needs free VRAM: open.
+
+## Fighters on a TTT1 guest's style: patch 23 (2026-10-21, tested in game)
+
+- **code** Expanded keeps a guest's interface files (`g->prefix`, `<Key>-T3-*`) apart from its
+  TTT1 data (`g->data_prefix`, `<Key>-TTT1-*`: model, moves, tables, voices, combos, move list).
+- **T3CB-PATCH-23** A customs.txt line `cb<name> @<guest key> [stage] [music]` (99: the guest's own)
+  makes a Custom page fighter that is a guest in all but its looks: the guest's data prefix,
+  moveset, donors and third costume, `custom` = 0 (so the TTT1 pipeline and renderer take it), its
+  own name, portrait and plate. `donor_id` holds the guest's ID for the strips row below.
+- **tested** `cbkittest @kunimitsu 17 5` (temporary) and KUNIKO made in the builder
+  (`cbkuniko @kunimitsu`): Kunimitsu's body and moves, the plate KUNIKO, log "Kuniko (character 45)
+  fights as Kunimitsu".
+- **tested** First the HUD's life bars and timer were purple blocks at ID 45 (a small block at 44,
+  none at 41), with Kunimitsu's own ui.jui too. Cause: patch 8's strips table (0x8007619C reads
+  table[ID].count tiles) gave ID 45 the original's row past its 22 rows (count 0x160). Patch 23
+  gives such a fighter its guest's row (24 for Kunimitsu): the HUD is right.
+- The builder: style group "Tekken Tag" from `guests.txt` (`custom_page.guest_styles`,
+  `/api/guest-styles`), field `guest_style`, donor 9 (guests read Jin's tables); such a fighter
+  hides the Builder, Model Importer and Move Lab tabs, rival and CPU personality, and gets none
+  of the Tekken 3 style files (`clear_tekken3_files`). Its name call stays the guest's (the voice
+  files follow the data prefix).

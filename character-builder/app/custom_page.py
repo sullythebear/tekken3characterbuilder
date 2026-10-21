@@ -27,6 +27,32 @@ def file_prefix(key: str) -> str:
     return key[0].upper() + key[1:].lower() + "-T3"
 
 
+# patch 23: a fighter on a TTT1 guest's style is listed with "@<guest key>" for its donor
+GUEST_STYLE_RE = re.compile(r"@[a-z0-9]{1,24}")
+
+
+def guest_styles(root: Path) -> list[dict]:
+    """[{key, label}] of the TTT1 guests in guests.txt (the styles patch 23 can lend)."""
+    for folder in FOLDERS[::-1]:
+        path = root / folder / "guests.txt"
+        try:
+            lines = path.read_text(encoding="ascii", errors="replace").splitlines()
+        except OSError:
+            continue
+        out = []
+        for line in lines:
+            key = (line.split() or [""])[0]
+            if re.fullmatch(r"[a-z0-9]{1,24}", key) and not key.startswith("cb"):
+                label = root / folder / f"{key[0].upper()}{key[1:]}-T3-label.txt"
+                try:
+                    name = label.read_text(encoding="ascii", errors="replace").strip()[:24]
+                except OSError:
+                    name = ""
+                out.append({"key": key, "label": (name or key).title()})
+        return out
+    return []
+
+
 def read_entries(root: Path, lines_out: dict | None = None) -> tuple[list[tuple[str, int]], list[str]]:
     """The listed (key, donor) pairs in order, and the lines that could not be read. A line may
     add the fighters whose stage and music it takes (patch 17): "<key> <donor> [stage] [music]";
@@ -42,11 +68,13 @@ def read_entries(root: Path, lines_out: dict | None = None) -> tuple[list[tuple[
             parts = line.split()
             if not parts:
                 continue
+            style = parts[1] if len(parts) > 1 else ""
             if (2 <= len(parts) <= 4 and KEY_RE.fullmatch(parts[0])
-                    and all(p.isdigit() and int(p) <= 20 for p in parts[1:])):
+                    and ((style.isdigit() and int(style) <= 20) or GUEST_STYLE_RE.fullmatch(style))
+                    and all(p.isdigit() and (int(p) <= 20 or int(p) == 99) for p in parts[2:])):
                 if parts[0] not in seen:
                     seen.add(parts[0])
-                    entries.append((parts[0], int(parts[1])))
+                    entries.append((parts[0], int(style) if style.isdigit() else style))
                     if lines_out is not None:
                         lines_out[parts[0]] = " ".join(parts)
             elif line.strip() not in unreadable:

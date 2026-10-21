@@ -97,10 +97,13 @@ def write_list(root: Path, entries: list[str], drop: list[str]) -> None:
     lines, keys = [], set()
     for entry in entries:
         key, *numbers = entry.split()          # donor, then optionally stage and music fighters
-        if (not re.fullmatch(r"cb[a-z0-9]{1,24}", key) or not 1 <= len(numbers) <= 3
-                or not all(n.isdigit() and int(n) <= 20 for n in numbers)):
+        style_ok = bool(numbers) and (re.fullmatch(r"@[a-z0-9]{1,24}", numbers[0]) is not None
+                                      or (numbers[0].isdigit() and int(numbers[0]) <= 20))
+        if (not re.fullmatch(r"cb[a-z0-9]{1,24}", key) or not 1 <= len(numbers) <= 3 or not style_ok
+                or not all(n.isdigit() and (int(n) <= 20 or int(n) == 99) for n in numbers[1:])):
             fail(f"Invalid entry: {entry}")
-        lines.append(" ".join([key, *(str(int(n)) for n in numbers)]))
+        lines.append(" ".join([key, numbers[0] if numbers[0].startswith("@") else str(int(numbers[0])),
+                               *(str(int(n)) for n in numbers[1:])]))
         keys.add(key)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import custom_page

@@ -14,6 +14,7 @@
 | Home stage and music | **tested** (patch 17) | no |
 | Stage colour looks | **tested** (patch 19, night and sunset on Gon's stage) | no |
 | Changed move damage per fighter | **tested** (patch 20: KITTEST's 3 from 25 to 60 in its own moveset buffer, opponent untouched; skipped in a mirror match, which shares one buffer) | no |
+| Fighters on a TTT1 guest's style | **tested** (patch 23: KUNIKO on Kunimitsu's style, her body and moves with its own name plate; HUD right after the strips fix) | no |
 | CPU personality per fighter | **tested** (patch 22: the CPU's behaviour block while it plays the custom fighter; see `knowledge/roster-tables.md`) | no |
 | Rival at Arcade stage 9 per fighter | **tested** (patch 22: KITTEST's rival Paul at stage 9 in three Arcade runs, Ogre and True Ogre after it) | no |
 | In-game COMMAND LIST with moved moves | **tested** (patch 22: KITTEST's pause menu lists Liftshot under f+2 as well) | no |

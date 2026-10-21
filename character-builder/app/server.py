@@ -705,6 +705,13 @@ def validate_character(data: dict) -> dict:
             if not DONOR_MIN <= value <= DONOR_MAX:
                 raise ValueError(f"That {key} does not exist.")
             clean[key] = value
+    guest = str(data.get("guest_style") or "").lower()   # patch 23: a TTT1 guest's style
+    if guest:
+        root = project_root()
+        known = [g["key"] for g in custom_page.guest_styles(root)] if root else []
+        if not re.fullmatch(r"[a-z0-9]{1,24}", guest) or guest.startswith("cb") or (known and guest not in known):
+            raise ValueError("That TTT1 style is not in this game.")
+        clean["guest_style"] = guest
     poses = data.get("poses")                 # Move Lab: intro and win pose, 1-based (patch 21 swaps)
     if isinstance(poses, dict):
         clean_poses = {k: int(v) for k, v in poses.items()
@@ -850,6 +857,9 @@ def check_library() -> dict:
                 add("bad", "Not on the Custom page (customs.txt): save the fighter or refresh the Custom page files.")
             if not game_file(key, f"{prefix}-ui.jui"):
                 add("bad", "The portrait and name plate files are missing in the game.")
+            if c.get("guest_style"):                   # the guest's model and moves: nothing else to check
+                out.append({"id": c["id"], "name": c["name"], "issues": issues})
+                continue
             if c.get("own_model") and (folder / "model.bin").is_file() and not game_file(key, f"{prefix}-model.bin"):
                 add("bad", "Its own 3D model is not in the game yet.")
             if c.get("name_call") in ("auto", "own") and not game_file(key, name_call.pack_name(key)):
@@ -1096,6 +1106,11 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
                 if not present and key not in donors:
                     continue
         listed.append(custom_entry(key, c))
+        if c.get("guest_style"):                       # patch 23: the guest's model and moves
+            problem = clear_tekken3_files(root, key)
+            if problem:
+                warnings.append(f"{c['name']}: {problem}")
+            continue
         problem = write_palettes(root, key, c) or write_own_model(root, key, c)
         if problem:
             warnings.append(f"{c['name']}: {problem}")
@@ -1114,10 +1129,31 @@ def sync_customs(changed: str | None = None, drop: str | None = None, everything
     return warnings
 
 
+GUEST_STYLE_OFF = ("-pal.bin", "-model.bin", "-stage.bin", "-moves.bin", "-rival.txt", "-commands.bin", "-cpu.txt")
+
+
+def clear_tekken3_files(root: Path, key: str) -> str | None:
+    """A fighter on a TTT1 guest's style uses none of the files made for Tekken 3 styles."""
+    try:
+        for folder in custom_page.FOLDERS:
+            target = root / folder
+            for suffix in GUEST_STYLE_OFF:
+                (target / f"{custom_page.file_prefix(key)}{suffix}").unlink(missing_ok=True)
+            (target / f"{key[0].upper()}{key[1:].lower()}-TTT1-sfx.jus").unlink(missing_ok=True)
+    except OSError as error:
+        return f"Old files could not be removed: {error}"
+    return None
+
+
 def custom_entry(key: str, c: dict) -> str:
     """A customs.txt line: key and donor, then the fighters whose stage and music it takes when
-    they are not the donor's (patch 17)."""
+    they are not the donor's (patch 17). A fighter on a TTT1 guest's style: "@<guest>" in the
+    donor's place, 99 for the guest's own stage or music (patch 23)."""
     stage, music = c.get("stage"), c.get("music")
+    if c.get("guest_style"):
+        if stage is None and music is None:
+            return f"{key} @{c['guest_style']}"
+        return f"{key} @{c['guest_style']} {99 if stage is None else stage} {99 if music is None else music}"
     if stage is None and music is None:
         return f"{key} {c['donor']}"
     return f"{key} {c['donor']} {c['donor'] if stage is None else stage} {c['donor'] if music is None else music}"
@@ -2076,7 +2112,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits", "move_damage", "move_buttons", "rival", "cpu", "poses")
+                  "costumes", "credits", "move_damage", "move_buttons", "rival", "cpu", "poses", "guest_style")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:
@@ -2555,6 +2591,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**saved, "warnings": sync_customs(changed=saved["id"])})
             if path == "/api/stage/preview":
                 return self._json(stage_preview(data))
+            if path == "/api/guest-styles":
+                root = project_root()
+                return self._json({"styles": custom_page.guest_styles(root) if root else []})
             if path == "/api/moves":
                 return self._json(command_list(data.get("donor")))
             if path == "/api/fairness":
