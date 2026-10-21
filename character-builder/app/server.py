@@ -508,13 +508,15 @@ def write_moves(root: Path, key: str, fighter: dict) -> str | None:
     buttons (or none)."""
     name = f"{custom_page.file_prefix(key)}-moves.bin"
     data = None
-    if fighter.get("move_damage") or fighter.get("move_buttons"):
+    if fighter.get("move_damage") or fighter.get("move_buttons") or fighter.get("poses"):
         try:
             moves = command_list(fighter["donor"])
         except ValueError as error:
             return f"Move damage: {error}"
         data = command_list_module.moves_file(moves["key"], moves["records"], fighter.get("move_damage") or {},
-                                              fighter.get("move_buttons"), moves.get("slots"))
+                                              fighter.get("move_buttons"), moves.get("slots"),
+                                              command_list_module.pose_swaps(moves.get("poses", {}), moves.get("pose_slots", {}),
+                                                                             fighter.get("poses")))
     try:
         for folder in custom_page.FOLDERS:
             target = root / folder
@@ -703,6 +705,12 @@ def validate_character(data: dict) -> dict:
             if not DONOR_MIN <= value <= DONOR_MAX:
                 raise ValueError(f"That {key} does not exist.")
             clean[key] = value
+    poses = data.get("poses")                 # Move Lab: intro and win pose, 1-based (patch 21 swaps)
+    if isinstance(poses, dict):
+        clean_poses = {k: int(v) for k, v in poses.items()
+                       if k in ("intro", "win") and isinstance(v, (int, str)) and str(v).isdigit() and 1 <= int(v) <= 8}
+        if clean_poses:
+            clean["poses"] = clean_poses
     if data.get("cpu") in CPU_BLOCKS:         # CPU personality (patch 22)
         clean["cpu"] = data["cpu"]
     look = data.get("stage_look")           # Stage Lab colours of the home stage (patch 19)
@@ -848,7 +856,7 @@ def check_library() -> dict:
                 add("warn", "The name call is not in the game yet.")
             if c.get("stage_look") and not game_file(key, f"{prefix}-stage.bin"):
                 add("warn", "The stage colours are not in the game yet.")
-            if (c.get("move_damage") or c.get("move_buttons")) and not game_file(key, f"{prefix}-moves.bin"):
+            if (c.get("move_damage") or c.get("move_buttons") or c.get("poses")) and not game_file(key, f"{prefix}-moves.bin"):
                 add("warn", "The changed moves are not in the game yet.")
             if c.get("cpu") and not game_file(key, f"{prefix}-cpu.txt"):
                 add("warn", "The CPU personality is not in the game yet.")
@@ -1582,7 +1590,7 @@ def command_list(donor) -> dict:
         raise ValueError("That style does not exist.")
     own = zlib.crc32(repr((sorted(command_list_module.OWN_MOVES.get(donor, {}).items()),
                            sorted(command_list_module.STRINGS.get(donor, {}).items()))).encode())
-    path = CACHE / f"commandlist7-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
+    path = CACHE / f"commandlist8-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)
@@ -1593,7 +1601,8 @@ def command_list(donor) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     return {"donor": donor, "moves": data["moves"], "basic": data["basic"], "own": data.get("own", {}),
             "records": data["records"], "key": data["key"], "slots": data.get("slots", {}),
-            "movable": data.get("movable", [])}
+            "movable": data.get("movable", []), "poses": data.get("poses", {}),
+            "pose_slots": data.get("pose_slots", {})}
 
 
 def cast_damage() -> dict:
@@ -2067,7 +2076,7 @@ def save_character(data: dict) -> dict:
 
 RESTORE_POINTS = 20
 RESTORE_FIELDS = ("name", "donor", "author", "stage", "music", "name_call", "name_call_voice", "stage_look",
-                  "costumes", "credits", "move_damage", "move_buttons", "rival", "cpu")
+                  "costumes", "credits", "move_damage", "move_buttons", "rival", "cpu", "poses")
 
 
 def keep_restore_point(folder: Path, record: dict) -> None:

@@ -58,6 +58,8 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
   by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
   (`#buttons-list`). Cache `commandlist6-...`.
+- Intro and win pose: `command_list.poses`, `pose_swaps`, `INTRO_SLOTS` / `WIN_SLOTS`; commandlist JSON `poses`,
+  `pose_slots`; `moves_file(..., extra)`; field `poses`; UI `movelab.js showPoses` (`#poses-field`). Cache `commandlist8-...`.
 - String endings: `command_list.string_slots` (in the commandlist JSON `slots` under "<string>#<hit>"), UI
   `movelab.js showButtons` (`later`); cache `commandlist7-...`.
 - COMMAND LIST with moved moves (patch 22): `command_list.encode`, `commands_file`; `model_export.py rawlists

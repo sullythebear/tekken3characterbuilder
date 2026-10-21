@@ -331,6 +331,42 @@ def string_slots(moveset: bytes, style: int) -> dict[str, list[int]]:
     return out
 
 
+# Intro and win poses (tested 2026-10-21, Nina): the game draws the round 1 intro from alias slots
+# 0 and 2, a win pose from 3431 and 3432; 3433-3437 hold the style's other win poses.
+INTRO_SLOTS, WIN_SLOTS, WIN_POSES = (0, 2), (3431, 3432), range(3431, 3438)
+
+
+def poses(moveset: bytes) -> dict[str, list[int]]:
+    """{"intro": [record], "win": [record]}: the style's intros and win poses, in slot order."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    start, alias = word(8), word(12)
+    count = (alias - start) // 56
+    out = {}
+    for name, slots in (("intro", INTRO_SLOTS), ("win", WIN_POSES)):
+        records = []
+        for s in slots:
+            r = word(alias + 4 * s) if alias + 4 * s + 4 <= len(moveset) else -1
+            if 0 <= r < count and r not in records:
+                records.append(r)
+        out[name] = records
+    return out
+
+
+def pose_swaps(moveset_poses: dict, slot_records: dict, choice: dict | None) -> list[tuple[int, int, int]]:
+    """Patch 21 swaps that make the drawn slots hold the chosen intro / win pose (1-based)."""
+    out = []
+    for name, slots in (("intro", INTRO_SLOTS), ("win", WIN_SLOTS)):
+        n = (choice or {}).get(name)
+        options = moveset_poses.get(name, [])
+        if not isinstance(n, int) or not 1 <= n <= len(options):
+            continue
+        for s in slots:
+            old = slot_records.get(str(s), slot_records.get(s))
+            if old is not None and old != options[n - 1]:
+                out.append((s, old, options[n - 1]))
+    return out
+
+
 def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
     """{COMMAND LIST command: (record, damage)} of the style's measured own moves with damage."""
     word = lambda o: struct.unpack_from("<I", moveset, o)[0]
@@ -352,7 +388,7 @@ BUTTONS_MAX = 16
 
 
 def moves_file(key: int, records: dict, changes: dict, buttons: dict | None = None,
-               slots: dict | None = None) -> bytes | None:
+               slots: dict | None = None, extra: list | None = None) -> bytes | None:
     """<prefix>-moves.bin for patch 20 ("T3MV"): {notation: new damage} over the style's basic
     records {notation: [record, damage]}; None when nothing changes. buttons {basic input: move}
     puts another move of the style on a basic input through its alias slots {input: [slot]}
@@ -363,7 +399,10 @@ def moves_file(key: int, records: dict, changes: dict, buttons: dict | None = No
             for slot in (slots or {}).get(name, []):
                 if not any(s[0] == slot for s in swaps):
                     swaps.append((slot, records[name][0], records[move][0]))
-    swaps = swaps[:2 * BUTTONS_MAX]
+    for s in extra or []:                            # intro / win pose (pose_swaps)
+        if not any(x[0] == s[0] for x in swaps):
+            swaps.append(tuple(s))
+    swaps = swaps[:2 * BUTTONS_MAX + 4]
     rows = []
     for name, new in sorted(changes.items()):
         if name in records and 0 <= int(new) <= 200 and int(new) != records[name][1]:

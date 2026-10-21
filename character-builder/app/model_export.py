@@ -692,11 +692,15 @@ def main() -> None:
         strings = {name: [d for _, d in hits] for name, hits in strings.items()}
         slots = {name: s for name, s in command_list.basic_slots(moveset, exe).items() if name in basic}
         slots.update({k: s for k, s in command_list.string_slots(moveset, args.style).items() if k in rows})
+        pose = command_list.poses(moveset)
+        alias_at = struct.unpack_from("<I", moveset, 12)[0]
+        pose_slots = {s: struct.unpack_from("<I", moveset, alias_at + 4 * s)[0]
+                      for s in (*command_list.INTRO_SLOTS, *command_list.WIN_SLOTS)}
         throws = {e["command"].replace(" ", "") for e in entries if "[Throw]" in e.get("name", "") and e.get("command")}
         movable = [name for name in rows if "#" not in name and name not in throws]   # a basic input can take these
         print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}, strings), "basic": basic,
                           "own": own, "records": rows, "key": command_list.moveset_key(exe, args.style),
-                          "slots": slots, "movable": movable}))
+                          "slots": slots, "movable": movable, "poses": pose, "pose_slots": pose_slots}))
         return
     if args.command == "ownportrait":
         if args.file is None or args.out is None:

@@ -390,6 +390,14 @@
           <div class="basic-grid own-grid" id="buttons-list"></div>
           <div class="portrait-buttons"><button class="btn btn-ghost mini" type="button" id="buttons-reset">Every input its own move</button></div>
         </fieldset>
+        <fieldset class="field" id="poses-field" hidden>
+          <legend>Intro and win pose</legend>
+          <p class="hint">Tekken 3 draws one of the style's intros at the start of a fight and one of its win poses after a won round. Choose one to always see it (your fighter only).</p>
+          <div class="arena-lists">
+            <label>Intro <select id="pose-intro"></select></label>
+            <label>Win pose <select id="pose-win"></select></label>
+          </div>
+        </fieldset>
         <fieldset class="field" id="fair-field" hidden>
           <legend>Fairness check</legend>
           <p class="hint">Your changes against Tekken 3's own cast: green is within what the cast does (its strongest but one on that input), amber up to a quarter above, red beyond. Saved with the fighter and carried in its package.</p>

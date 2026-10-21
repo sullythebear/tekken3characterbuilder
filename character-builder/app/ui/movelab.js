@@ -69,6 +69,21 @@
     $("buttons-field").hidden = !inputs.length && !later.length;
   }
 
+  // intro and win pose: Tekken 3's draw, or one of the style's own (1-based)
+  function showPoses(r) {
+    const chosen = state.current.poses || {};
+    let any = false;
+    for (const [name, label] of [["intro", "Intro"], ["win", "Win pose"]]) {
+      const pick = $(`pose-${name}`), list = (r.poses || {})[name] || [];
+      pick.textContent = "";
+      pick.append(new Option("Tekken 3's choice (drawn)", ""));
+      list.forEach((_, i) => pick.append(new Option(`${label} ${i + 1}`, String(i + 1))));
+      pick.value = chosen[name] && chosen[name] <= list.length ? String(chosen[name]) : "";
+      if (list.length > 1) any = true;
+    }
+    $("poses-field").hidden = !any;
+  }
+
   // fairness check: traffic lights against the cast (/api/fairness), refreshed after each change
   let fairTimer = null, fairRun = 0;
   function fairSoon() { clearTimeout(fairTimer); fairTimer = setTimeout(fair, 400); }
@@ -103,11 +118,15 @@
       if (Number.isFinite(n) && n !== Number(v.dataset.original)) out[v.dataset.move] = n;
     }
     if (shown !== state.current.donor)
-      return { move_damage: state.current.move_damage || null, move_buttons: state.current.move_buttons || null };
+      return { move_damage: state.current.move_damage || null, move_buttons: state.current.move_buttons || null,
+               poses: state.current.poses || null };
+    const poses = {};
+    for (const name of ["intro", "win"]) if ($(`pose-${name}`).value) poses[name] = Number($(`pose-${name}`).value);
     const buttons = {};
     for (const s of document.querySelectorAll("#buttons-list select")) if (s.value) buttons[s.dataset.move] = s.value;
     return { move_damage: Object.keys(out).length ? out : null,
-             move_buttons: Object.keys(buttons).length ? buttons : null };
+             move_buttons: Object.keys(buttons).length ? buttons : null,
+             poses: Object.keys(poses).length ? poses : null };
   }
 
   async function show() {
@@ -153,6 +172,7 @@
       $("own-moves").hidden = !own;
       $("basic-field").hidden = !basic && !own;
       showButtons(r, titles);
+      showPoses(r);
       fair();
     } catch (e) { note.textContent = e.message; shown = null; }
   }
@@ -165,6 +185,7 @@
     if (changed) { markDirty(); fairSoon(); }
   }
   document.getElementById("basic-reset").addEventListener("click", resetDamage);
+  for (const id of ["pose-intro", "pose-win"]) document.getElementById(id).addEventListener("change", () => markDirty());
   document.getElementById("buttons-reset").addEventListener("click", () => {
     let changed = false;
     for (const s of document.querySelectorAll("#buttons-list select")) {

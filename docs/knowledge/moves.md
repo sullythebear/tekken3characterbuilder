@@ -357,3 +357,19 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - **tested** KITTEST, b+2, 2 #2 → Liftshot, Arcade (scratch `p21c.py`): alias 877 → 239 for P1,
   121 again when P1 was seen as stock Nina; with the 2 pressed 8 frames after b+2: 120, 239, and
   P2's health 130 → 93. Earlier or later presses gave the basic 2 or nothing (the string's window).
+
+## Intro and win pose (2026-10-21, tested in game)
+
+- **tested** (scratch `winpose.py`, KITTEST in Arcade, P2 knocked out each round) Nina's round 1
+  intro is record 464 or 465, a later round starts with 466, a won round plays 467 or 468.
+- **code** Nina's alias slots: 0 → 464, 2 → 465, 1 → 466 (later rounds), 3431-3437 → 467-473.
+  Every style has the same layout at 3431-3437 (empty slots hold 0x3FFFFFFF; Xiaoyu and Law
+  leave 3435 empty; style 19 points 3431-3434 at one record).
+- **tested** (scratch `winpose2.py`) Slots written live: 0 and 2 → 465 and 3431 and 3432 → 469 gave
+  465 at every round 1 and 469 after every win, over three stages; 470-473 written the same way
+  all played as win poses (472: a bow).
+- The builder: `command_list.poses` (the style's intros from slots 0 and 2, win poses from
+  3431-3437), `pose_swaps` (the drawn slots 0, 2 / 3431, 3432 onto the chosen record; patch 21's
+  swaps, no new game code), field `poses` {"intro": n, "win": n} (1-based).
+- **tested** KITTEST intro 2, win pose 3 (Move Lab): against Xiaoyu and Lei 465 and 469 every
+  round; against Nina (one shared moveset buffer) the drawn ones, as with all moveset changes.

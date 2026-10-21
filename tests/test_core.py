@@ -404,6 +404,15 @@ class BasicDamageTests(unittest.TestCase):
         c = server.validate_character({"name": "A", "donor": 5, "move_buttons": {
             "f+2": "Duringsidestep,2", "3": "3", "1": "b+2,2#2", "x;y": "1"}})
         self.assertEqual(c["move_buttons"], {"f+2": "Duringsidestep,2"})
+        poses = {"intro": [464, 465], "win": [467, 468, 469]}                # intro and win pose
+        slot_records = {"0": 464, "2": 465, "3431": 467, "3432": 468}
+        self.assertEqual(M.pose_swaps(poses, slot_records, {"intro": 2, "win": 3}),
+                         [(0, 464, 465), (3431, 467, 469), (3432, 468, 469)])
+        self.assertEqual(M.pose_swaps(poses, slot_records, {"win": 9}), [])
+        b = M.moves_file(5, records, {}, None, None, [(0, 464, 465)])
+        self.assertEqual(b[4:], struct.pack("<HHHH", 2, 5, 0, 1) + struct.pack("<HHH", 0, 464, 465))
+        c = server.validate_character({"name": "A", "donor": 5, "poses": {"intro": 2, "win": "3", "x": 1, "y": 0}})
+        self.assertEqual(c["poses"], {"intro": 2, "win": 3})
         records["b+2,2#2"] = [121, 21]                                       # a string's later hit
         b = M.moves_file(5, records, {}, {"b+2,2#2": "Duringsidestep,2"}, {"b+2,2#2": [877]})
         self.assertEqual(b[-6:], struct.pack("<HHH", 877, 121, 239))
