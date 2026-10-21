@@ -727,3 +727,13 @@ class AutoRigTests(unittest.TestCase):
         self.assertEqual(again["auto_rig"]["shinL"], [0.1, 0.6, 0.0])
         with self.assertRaises(autorig.RigError):
             autorig.rig({"P": P, "T": T}, {"neck": [0, 1.5, 0]})
+        import numpy as np                                               # body parts painted by hand
+        tip = int(np.argmin(np.linalg.norm(P - [0.85, 1.43, 0.05], axis=1)))
+        painted = autorig.rig({"P": P, "T": T}, None, [[0.85, 1.43, 0.05, "head"]])
+        part = lambda s, i: __import__("model_import")._part(s["bones"][int(s["vbone"][i])]["name"])
+        self.assertEqual(part(painted, tip), ("head", None))
+        self.assertEqual(part(src, tip), ("hand", "L"))
+        rig = server.clean_rig(None, "auto", [[0.85, 1.43, 0.05, "head"]])
+        self.assertEqual(rig["paint"], [[0.85, 1.43, 0.05, "head"]])
+        with self.assertRaises(ValueError):
+            server.clean_rig(None, "auto", [[0, 0, 0, "tail"]])

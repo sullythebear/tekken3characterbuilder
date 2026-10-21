@@ -27,6 +27,12 @@ const T3Rig = (() => {
 
   let rig = null, joints = {}, changed = false, onInfo = null, drag = null, hover = null;
   let posing = false, poseStart = 0, frame = 0;
+  // painting body parts: the strokes kept ([x, y, z, part]) and the part on the brush
+  let painting = false, strokes = [], brushPart = "pelvis", brushDown = false, movedJoints = false;
+  const PAINT = [["head", "Head"], ["spine", "Chest"], ["pelvis", "Hips"], ["collarL", "L collar"], ["collarR", "R collar"],
+    ["upperL", "L upper arm"], ["upperR", "R upper arm"], ["foreL", "L forearm"], ["foreR", "R forearm"],
+    ["handL", "L hand"], ["handR", "R hand"], ["thighL", "L thigh"], ["thighR", "R thigh"], ["shinL", "L shin"],
+    ["shinR", "R shin"], ["footL", "L foot"], ["footR", "R foot"]];
   const views = [{ id: "rig-front", ax: 0 }, { id: "rig-side", ax: 2 }];   // x or z across, y up
 
   // world <-> canvas: one scale for both views, from the model's height
@@ -102,7 +108,7 @@ const T3Rig = (() => {
   function draw() {
     if (!rig) return;
     const t = posing ? (performance.now() - poseStart) / 450 : 0;
-    const colourParts = $("rig-colours").checked || posing;
+    const colourParts = $("rig-colours").checked || posing || painting;
     for (const v of views) {
       const canvas = $(v.id), ctx = canvas.getContext("2d");
       const f = frameOf(canvas, v.ax);
@@ -169,6 +175,13 @@ const T3Rig = (() => {
     canvas.addEventListener("pointerdown", (e) => {
       if (posing) return;
       const [px, py] = pointer(view, e);
+      if (painting) {
+        brushDown = true;
+        canvas.setPointerCapture(e.pointerId);
+        paintAt(view, px, py);
+        draw();
+        return;
+      }
       const key = nearest(view, px, py);
       if (!key) return;
       drag = { view, key };
@@ -176,6 +189,11 @@ const T3Rig = (() => {
     });
     canvas.addEventListener("pointermove", (e) => {
       const [px, py] = pointer(view, e);
+      if (painting) {
+        if (brushDown) paintAt(view, px, py);
+        draw();
+        return;
+      }
       if (drag && drag.view === view) {
         const f = frameOf(canvas, view.ax), [a, b] = f.from(px, py);
         const j = joints[drag.key].slice();
@@ -189,6 +207,7 @@ const T3Rig = (() => {
           joints[twin] = m;
         }
         changed = true;
+        movedJoints = true;
         showState();
       } else {
         const key = nearest(view, px, py);
@@ -197,10 +216,38 @@ const T3Rig = (() => {
       }
       draw();
     });
-    const end = () => { drag = null; };
+    const end = () => { drag = null; brushDown = false; };
     canvas.addEventListener("pointerup", end);
     canvas.addEventListener("pointercancel", end);
     canvas.addEventListener("pointerleave", () => { hover = null; draw(); });
+  }
+
+  // ---------------------------------------------------------------- painting body parts
+  function paintAt(view, px, py) {
+    const canvas = $(view.id), f = frameOf(canvas, view.ax), r = Number($("rig-brush").value);
+    const pts = view.ax === 0 ? rig.front : rig.side;
+    pts.forEach((p, i) => {
+      const [x, y] = f.to(p[0], p[1]);
+      if (Math.hypot(x - px, y - py) <= r && rig.parts[i] !== brushPart) {
+        rig.parts[i] = brushPart;
+        strokes.push([rig.front[i][0], rig.front[i][1], rig.side[i][0], brushPart]);
+        changed = true;
+      }
+    });
+    showState();
+  }
+  function palette() {
+    const box = $("rig-palette");
+    box.replaceChildren();
+    for (const [key, label] of PAINT) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.style.background = PART_COLOUR[key.replace(/[LR]$/, "")];
+      b.className = key === brushPart ? "on" : "";
+      b.addEventListener("click", () => { brushPart = key; palette(); });
+      box.append(b);
+    }
   }
 
   // ---------------------------------------------------------------- state and actions
@@ -211,16 +258,17 @@ const T3Rig = (() => {
       status.textContent = "The skeleton was not found automatically: drag the dots onto the joints, then press Use these joints.";
     } else if (changed) {
       badge.textContent = "✎"; badge.className = "rig-badge edit";
-      status.textContent = "Joints moved: press Use these joints to rig the model with them.";
-    } else if (rig.by_hand) {
+      status.textContent = "Changed: press Use these joints to rig the model with your joints and painting.";
+    } else if (rig.by_hand || (rig.paint || []).length) {
       badge.textContent = "✓"; badge.className = "rig-badge ok";
-      status.textContent = "Rigged with the joints you placed.";
+      status.textContent = rig.by_hand ? "Rigged with the joints you placed" + ((rig.paint || []).length ? " and your painting." : ".")
+        : "Rigged automatically, with your painting.";
     } else {
       badge.textContent = "✓"; badge.className = "rig-badge ok";
       status.textContent = "Rigged automatically from the model's shape. Check that every dot sits on its joint.";
     }
     $("rig-apply").disabled = !changed;
-    $("rig-auto").hidden = !rig.by_hand && !changed && !rig.turned_by_hand;
+    $("rig-auto").hidden = !rig.by_hand && !changed && !rig.turned_by_hand && !(rig.paint || []).length;
   }
 
   // a starting skeleton when none was found: human proportions over the model's box
@@ -248,6 +296,8 @@ const T3Rig = (() => {
     const src = rig.joints || guess();
     for (const k of Object.keys(JOINTS)) if (src[k]) joints[k] = src[k].slice();
     changed = !rig.joints;          // a guess must be applied before it counts
+    movedJoints = !rig.joints;
+    strokes = (rig.paint || []).map((s) => s.slice());
     showState();
     draw();
   }
@@ -274,9 +324,21 @@ const T3Rig = (() => {
     $("rig-colours").addEventListener("change", draw);
     $("rig-apply").addEventListener("click", () => {
       const turn = Array.isArray(rig.turn) ? rig.turn : "auto";
-      send({ joints, turn }, "Rigging the model with your joints…");
+      send({ joints: rig.by_hand || movedJoints ? joints : null, turn, paint: strokes },
+        "Rigging the model with your joints and painting…");
     });
-    $("rig-auto").addEventListener("click", () => send({ joints: null, turn: "auto" }, "Rigging the model automatically…"));
+    $("rig-auto").addEventListener("click", () => send({ joints: null, turn: "auto", paint: null }, "Rigging the model automatically…"));
+    $("rig-paint").addEventListener("change", () => {
+      painting = $("rig-paint").checked;
+      $("rig-paintbox").hidden = !painting;
+      if (painting) palette();
+      draw();
+    });
+    $("rig-paint-clear").addEventListener("click", () => {
+      strokes = [];
+      send({ joints: rig.by_hand ? joints : null, turn: Array.isArray(rig.turn) && rig.turned_by_hand ? rig.turn : "auto", paint: null },
+        "Rigging the model without the painting…");
+    });
     $("rig-pose").addEventListener("click", () => {
       posing = !posing;
       $("rig-pose").textContent = posing ? "■ Stop the pose" : "▶ Try a pose";

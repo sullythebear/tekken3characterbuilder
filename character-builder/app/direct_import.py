@@ -56,11 +56,12 @@ def _external_texture(src: dict) -> None:
 # turned model's axes) and how the model is turned ("auto", or a 3x3 rotation), else automatic
 RIG_JOINTS: dict | None = None
 RIG_TURN = "auto"
+RIG_PAINT: list | None = None             # body parts painted by hand: [[x, y, z, part], ...]
 
 
-def set_rig(joints=None, turn="auto") -> None:
-    global RIG_JOINTS, RIG_TURN
-    RIG_JOINTS, RIG_TURN = joints or None, turn or "auto"
+def set_rig(joints=None, turn="auto", paint=None) -> None:
+    global RIG_JOINTS, RIG_TURN, RIG_PAINT
+    RIG_JOINTS, RIG_TURN, RIG_PAINT = joints or None, turn or "auto", paint or None
 
 
 def load(path: Path) -> dict:
@@ -86,7 +87,7 @@ def _auto_rig(out: dict, suffix: str) -> None:
     out["P"] = P @ R.T
     out["turn"] = R.tolist()
     try:
-        autorig.rig(out, RIG_JOINTS)
+        autorig.rig(out, RIG_JOINTS, RIG_PAINT)
     except autorig.RigError as error:
         out["rig_error"] = str(error)
 
@@ -613,7 +614,7 @@ def rig_view(src: dict) -> dict | None:
             prt, side = MI._part(src["bones"][int(b)]["name"]) if b >= 0 else ("spine", None)
             parts.append((prt or "spine") + (side or "" if prt in PAIRS else ""))
     return {"joints": src.get("auto_rig"), "error": src.get("rig_error"), "turn": src.get("turn"),
-            "by_hand": bool(RIG_JOINTS), "turned_by_hand": not isinstance(RIG_TURN, str), "front": r(pick[:, [0, 1]]), "side": r(pick[:, [2, 1]]),
+            "by_hand": bool(RIG_JOINTS), "turned_by_hand": not isinstance(RIG_TURN, str), "paint": RIG_PAINT or [], "front": r(pick[:, [0, 1]]), "side": r(pick[:, [2, 1]]),
             "depth": r(pick[:, 2]), "parts": parts, "markers": list(__import__("autorig").MARKERS)}
 
 
@@ -1193,7 +1194,7 @@ def main():
     set_external_texture(a.texture)
     if a.rig and a.rig.is_file():
         r = json.loads(a.rig.read_text(encoding="utf-8"))
-        set_rig(r.get("joints"), r.get("turn", "auto"))
+        set_rig(r.get("joints"), r.get("turn", "auto"), r.get("paint"))
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))

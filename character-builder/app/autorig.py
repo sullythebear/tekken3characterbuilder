@@ -26,6 +26,7 @@ CELLS = 80                     # voxels over the model's height
 ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
+HEAD_LIFT, HEAD_WIDTH = 0.03, 0.5  # all above the head joint + lift, within this share of the shoulders: head
 
 # offsets of the 26 neighbours and their lengths
 OFFS = np.array([(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
@@ -234,8 +235,37 @@ def auto_rig(P, T):
     J["handendL"], J["handendR"] = handL[1], handR[1]
     for s in "LR":
         J["collar" + s] = J["upper" + s] + 0.65 * (np.array([J["neck"][0], J["upper" + s][1], J["upper" + s][2]]) - J["upper" + s])
-    part = segment(P, solid, origin, h, J)
+    used = [footL, footR, handL, handR] + ([head] if head[0] is not None else [])
+    extra = _branches(E, used, Dw, solid, world, J, P, H)
+    part = segment(P, solid, origin, h, J, extra)
     return J, part
+
+
+def _seg_dist(p, a, b):
+    ab = b - a
+    t = np.clip(np.dot(p - a, ab) / max(np.dot(ab, ab), 1e-12), 0, 1)
+    return float(np.linalg.norm(p - (a + t * ab)))
+
+
+def _branches(E, used, Dw, solid, world, J, P, H):
+    """[(part, polyline)]: the body's other ends (tails, ears, wings, a ponytail) followed back to
+    where they join the body; each takes the part of the bone it joins (a tail on the hips the
+    pelvis, not a leg), so it moves stiffly with that part."""
+    main = _bones(J, P)
+    out = []
+    for e in E:
+        if any(e is u for u in used) or min(np.linalg.norm(e[1] - u[1]) for u in used) < 0.15 * H:
+            continue
+        path = np.array([world(v) for v in _descend(Dw, e[0], solid)])        # end .. torso
+        near = [min(((_seg_dist(p, a, b), prt) for prt, a, b in main), key=lambda x: x[0]) for p in path]
+        k = next((i for i, (d, _) in enumerate(near) if d < 0.08 * H), None)
+        if k is None or k < 3:
+            continue
+        prt = near[k][1]
+        if prt[0] in ("thigh", "shin", "foot"):      # a tail starts at the hips, not on a leg
+            prt = ("pelvis", None)
+        out.append((prt, path[:k + 1]))
+    return out
 
 
 def _nearest_solid(solid, origin, h, p):
@@ -368,14 +398,25 @@ def _bones(J, P=None):
     return out
 
 
-def segment(P, solid, origin, h, J):
+def segment(P, solid, origin, h, J, extra=()):
     bones = _bones(J, P)
+    lines = [(prt, np.array([a, b])) for prt, a, b in bones] + list(extra)
     label = np.full(solid.shape, -1, np.int16)
-    for n, (_, a, b) in enumerate(bones):            # seeds: voxels on each bone's line
-        for t in np.linspace(0, 1, 40):
-            v = np.floor((a + t * (b - a) - origin) / h).astype(int)
-            if (v >= 0).all() and (v < solid.shape).all() and solid[tuple(v)] and label[tuple(v)] < 0:
-                label[tuple(v)] = n
+    for n, (_, line) in enumerate(lines):            # seeds: voxels along each bone and branch
+        for a, b in zip(line[:-1], line[1:]):
+            for t in np.linspace(0, 1, 40 if len(line) == 2 else 4):
+                v = np.floor((a + t * (b - a) - origin) / h).astype(int)
+                if (v >= 0).all() and (v < solid.shape).all() and solid[tuple(v)] and label[tuple(v)] < 0:
+                    label[tuple(v)] = n
+    # the head: everything above its joint and within the shoulders (a snout, a jaw, big ears)
+    head = next(n for n, (prt, _) in enumerate(lines) if prt == ("head", None))
+    centres = origin + (np.indices(solid.shape).reshape(3, -1).T + 0.5) * h
+    half = HEAD_WIDTH * abs(J["upperL"][0] - J["upperR"][0]) / 2
+    Hm = np.ptp(P[:, 1])
+    above = ((centres[:, 1] > J["neck"][1] + HEAD_LIFT * Hm) & (np.abs(centres[:, 0] - J["neck"][0]) < half)
+             & (centres[:, 2] > J["neck"][2] - 0.12 * Hm))     # not a tail curling up behind
+    above = above.reshape(solid.shape) & solid & (label < 0)
+    label[above] = head
     # grow the labels through the solid, one layer at a time (6-neighbours)
     for _ in range(4 * max(solid.shape)):
         free = solid & (label < 0)
@@ -395,7 +436,7 @@ def segment(P, solid, origin, h, J):
     lab = label[idx[:, 0], idx[:, 1], idx[:, 2]]
     part = np.empty(len(P), dtype=object)
     for i, l in enumerate(lab):
-        part[i] = bones[l][0] if l >= 0 else ("spine", None)
+        part[i] = lines[l][0] if l >= 0 else ("spine", None)
     return part
 
 
@@ -573,7 +614,36 @@ def complete(J, P):
     return J
 
 
-def rig(src, joints=None):
+PAINT_PARTS = ("head", "spine", "pelvis", "collarL", "collarR", "upperL", "upperR", "foreL", "foreR", "handL",
+               "handR", "thighL", "thighR", "shinL", "shinR", "footL", "footR")
+
+
+def paint(P, part, strokes):
+    """Body parts painted by hand: [[x, y, z, part], ...] (points of the rig view); every vertex in
+    a painted cell (1/60 of the height, and its neighbours) takes the paint of that cell."""
+    if not strokes:
+        return part
+    P = np.asarray(P, float)
+    h = float(np.ptp(P[:, 1])) / 60 or 1.0
+    lo = P.min(0)
+    cells = {}
+    for x, y, z, name in strokes:
+        c = tuple(np.floor((np.array([x, y, z]) - lo) / h).astype(int))
+        prt = (name[:-1], name[-1]) if name[-1] in "LR" and name not in ("head", "spine", "pelvis") else (name, None)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    cells.setdefault((c[0] + dx, c[1] + dy, c[2] + dz), prt)
+        cells[c] = prt                               # its own cell over a neighbour's
+    idx = np.floor((P - lo) / h).astype(int)
+    out = part.copy()
+    for i, c in enumerate(map(tuple, idx)):
+        if c in cells:
+            out[i] = cells[c]
+    return out
+
+
+def rig(src, joints=None, strokes=None):
     """Gives a model without a skeleton one: src (direct_import.load) gets "bones", "weights",
     "vbone" and "auto_rig" (the joints, for the builder's view). joints: placed by hand
     {name: [x, y, z]} (MARKERS), else found from the shape."""
@@ -587,6 +657,7 @@ def rig(src, joints=None):
         part = segment(P, solid, origin, h, J)
     else:
         J, part = auto_rig(P, T)
+    part = paint(P, part, strokes)
     src["bones"], src["weights"], src["vbone"] = skeleton(J, part)
     src["auto_rig"] = {k: [round(float(x), 5) for x in v] for k, v in J.items()}
     return src

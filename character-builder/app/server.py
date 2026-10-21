@@ -1360,9 +1360,25 @@ RIG_MARKERS = ("neck", "hips", "upperL", "upperR", "foreL", "foreR", "handL", "h
                "thighL", "thighR", "shinL", "shinR", "footL", "footR", "toeL", "toeR")     # autorig.MARKERS
 
 
-def clean_rig(joints, turn) -> dict:
-    """{"joints": {marker: [x, y, z]} or None, "turn": 3x3 rotation or "auto"}, checked."""
-    out = {"joints": None, "turn": "auto"}
+PAINT_PARTS = ("head", "spine", "pelvis", "collarL", "collarR", "upperL", "upperR", "foreL", "foreR", "handL",
+               "handR", "thighL", "thighR", "shinL", "shinR", "footL", "footR")      # autorig.PAINT_PARTS
+PAINT_MAX = 8000
+
+
+def clean_rig(joints, turn, paint=None) -> dict:
+    """{"joints": {marker: [x, y, z]} or None, "turn": 3x3 rotation or "auto", "paint": [[x, y, z,
+    part], ...] or None}, checked."""
+    out = {"joints": None, "turn": "auto", "paint": None}
+    if isinstance(paint, list) and paint:
+        strokes = []
+        for s in paint[:PAINT_MAX]:
+            if not (isinstance(s, list) and len(s) == 4 and s[3] in PAINT_PARTS):
+                raise ValueError("Invalid painted body part.")
+            xyz = [float(v) for v in s[:3]]
+            if not all(abs(v) < 1e6 for v in xyz):
+                raise ValueError("Invalid painted point.")
+            strokes.append([*xyz, s[3]])
+        out["paint"] = strokes
     if isinstance(turn, list) and len(turn) == 3 and all(isinstance(r, list) and len(r) == 3 for r in turn):
         M = [[float(x) for x in r] for r in turn]
         rows_ok = all(abs(sum(x * x for x in r) - 1) < 0.01 for r in M)
@@ -1382,7 +1398,7 @@ def clean_rig(joints, turn) -> dict:
     return out
 
 
-def set_model_rig(cid: str, joints=None, turn="auto") -> dict:
+def set_model_rig(cid: str, joints=None, turn="auto", paint=None) -> dict:
     """The rig of an uploaded model without a skeleton: joints placed by hand and/or how the model
     is turned (rig-upload.json); none of it = automatic again. The check runs again with it."""
     root = project_root()
@@ -1390,9 +1406,9 @@ def set_model_rig(cid: str, joints=None, turn="auto") -> dict:
     upload = model_upload(folder)
     if not root or not upload:
         raise ValueError("Upload a model first.")
-    rig = clean_rig(joints, turn)
+    rig = clean_rig(joints, turn, paint)
     path = folder / "rig-upload.json"
-    if rig["joints"] is None and rig["turn"] == "auto":
+    if rig["joints"] is None and rig["turn"] == "auto" and not rig["paint"]:
         path.unlink(missing_ok=True)
     else:
         path.write_text(json.dumps(rig), encoding="utf-8")
@@ -2430,7 +2446,7 @@ def import_character(payload: str) -> dict:
     if "rig-source.json" in files:                        # joints placed by hand (checked)
         try:
             r = json.loads(files["rig-source.json"].decode("utf-8"))
-            (folder / "rig-source.json").write_text(json.dumps(clean_rig(r.get("joints"), r.get("turn", "auto"))),
+            (folder / "rig-source.json").write_text(json.dumps(clean_rig(r.get("joints"), r.get("turn", "auto"), r.get("paint"))),
                                                     encoding="utf-8")
         except (ValueError, UnicodeDecodeError, AttributeError):
             raise ValueError("rig-source.json is damaged.") from None
@@ -2618,7 +2634,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/check":
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/rig":
-                return self._json(set_model_rig(str(data.get("id", "")), data.get("joints"), data.get("turn", "auto")))
+                return self._json(set_model_rig(str(data.get("id", "")), data.get("joints"), data.get("turn", "auto"),
+                                                data.get("paint")))
             if path == "/api/model/texture":
                 return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":

@@ -514,3 +514,7 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .rig-canvases figcaption { font-size: .8rem; color: var(--gold); }
 .rig-controls { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .9rem; margin: .3rem 0; }
 .rig-turns { align-items: center; }
+.rig-paintbox { margin: .3rem 0; }
+.rig-palette { display: flex; flex-wrap: wrap; gap: .25rem; margin: .3rem 0; }
+.rig-palette button { border: 2px solid transparent; border-radius: 3px; padding: .15rem .4rem; font: inherit; font-size: .8rem; color: #000; cursor: pointer; }
+.rig-palette button.on { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }

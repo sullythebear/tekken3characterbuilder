@@ -241,6 +241,15 @@
                 <div class="rig-controls">
                   <label class="check-line"><input type="checkbox" id="rig-mirror" checked> Move both sides together</label>
                   <label class="check-line"><input type="checkbox" id="rig-colours"> Colour the body parts</label>
+                  <label class="check-line"><input type="checkbox" id="rig-paint"> 🖌 Paint body parts</label>
+                </div>
+                <div class="rig-paintbox" id="rig-paintbox" hidden>
+                  <p class="hint">A piece that moves with the wrong bone (a coat tail on a leg, hair on a shoulder)? Pick the
+                    body part it should follow and paint over it in either view. Painting goes through the model (front and
+                    back at once).</p>
+                  <div class="rig-palette" id="rig-palette"></div>
+                  <label class="check-line">Brush <input type="range" id="rig-brush" min="4" max="40" value="12"></label>
+                  <button class="btn btn-ghost mini" type="button" id="rig-paint-clear">Clear the painting</button>
                 </div>
                 <div class="portrait-buttons">
                   <button class="btn btn-ghost" type="button" id="rig-pose">▶ Try a pose</button>

@@ -312,3 +312,24 @@ to correct it.
   apply (by hand, knee moved), back to automatic, import.
 - rig-upload.json travels to rig-source.json / rig-prev.json with the texture (`move_texture`) and
   in .t3char packages.
+
+### Auto rig v2.1 (2026-10-21): branches, the head, painting
+
+- **tested** The lighter texture of the unrigged Soldier is not the rig's: the rigged and the
+  unrigged Soldier bake the same 256 x 256 page (mean RGB 123/99/77 and 120/97/75; the source's
+  1024 x 1024 texture is 84/69/54 with its dark margins). The bake is the same for both.
+- **Branches**: the body's other ends (tails, ears, wings, a ponytail; not hands, feet or head and
+  15 % of the height from them) are followed back to where they join the skeleton; the branch
+  takes that bone's part (one on a leg: the pelvis), so a tail moves stiffly with the hips.
+- **The head**: every voxel above the head joint (+3 % of the height), within half the shoulders'
+  width and not more than 12 % behind the head joint (a tail curling up) is the head's: snouts,
+  jaws and big ears no longer go to the chest.
+- Benchmark (`autorig_bench.py`): parts 79.9 % -> 82.2 % on average; Buffedwolf 59 -> 81 %,
+  Crowley 55 -> 83 %, MeganTheFox 64 -> 75 %, MushroomFairy 81 -> 85 %. Two-Tails 67 -> 55 % is the
+  benchmark's: her hair and ears hang on bones without part names, which the truth counts as
+  chest; the rig gives them to the head, as the animation needs.
+- **Painting body parts** (rig view, `autorig.paint`): pick a part on the palette, brush over the
+  model in either view; strokes [x, y, z, part] go with the joints in rig-*.json ("paint", 8000 at
+  most) and win over the automatic parts (each painted cell 1/60 of the height and its
+  neighbours). Browser-tested: Michelle without a skeleton, part of an arm painted Head, applied:
+  24 strokes stored, the server's parts as the view showed them.
