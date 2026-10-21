@@ -339,3 +339,21 @@ Each token was pressed for 3 frames, 14 frames apart; the cursor was moved to La
 - **tested** KITTEST (f+2 → Liftshot), Arcade: log "Kittest has its own COMMAND LIST",
   "P1 Kittest COMMAND LIST in"; the pause menu shows Liftshot twice: "During side step, 2" and
   the f+2 icons.
+
+## String endings: a later hit on another move (2026-10-21, tested in game)
+
+- **code** A record's word 3 is an entry index into the cancel-list block (header +4, 12 bytes per
+  entry), not an offset. Nina's record 120 (b+2): entries 928-932; the one leading to 121 (the
+  string's hit 2) is entry 930, command 0x10, condition 0x1A06, through alias 877. Entry 928
+  (command 2, condition 6) leads to 122: the commands alone do not tell which entry a press
+  takes, so only measured strings are offered.
+- **tested** (scratch `combot2.py`, Practice) Alias 877 pointed at 239: b+2, 2 gave 120, 239
+  (twice), at 237 once 120, 237; written back: 120, 121 again.
+- `command_list.string_slots`: a measured string's later hit can take another move when the hit
+  before's list (with its `C00C` sub-lists) has exactly one entry leading to it, through an alias
+  no other entry uses. 4 of the 10 strings: Nina b+2, 2 #2 (877), Xiaoyu u+1+2, 2, 1 #2 (1335),
+  Bryan b+2, 1, 2 #3 (2061), style 14 ub+3, 2 #2 (2181). They go through patch 21's swaps
+  (`move_buttons` key "<string>#<hit>").
+- **tested** KITTEST, b+2, 2 #2 → Liftshot, Arcade (scratch `p21c.py`): alias 877 → 239 for P1,
+  121 again when P1 was seen as stock Nina; with the 2 pressed 8 frames after b+2: 120, 239, and
+  P2's health 130 → 93. Earlier or later presses gave the basic 2 or nothing (the string's window).

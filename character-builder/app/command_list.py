@@ -295,6 +295,42 @@ def string_records(moveset: bytes, style: int) -> dict[str, list[tuple[int, int]
             for name, records in STRINGS.get(style, {}).items() if all(0 <= r < count for r in records)}
 
 
+def string_slots(moveset: bytes, style: int) -> dict[str, list[int]]:
+    """{"<string>#<hit>": [alias slot]} of the measured strings' later hits that can take another
+    move: the hit before's cancel list (with its shared sub-lists) has exactly one entry leading
+    to the hit, through an alias slot no other entry of the moveset uses (patch 21 swaps it;
+    tested: Nina b+2, 2 ended in Liftshot)."""
+    word = lambda o: struct.unpack_from("<I", moveset, o)[0]
+    block, start, alias = word(4), word(8), word(12)
+    uses = {}
+    for e in range((start - block) // 12):
+        cmd, _, _, dest = struct.unpack_from("<4H", moveset, block + 12 * e)
+        if cmd != 0xC00C:
+            uses[dest] = uses.get(dest, 0) + 1
+
+    def entries(index, seen):
+        out = []
+        for e in range(index, index + 60):
+            cmd, _, _, dest = struct.unpack_from("<4H", moveset, block + 12 * e)
+            if cmd == 0xC00C:
+                if dest not in seen:
+                    seen.add(dest)
+                    out += entries(dest, seen)
+                continue
+            out.append(dest)
+            if cmd == 0xC000:
+                break
+        return out
+    out = {}
+    for name, hits in STRINGS.get(style, {}).items():
+        for n, (a, b) in enumerate(zip(hits, hits[1:]), 2):
+            found = [d for d in entries(word(start + 56 * a + 12), set())
+                     if alias + 4 * d + 4 <= len(moveset) and word(alias + 4 * d) == b]
+            if len(found) == 1 and uses.get(found[0]) == 1:
+                out[f"{name}#{n}"] = found
+    return out
+
+
 def own_records(moveset: bytes, style: int) -> dict[str, tuple[int, int]]:
     """{COMMAND LIST command: (record, damage)} of the style's measured own moves with damage."""
     word = lambda o: struct.unpack_from("<I", moveset, o)[0]

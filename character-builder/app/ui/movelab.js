@@ -36,6 +36,7 @@
     const grid = $("buttons-list"), own = state.current.move_buttons || {};
     grid.textContent = "";
     const inputs = Object.keys(r.slots || {}).filter((k) => (r.basic || {})[k]);
+    const later = Object.keys(r.slots || {}).filter((k) => k.includes("#"));    // a string's later hit
     const dir = (k) => (k.includes("+") && isNaN(k.split("+")[0]) ? k.split("+")[0] : "");
     inputs.sort((a, b) => ORDER.indexOf(dir(a)) - ORDER.indexOf(dir(b)) || a.length - b.length || a.localeCompare(b));
     const name = (k) => titles[k] || k;
@@ -44,11 +45,11 @@
     const movable = r.movable || [];
     const ownFirst = movable.filter((m) => !(m in (r.basic || {}))).sort((a, b) => name(a).localeCompare(name(b)));
     const basicToo = movable.filter((m) => m in (r.basic || {}));
-    for (const k of inputs) {
+    for (const k of [...inputs, ...later]) {
       const cell = document.createElement("label");
       const input = document.createElement("span"), pick = document.createElement("select");
       input.className = "move-input";
-      input.textContent = k;
+      input.textContent = k.includes("#") ? name(k) : k;
       pick.dataset.move = k;
       pick.setAttribute("aria-label", `Move on ${k}`);
       pick.append(new Option(`its own: ${label(k)}`, ""));
@@ -65,7 +66,7 @@
       cell.append(input, pick);
       grid.append(cell);
     }
-    $("buttons-field").hidden = !inputs.length;
+    $("buttons-field").hidden = !inputs.length && !later.length;
   }
 
   // fairness check: traffic lights against the cast (/api/fairness), refreshed after each change

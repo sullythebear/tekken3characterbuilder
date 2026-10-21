@@ -1582,7 +1582,7 @@ def command_list(donor) -> dict:
         raise ValueError("That style does not exist.")
     own = zlib.crc32(repr((sorted(command_list_module.OWN_MOVES.get(donor, {}).items()),
                            sorted(command_list_module.STRINGS.get(donor, {}).items()))).encode())
-    path = CACHE / f"commandlist6-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
+    path = CACHE / f"commandlist7-{models[0]}-{donor}-{own:08x}.json"   # the measured table is in the name
     if not path.is_file():
         problem, out = run_model_tool(project_root(), ["commandlist", "--model", str(models[0]), "--style", str(donor)],
                                       timeout=120)

@@ -404,6 +404,11 @@ class BasicDamageTests(unittest.TestCase):
         c = server.validate_character({"name": "A", "donor": 5, "move_buttons": {
             "f+2": "Duringsidestep,2", "3": "3", "1": "b+2,2#2", "x;y": "1"}})
         self.assertEqual(c["move_buttons"], {"f+2": "Duringsidestep,2"})
+        records["b+2,2#2"] = [121, 21]                                       # a string's later hit
+        b = M.moves_file(5, records, {}, {"b+2,2#2": "Duringsidestep,2"}, {"b+2,2#2": [877]})
+        self.assertEqual(b[-6:], struct.pack("<HHH", 877, 121, 239))
+        c = server.validate_character({"name": "A", "donor": 5, "move_buttons": {"b+2,2#2": "Duringsidestep,2"}})
+        self.assertEqual(c["move_buttons"], {"b+2,2#2": "Duringsidestep,2"})
         c = server.validate_character({"name": "A", "donor": 5, "move_damage": {"3": 999, "df+2": "12", "x": 3}})
         self.assertEqual(c["move_damage"], {"3": 200, "df+2": 12})
         c = server.validate_character({"name": "A", "donor": 4, "move_damage": {"D+3+4": 9, "d+1+4": 70}})

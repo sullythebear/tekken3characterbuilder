@@ -691,6 +691,7 @@ def main() -> None:
                 own[f"{name}#{n}"] = damage
         strings = {name: [d for _, d in hits] for name, hits in strings.items()}
         slots = {name: s for name, s in command_list.basic_slots(moveset, exe).items() if name in basic}
+        slots.update({k: s for k, s in command_list.string_slots(moveset, args.style).items() if k in rows})
         throws = {e["command"].replace(" ", "") for e in entries if "[Throw]" in e.get("name", "") and e.get("command")}
         movable = [name for name in rows if "#" not in name and name not in throws]   # a basic input can take these
         print(json.dumps({"moves": command_list.with_damage(entries, {**basic, **own}, strings), "basic": basic,

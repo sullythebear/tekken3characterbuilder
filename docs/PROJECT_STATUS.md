@@ -54,6 +54,7 @@ Updated: 2026-10-20.
 - Rival per fighter (Stage Lab, patch 22, tested in game): KITTEST meets Paul at Arcade stage 9.
   An own final boss was tried and left out (the Ogre cutscene breaks; `knowledge/roster-tables.md`).
 - The in-game COMMAND LIST shows moved moves on their new input (patch 22, tested in game).
+- String endings: a string's later hit can be another move (Move Lab, 4 strings; tested in game).
 - CPU personality per fighter (Stage Lab: Calm, Steady, Fierce; patch 22, tested in game).
 - Share codes (Fighter page "Share code", menu "Enter share code") and "Surprise me" in the menu.
 - Fairness check in the Move Lab: traffic lights against the cast's damage (KITTEST: Just for fun,

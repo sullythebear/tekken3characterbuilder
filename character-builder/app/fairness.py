@@ -58,11 +58,12 @@ def check(cast: dict, style: dict, move_damage: dict | None, move_buttons: dict 
                       "notes": notes or ([f"{len(keys)} changed, within the cast"] if keys else ["unchanged"])})
     notes, lights = [], []
     for k, move in sorted((move_buttons or {}).items()):
-        if k not in basic_bar or move not in records:
+        if (k not in basic_bar and "#" not in k) or move not in records:
             continue
-        lights.append(light(now(move), basic_bar[k]))
+        b, what = bar(k)                       # a basic input, or a string's later hit
+        lights.append(light(now(move), b))
         if lights[-1] != GREEN:
-            notes.append(f"{k} gives {now(move)} (cast's {k} up to {basic_bar[k]})")
+            notes.append(f"{k} gives {now(move)} ({what} up to {b})")
     parts.append({"part": "Moves on other buttons", "light": worst(lights),
                   "notes": notes or ([f"{len(lights)} moved, within the cast's damage"] if lights else ["unchanged"])})
     overall = worst(p["light"] for p in parts)
