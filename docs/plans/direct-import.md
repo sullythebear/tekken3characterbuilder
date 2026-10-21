@@ -266,3 +266,49 @@ MeganTheFox, Two-Tails, Buffedwolf.
   Newly listed and folded by default: MegaAngel's four wing halves, the tails of Buffedwolf,
   Two-Tails and Crowley's coat; Seed-san unchanged. The five re-approved after a look (speckle
   of Buffedwolf 0.40 % and Two-Tails 1.53 %, no visible change); every other model identical.
+
+## Automatic rig v2 (2026-10-21, tested; `autorig.py`)
+
+Models without a skeleton were locked (the first shape-based rig was dropped on 2026-10-03). Now
+the importer rigs them itself and the builder shows the result (rig view), with the player able
+to correct it.
+
+- **How** (numpy only): the model becomes a solid of voxels (80 over its height); every voxel's
+  depth (layers of erosion); from the deepest voxel of the torso the plain and the depth-weighted
+  geodesic distance (26 neighbours, relaxation in place); the body's ends = local maxima of the
+  plain distance; feet = the two lowest (else, legs joined in a dress: the lowest vertices each
+  side), hands = the most mirror-like pair to the sides, ends far behind the body (wings, capes,
+  tails) penalised; the weighted ways from the ends back to the torso run through the limbs'
+  middles: where the legs' ways part = the crotch, the arms' = the chest. Shoulder = where the
+  arm's way thins (depth <= 1.55 x the arm's), elbow / wrist at 0.36 / 0.70 of shoulder ..
+  fingertip, hip sockets above the split at the thigh's middle line, ankles at 5 %, head joint
+  0.15 of the way from the shoulders to the top. Body parts: bone segments (spine up to the head
+  joint and out along the shoulder girdle, pelvis to both sockets, thighs from a quarter down,
+  feet to the heel) grown through the solid, each vertex taking its voxel's bone.
+- `autorig.orient`: up = the axis whose low end is two feet (2-4 pieces in a 2 % slice, dense
+  surface samples) and high end one head, with the solid's centre of volume above the middle
+  (weighted most); glTF (.glb/.vrm) keeps Y up unless the model lies (Y under 0.6 of the width).
+  Front: the feet reach farther ahead of the ankles than behind; the left-right axis is the one
+  the two feet stand apart along.
+- `autorig.skeleton` turns the joints into a Mixamo-named skeleton with full weights per part,
+  so the whole importer (reduce, protrusions, mittens, chibi gate, checks) takes the model as
+  rigged. `direct_import.load` rigs every file without bones; `set_rig(joints, turn)` / CLI
+  `--rig file.json` use joints placed by hand ({marker: [x, y, z]}, `autorig.MARKERS`) and a turn.
+- **Benchmark** (`tools/render/autorig_bench.py --orient`, 22 rigged test models rigged again as if
+  they had none, their skeleton as the truth): the old rig failed on 7 and missed by ~5 % of the
+  height; v2 rigs all 22, joints 3.3 % off on average (worst: shoulders 4.6 %), 80 % of the
+  vertices on the skeleton's part, 0.5-5 s per model; orient right in 113 of 132 turned copies,
+  33 of 34 for glTF (Y up given). Weak: furry models with big tails (Two-Tails, MeganTheFox),
+  long coats (Crowley).
+- **tested** Unrigged files made from rigged ones (scratch `strip_skin.py`: skins removed, skinned
+  meshes made root nodes): all six checked "rigged by the creator"; Soldier (Z up after
+  stripping) stood up by itself; imported over Nina (834 triangles from 11376) and fought in
+  Arcade: punches, kicks and jumps moved arms and legs with their bones, the body stayed whole.
+  Its texture came out lighter than the source's (not checked whether the stripping or the bake).
+- **Rig view** (builder, `ui/rigview.js`): front and side point views with the skeleton; dots to
+  drag (mirrored by default), Use these joints (`/api/model/rig` -> `rig-upload.json`, checked
+  again), Rig automatically again, turns (tip over, roll, turn around), Try a pose (each point
+  turned with its part's bone, forward kinematics), Colour the body parts. Browser-tested: drag,
+  apply (by hand, knee moved), back to automatic, import.
+- rig-upload.json travels to rig-source.json / rig-prev.json with the texture (`move_texture`) and
+  in .t3char packages.

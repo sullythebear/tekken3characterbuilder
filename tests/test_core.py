@@ -659,3 +659,71 @@ class StageModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _figure():
+    """A standing figure of boxes in T-pose (1.75 high, Y up, facing +Z): no game data."""
+    import numpy as np
+    boxes = [((-0.18, 0.95, -0.1), (0.18, 1.45, 0.1)), ((-0.05, 1.44, -0.05), (0.05, 1.52, 0.05)),
+             ((-0.1, 1.5, -0.1), (0.1, 1.75, 0.12))]
+    for s in (1, -1):
+        boxes += [((min(s * 0.17, s * 0.85), 1.33, -0.05), (max(s * 0.17, s * 0.85), 1.43, 0.05)),
+                  ((min(s * 0.04, s * 0.16), 0.08, -0.06), (max(s * 0.04, s * 0.16), 0.97, 0.06)),
+                  ((min(s * 0.04, s * 0.16), 0.0, -0.06), (max(s * 0.04, s * 0.16), 0.08, 0.22))]
+    P, T = [], []
+    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    for lo, hi in boxes:
+        base = len(P)
+        P += [(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+        for a, b, c, d in quads:
+            T += [(base + a, base + b, base + c), (base + a, base + c, base + d)]
+    return np.array(P, float), np.array(T)
+
+
+class AutoRigTests(unittest.TestCase):
+    """autorig.py on a figure of boxes: joints, body parts, turning upright, skeleton."""
+
+    def test_joints_and_parts(self):
+        import numpy as np
+        import autorig
+        P, T = _figure()
+        J, part = autorig.auto_rig(P, T)
+        self.assertGreater(J["handendL"][0], 0.75)
+        self.assertLess(J["handendR"][0], -0.75)
+        self.assertTrue(0.06 < J["upperL"][0] < J["foreL"][0] and 1.2 < J["upperL"][1] < 1.5)
+        self.assertTrue(0.3 < J["foreL"][0] < 0.7)
+        self.assertTrue(0.85 < J["hips"][1] < 1.15 and 1.35 < J["neck"][1] < 1.65)
+        self.assertTrue(0.02 < J["thighL"][0] < 0.2 and 0.3 < J["shinL"][1] < 0.7)
+        self.assertGreater(J["toeL"][2], J["footL"][2])
+        near = lambda q: tuple(part[int(np.argmin(np.linalg.norm(P - q, axis=1)))])
+        self.assertEqual(near((0.85, 1.43, 0.05)), ("hand", "L"))
+        self.assertEqual(near((-0.85, 1.33, -0.05)), ("hand", "R"))
+        self.assertEqual(near((0.1, 1.75, 0.12)), ("head", None))
+        self.assertEqual(near((0.16, 0.0, 0.22)), ("foot", "L"))
+
+    def test_orient(self):
+        import numpy as np
+        import autorig
+        P, T = _figure()
+        for Q in (np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]),            # Z up
+                  np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]),           # facing -Z
+                  np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])):          # upside down
+            P2 = P @ Q.T
+            P3 = P2 @ autorig.orient(P2, T).T
+            self.assertTrue(np.allclose(P3 - P3.mean(0), P - P.mean(0), atol=1e-6), Q)
+
+    def test_rig_gives_a_skeleton(self):
+        import autorig
+        P, T = _figure()
+        src = autorig.rig({"P": P, "T": T})
+        names = [b["name"] for b in src["bones"]]
+        for n in ("Hips", "Spine", "Neck", "Head", "LeftArm", "RightForeArm", "LeftHand", "RightUpLeg", "LeftLeg", "RightFoot"):
+            self.assertIn(n, names)
+        self.assertEqual(len(src["weights"]), len(P))
+        self.assertEqual(set(src["auto_rig"]), set(autorig.MARKERS) | {"top", "collarL", "collarR"})
+        placed = dict(src["auto_rig"])                                   # joints placed by hand
+        placed["shinL"] = [0.1, 0.6, 0.0]
+        again = autorig.rig({"P": P, "T": T}, {k: placed[k] for k in autorig.MARKERS})
+        self.assertEqual(again["auto_rig"]["shinL"], [0.1, 0.6, 0.0])
+        with self.assertRaises(autorig.RigError):
+            autorig.rig({"P": P, "T": T}, {"neck": [0, 1.5, 0]})

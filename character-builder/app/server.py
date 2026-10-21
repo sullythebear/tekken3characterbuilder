@@ -1264,12 +1264,16 @@ def model_texture(folder: Path, stem: str) -> Path | None:
 
 
 def move_texture(folder: Path, src: str, dst: str) -> None:
-    """texture-<src>.* becomes texture-<dst>.* (any old texture-<dst>.* goes)."""
+    """texture-<src>.* becomes texture-<dst>.* (any old texture-<dst>.* goes); the rig placed by
+    hand (rig-<src>.json) moves along."""
     for old in folder.glob(f"texture-{dst}.*"):
         old.unlink()
     texture = model_texture(folder, src)
     if texture:
         texture.replace(folder / f"texture-{dst}{texture.suffix}")
+    (folder / f"rig-{dst}.json").unlink(missing_ok=True)
+    if (folder / f"rig-{src}.json").is_file():
+        (folder / f"rig-{src}.json").replace(folder / f"rig-{dst}.json")
 
 
 def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
@@ -1280,6 +1284,9 @@ def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=No
         texture = model_texture(Path(args[0]).parent, Path(args[0]).stem)
         if texture:
             args = [*args, "--texture", str(texture)]
+        rig = Path(args[0]).parent / f"rig-{Path(args[0]).stem}.json"     # joints placed by hand
+        if rig.is_file():
+            args = [*args, "--rig", str(rig)]
     cmd = [venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)]
     try:
         if on_line is None:
@@ -1326,7 +1333,7 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This model file is too large (16 MB at most).")
-    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*")]:
+    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*"), *folder.glob("rig-upload.json")]:
         old.unlink()
     target = folder / f"upload{ext}"
     target.write_bytes(raw)
@@ -1347,6 +1354,50 @@ def recheck_upload(root: Path, folder: Path, target: Path, name: str) -> dict:
     if not info.get("ok"):
         target.unlink(missing_ok=True)
     return info
+
+
+RIG_MARKERS = ("neck", "hips", "upperL", "upperR", "foreL", "foreR", "handL", "handR", "handendL", "handendR",
+               "thighL", "thighR", "shinL", "shinR", "footL", "footR", "toeL", "toeR")     # autorig.MARKERS
+
+
+def clean_rig(joints, turn) -> dict:
+    """{"joints": {marker: [x, y, z]} or None, "turn": 3x3 rotation or "auto"}, checked."""
+    out = {"joints": None, "turn": "auto"}
+    if isinstance(turn, list) and len(turn) == 3 and all(isinstance(r, list) and len(r) == 3 for r in turn):
+        M = [[float(x) for x in r] for r in turn]
+        rows_ok = all(abs(sum(x * x for x in r) - 1) < 0.01 for r in M)
+        if not rows_ok:
+            raise ValueError("Invalid turn.")
+        out["turn"] = M
+    if isinstance(joints, dict) and joints:
+        J = {}
+        for k in RIG_MARKERS:
+            v = joints.get(k)
+            if not (isinstance(v, list) and len(v) == 3):
+                raise ValueError(f"Place every joint ({k} is missing).")
+            J[k] = [float(x) for x in v]
+            if not all(abs(x) < 1e6 for x in J[k]):
+                raise ValueError("Invalid joint position.")
+        out["joints"] = J
+    return out
+
+
+def set_model_rig(cid: str, joints=None, turn="auto") -> dict:
+    """The rig of an uploaded model without a skeleton: joints placed by hand and/or how the model
+    is turned (rig-upload.json); none of it = automatic again. The check runs again with it."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    rig = clean_rig(joints, turn)
+    path = folder / "rig-upload.json"
+    if rig["joints"] is None and rig["turn"] == "auto":
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(json.dumps(rig), encoding="utf-8")
+    old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
+    return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
 
 def upload_texture(cid: str, name: str, payload: str) -> dict:
@@ -2256,6 +2307,8 @@ def export_character(cid: str) -> tuple[str, bytes]:
             texture = model_texture(folder, "source")     # its texture image, if one was chosen
             if texture:
                 z.write(texture, texture.name)
+            if (folder / "rig-source.json").is_file():    # the joints placed by hand
+                z.write(folder / "rig-source.json", "rig-source.json")
     return f"{folder.name}.t3char", buffer.getvalue()
 
 
@@ -2310,7 +2363,7 @@ def import_character(payload: str) -> dict:
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
     allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
-               "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES)}
+               "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES), "rig-source.json"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -2374,6 +2427,13 @@ def import_character(payload: str) -> dict:
         texture = files.get(f"texture-source{ext}")
         if texture and texture.startswith(magic):
             (folder / f"texture-source{ext}").write_bytes(texture)
+    if "rig-source.json" in files:                        # joints placed by hand (checked)
+        try:
+            r = json.loads(files["rig-source.json"].decode("utf-8"))
+            (folder / "rig-source.json").write_text(json.dumps(clean_rig(r.get("joints"), r.get("turn", "auto"))),
+                                                    encoding="utf-8")
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            raise ValueError("rig-source.json is damaged.") from None
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
     warnings = fit_source(saved["id"], folder / name, int(own.get("costume", 0) or 0), own.get("parts") or {},
                           str(own.get("file") or name)[:80], own.get("settings"))
@@ -2557,6 +2617,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "warnings": sync_customs(drop=game_key(cid))})
             if path == "/api/model/check":
                 return self._json(check_model(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
+            if path == "/api/model/rig":
+                return self._json(set_model_rig(str(data.get("id", "")), data.get("joints"), data.get("turn", "auto")))
             if path == "/api/model/texture":
                 return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":

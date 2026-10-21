@@ -54,6 +54,8 @@ Updated: 2026-10-20.
 - Rival per fighter (Stage Lab, patch 22, tested in game): KITTEST meets Paul at Arcade stage 9.
   An own final boss was tried and left out (the Ogre cutscene breaks; `knowledge/roster-tables.md`).
 - The in-game COMMAND LIST shows moved moves on their new input (patch 22, tested in game).
+- Models without a skeleton are rigged automatically (Model Importer, rig view to check and drag joints;
+  benchmark 22 of 22 rigged, joints 3.3 % off; an unrigged Soldier imported and fought in game).
 - TTT1 styles as donors: a fighter on a Tekken Tag guest's style (patch 23; KUNIKO on Kunimitsu, tested in game).
 - Intro and win pose per fighter (Move Lab; tested in game).
 - String endings: a string's later hit can be another move (Move Lab, 4 strings; tested in game).

@@ -1,5 +1,6 @@
 """Direct import of a PS1-style model (.glb/.fbx): used as it is - its own polygons, UVs and
-texture - with an automatic rig when it has no skeleton (T-pose or A-pose, facing +Z, Y up).
+texture - with an automatic rig when it has no skeleton (autorig.py: turned upright facing +Z,
+then joints and body parts found from its shape, or placed by the player).
 
 Every vertex belongs to one body row, as on the PlayStation (no blended bones). The texture
 keeps its layout: texel (u, v) * size is the same texel in the fighter's page, 4-bit, each UV
@@ -51,13 +52,43 @@ def _external_texture(src: dict) -> None:
             src["textures"][mi] = EXTERNAL_TEXTURE
 
 
+# a model without a skeleton: the joints the player placed by hand ({name: [x, y, z]}, in the
+# turned model's axes) and how the model is turned ("auto", or a 3x3 rotation), else automatic
+RIG_JOINTS: dict | None = None
+RIG_TURN = "auto"
+
+
+def set_rig(joints=None, turn="auto") -> None:
+    global RIG_JOINTS, RIG_TURN
+    RIG_JOINTS, RIG_TURN = joints or None, turn or "auto"
+
+
 def load(path: Path) -> dict:
     out = _load(path)
     if out.get("bones"):
         _vrm_extras(out)
         _name_by_shape(out)
         _upright(out)
+    else:
+        _auto_rig(out, Path(path).suffix.lower())
     return out
+
+
+def _auto_rig(out: dict, suffix: str) -> None:
+    """No skeleton in the file: stand the model upright facing +Z and give it one (autorig.py),
+    as a rigged file would have. A shape it cannot rig keeps its reason in "rig_error"."""
+    import autorig
+    P, T = np.asarray(out["P"], float), np.asarray(out["T"])
+    if isinstance(RIG_TURN, (list, tuple, np.ndarray)):
+        R = np.asarray(RIG_TURN, float)
+    else:                                            # glTF is Y up by its standard
+        R = autorig.orient(P, T, up=np.array([0.0, 1, 0]) if suffix in (".glb", ".vrm") else None)
+    out["P"] = P @ R.T
+    out["turn"] = R.tolist()
+    try:
+        autorig.rig(out, RIG_JOINTS)
+    except autorig.RigError as error:
+        out["rig_error"] = str(error)
 
 
 def _vrm_extras(src: dict) -> None:
@@ -330,82 +361,6 @@ def _load(path: Path) -> dict:
     return out
 
 
-def auto_rig(P, T=None):
-    """Joints of a T/A-posed humanoid from its shape alone (glTF axes: Y up, facing +Z, the
-    character's left at +X). -> joints {name: point}, and a row for every vertex."""
-    y0, y1 = P[:, 1].min(), P[:, 1].max()
-    H = y1 - y0
-    y = (P[:, 1] - y0) / H
-    ax = np.abs(P[:, 0])
-    reach = ax.max()
-    hands = ax > reach - 0.03 * H
-    arm_y = float(np.median(y[hands]))
-    # torso half width: widest point of the body between the waist and below the arms
-    band = (y > 0.5) & (y < arm_y - 0.08)
-    torso_x = float(np.percentile(ax[band], 98))
-    # crotch: the lowest height where a ray through the centre line (front to back) meets the
-    # body; below it is the gap between the legs. Rays, not vertices: a low-poly model has
-    # few vertices, so "no vertex near the centre" holds almost everywhere
-    import lowpoly
-    crotch = 0.45
-    if T is not None:
-        zs = P[:, 2].min() - 0.1 * H
-        hs = np.arange(0.2, 0.65, 0.004)
-        o = np.array([[0.0, y0 + h * H, zs] for h in hs])
-        d = np.tile([0.0, 0, 1.0], (len(hs), 1))
-        hit = lowpoly.ray_hits(o, d, P, T, np.full(len(hs), 2 * H + 1))
-        body = ~np.isnan(hit)
-        if body.any():
-            crotch = float(hs[np.argmax(body)])
-    # baggy trousers or a skirt close the gap low down; a human crotch sits at 0.42-0.50 of
-    # the height
-    crotch = float(np.clip(crotch, 0.42, 0.5))
-    knee = crotch * 0.52 + 0.05 * 0.48
-    ankle = 0.06
-    neck = arm_y + 0.06
-    hip_line = crotch + 0.08
-    sh_x = torso_x * 0.92
-    wrist_x = reach - 0.105 * H
-    elbow_x = (sh_x + wrist_x) / 2
-    legs = y < crotch + 0.01
-    leg_x = float(np.median(ax[legs & (y > crotch - 0.15)]))
-    J = {}
-    for side, s in (("L", 1), ("R", -1)):
-        J["collar" + side] = np.array([s * 0.035 * H, y0 + arm_y * H, 0])
-        J["upper" + side] = np.array([s * sh_x, y0 + arm_y * H, 0])
-        J["fore" + side] = np.array([s * elbow_x, y0 + arm_y * H, 0])
-        J["hand" + side] = np.array([s * wrist_x, y0 + arm_y * H, 0])
-        J["handend" + side] = np.array([s * reach, y0 + arm_y * H, 0])
-        J["thigh" + side] = np.array([s * leg_x, y0 + hip_line * H - 0.03 * H, 0])
-        J["shin" + side] = np.array([s * leg_x, y0 + knee * H, 0])
-        J["foot" + side] = np.array([s * leg_x, y0 + ankle * H, 0])
-        sel = (np.sign(P[:, 0]) == s) & (y < ankle + 0.02)
-        J["toe" + side] = P[sel][np.argmax(P[sel][:, 2])] if sel.any() else J["foot" + side] + [0, 0, 0.1 * H]
-    for k in ("thighL", "thighR", "shinL", "shinR", "footL", "footR"):
-        J[k][2] = float(np.median(P[(np.abs(P[:, 0] - J[k][0]) < 0.05 * H) & (np.abs(P[:, 1] - J[k][1]) < 0.03 * H), 2]
-                                  if ((np.abs(P[:, 0] - J[k][0]) < 0.05 * H) & (np.abs(P[:, 1] - J[k][1]) < 0.03 * H)).any() else [0]))
-    J["hips"] = np.array([0, y0 + hip_line * H, float(np.median(P[np.abs(y - hip_line) < 0.02, 2]))])
-    J["neck"] = np.array([0, y0 + neck * H, float(np.median(P[np.abs(y - neck) < 0.02, 2]))])
-    J["top"] = np.array([0, y1, J["neck"][2]])
-    # one row per vertex
-    part = np.empty(len(P), dtype=object)
-    for i, (p, yy, a) in enumerate(zip(P, y, ax)):
-        side = "L" if p[0] >= 0 else "R"
-        if a > sh_x and abs(yy - arm_y) < 0.14:
-            part[i] = ("upper" if a < elbow_x else "fore" if a < wrist_x else "hand", side)
-        elif yy > neck and a < torso_x:
-            part[i] = ("head", None)
-        elif a > 0.6 * sh_x and abs(yy - arm_y) < 0.07:
-            part[i] = ("collar", side)
-        elif yy < crotch + 0.01:
-            part[i] = ("thigh" if yy > knee else "shin" if yy > ankle + 0.015 else "foot", side)
-        elif yy < hip_line:
-            part[i] = ("pelvis", None)
-        else:
-            part[i] = ("spine", None)
-    return J, part
-
-
 def rig_from_skeleton(bones, vbone, P):
     """Joints and per-vertex parts from a skeleton with Mixamo-like names."""
     J = {"hips": MI.joint(bones, "pelvis"), "neck": MI.joint(bones, "head")}
@@ -609,7 +564,10 @@ def inspect(path: Path) -> dict:
     parts = {MI._part(b["name"]) for b in src.get("bones", [])}
     info["missing"] = [k for k, v in NEEDED.items() if v not in parts]
     weighted = sum(1 for w in src.get("weights", []) if w) if "weights" in src else 0
-    if not src.get("bones"):
+    if src.get("rig_error"):
+        info["problems"].append(f"The automatic rig did not work: {src['rig_error']} Place the joints yourself "
+                                "in the rig view, or rig the model in Mixamo (FBX Binary, T-pose).")
+    elif not src.get("bones"):
         info["problems"].append("The model is not rigged: it has no skeleton. Rig it first (for example "
                                 "with Mixamo, then export FBX Binary in T-pose).")
     elif info["missing"]:
@@ -621,6 +579,7 @@ def inspect(path: Path) -> dict:
                                 "50 %). Tekken's animations stretch such a model into a giant; use a model with a "
                                 "human build.")
     info["rigged"] = not info["problems"]
+    info["rig"] = rig_view(src)
     info["notes"] = []
     if info["triangles"] > REDUCE_ABOVE:
         info["notes"].append(f"{info['triangles']} triangles: Tekken 3 fighters have 650-1100, so the creator "
@@ -636,6 +595,26 @@ def inspect(path: Path) -> dict:
 # hips below 30 % of the height: a chibi (KayKit's adventurers, 19-23 %); tested 2026-10-19: the
 # Mage came out as a stretched giant in a fight, so such models are not imported
 CHIBI_HIPS = 0.30
+
+
+def rig_view(src: dict) -> dict | None:
+    """For a model without a skeleton of its own: the joints the automatic rig found (or the
+    player placed), how the model was turned, and its points seen from the front (x, y) and the
+    side (z, y), for the builder's rig view. None for a rigged file."""
+    if not (src.get("auto_rig") or src.get("rig_error")):
+        return None
+    P = np.asarray(src["P"], float)
+    step = max(1, len(P) // 2500)
+    pick = P[::step]
+    r = lambda a: np.round(a, 4).tolist()
+    parts = []
+    if src.get("bones") is not None and src.get("vbone") is not None:
+        for b in np.asarray(src["vbone"])[::step]:   # each point's body part, for the pose preview
+            prt, side = MI._part(src["bones"][int(b)]["name"]) if b >= 0 else ("spine", None)
+            parts.append((prt or "spine") + (side or "" if prt in PAIRS else ""))
+    return {"joints": src.get("auto_rig"), "error": src.get("rig_error"), "turn": src.get("turn"),
+            "by_hand": bool(RIG_JOINTS), "turned_by_hand": not isinstance(RIG_TURN, str), "front": r(pick[:, [0, 1]]), "side": r(pick[:, [2, 1]]),
+            "depth": r(pick[:, 2]), "parts": parts, "markers": list(__import__("autorig").MARKERS)}
 
 
 def hips_share(src: dict) -> float | None:
@@ -702,9 +681,14 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                                      "they may look smeared, as the PS1 page cannot repeat")
     # rigging
     bones = src.get("bones") or []
-    if not bones:
+    if src.get("rig_error"):
+        add("Rigging", "bad", f"No skeleton, and the automatic rig did not work: {src['rig_error']}")
+    elif src.get("auto_rig"):
+        add("Rigging", "info", "No skeleton in the file: " + ("rigged with the joints you placed" if RIG_JOINTS else
+                               "rigged automatically from the model's shape") + ". Check the joints in the rig view")
+    elif not bones:
         add("Rigging", "bad", "No skeleton")
-    else:
+    if bones and not src.get("auto_rig"):
         found = len(NEEDED) - len(info.get("missing", []))
         add("Rigging", "ok" if found == len(NEEDED) else "bad",
             f"{len(bones)} bones; {found} of the {len(NEEDED)} Tekken needs found")
@@ -763,10 +747,9 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     # standing frames: those mirror collarbones and hips and tilt the head (bind_pose.py)
     W = BP.solve(m, MI.donor_frames(root, m))
     P, T, UV = src["P"], src["T"], src["UV"]
-    if "bones" in src:
-        J0, part = rig_from_skeleton(src["bones"], src["vbone"], P)
-    else:
-        J0, part = auto_rig(P, T)
+    if "bones" not in src:                           # load() rigs every model; this one could not be
+        raise ValueError(src.get("rig_error") or "The model has no skeleton.")
+    J0, part = rig_from_skeleton(src["bones"], src["vbone"], P)
     log(f"auto rig: crotch at {(J0['thighL'][1] - P[:, 1].min()) / np.ptp(P[:, 1]):.2f} of the height")
     # axes as model_import.build: glTF (Y up, faces +Z, left +X) -> game (Y down)
     up = np.array([0.0, -1, 0])
@@ -1205,8 +1188,12 @@ def main():
     ap.add_argument("--preview", type=Path, help="write a PNG of the model with the parts applied")
     ap.add_argument("--texture", type=Path, help="an image for the materials without a texture of their own")
     ap.add_argument("--settings", default="{}", help='JSON {"head": 4|2|1, "detail": 100|80|60} (reduced models)')
+    ap.add_argument("--rig", type=Path, help='JSON {"joints": {name: [x, y, z]}, "turn": 3x3 | "auto"} for a model without a skeleton')
     a = ap.parse_args()
     set_external_texture(a.texture)
+    if a.rig and a.rig.is_file():
+        r = json.loads(a.rig.read_text(encoding="utf-8"))
+        set_rig(r.get("joints"), r.get("turn", "auto"))
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))

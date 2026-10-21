@@ -500,3 +500,17 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 
 /* share codes */
 .share-code { width: 100%; box-sizing: border-box; background: #08090d; color: var(--paper); border: 2px solid #3a4052; padding: .5rem; font: .8rem/1.3 monospace; word-break: break-all; resize: vertical; }
+
+/* Model Importer: the rig view of a model without a skeleton */
+.rig-view { margin: .6rem 0; padding: .6rem; border: 1px solid var(--line); background: var(--panel); }
+.rig-head { margin: 0 0 .3rem; }
+.rig-badge { display: inline-block; min-width: 1.4rem; text-align: center; border-radius: 50%; font-weight: bold; }
+.rig-badge.ok { background: #2e9e4a; color: #fff; }
+.rig-badge.bad { background: #c03030; color: #fff; }
+.rig-badge.edit { background: #e09a20; color: #000; }
+.rig-canvases { display: flex; gap: .6rem; flex-wrap: wrap; }
+.rig-canvases figure { margin: 0; text-align: center; }
+.rig-canvases canvas { max-width: 100%; border: 1px solid #3a4052; touch-action: none; background: #0b0c12; }
+.rig-canvases figcaption { font-size: .8rem; color: var(--gold); }
+.rig-controls { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .9rem; margin: .3rem 0; }
+.rig-turns { align-items: center; }

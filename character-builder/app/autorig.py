@@ -1,0 +1,592 @@
+"""Automatic rig for a humanoid model without a skeleton (numpy only).
+
+The model becomes a solid of voxels. Inside it:
+1. depth: how far each voxel lies from the skin;
+2. from the middle of the torso, the cheapest way to every voxel, where deep voxels cost less,
+   so the ways run along the middle of the limbs;
+3. the ends of the body (the voxels farthest from the torso): head, hands, feet;
+4. the way from each end back to the torso: the legs part at the crotch, the arms and the
+   head at the shoulders;
+5. the joints along those ways, in human proportions;
+6. every vertex's body part: the bone nearest to it through the body (not through the air), so
+   an arm resting on the hip stays an arm.
+
+auto_rig(P, T) -> (joints {name: point}, part per vertex) as direct_import.rig_from_skeleton.
+Axes: Y up, facing +Z, the character's left at +X (direct_import turns models that way first).
+Raises RigError with a reason a player can act on when the shape is not a standing humanoid.
+"""
+from __future__ import annotations
+import numpy as np
+
+import remesh
+
+CELLS = 80                     # voxels over the model's height
+# proportions along the arm (shoulder .. fingertip) and the head joint's height between the
+# shoulders and the top of the head, fitted on 22 rigged models (tools: scratch bench_rig.py)
+ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
+SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
+NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
+
+# offsets of the 26 neighbours and their lengths
+OFFS = np.array([(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                 if (dx, dy, dz) != (0, 0, 0)])
+LENS = np.linalg.norm(OFFS, axis=1)
+
+
+class RigError(ValueError):
+    pass
+
+
+def _shift(a, d, fill):
+    """a moved by offset d (out[x] = a[x - d]); cells moved in from outside get `fill`."""
+    out = np.full_like(a, fill)
+    src, dst = [], []
+    for k in range(3):
+        if d[k] > 0:
+            src.append(slice(0, -d[k]))
+            dst.append(slice(d[k], None))
+        elif d[k] < 0:
+            src.append(slice(-d[k], None))
+            dst.append(slice(0, d[k]))
+        else:
+            src.append(slice(None))
+            dst.append(slice(None))
+    out[tuple(dst)] = a[tuple(src)]
+    return out
+
+
+def voxels(P, T):
+    """-> (solid bool grid, origin, voxel size)."""
+    lo, hi = P.min(0), P.max(0)
+    h = max(float(hi[1] - lo[1]) / CELLS, float((hi - lo).max()) / (2 * CELLS))   # never a huge grid
+    origin = lo - 2.5 * h
+    shape = tuple(int(x) for x in np.ceil((hi - origin) / h) + 3)
+    pts, _, _, _ = remesh.surface_samples(P, T, h)
+    return remesh.solid(pts, origin, h, shape, close=1), origin, h
+
+
+def depth(solid):
+    """Layers of erosion each voxel survives (6-neighbour): its distance to the skin in voxels."""
+    d = np.zeros(solid.shape, np.float32)
+    cur = solid.copy()
+    n = 0
+    while cur.any():
+        n += 1
+        d[cur] = n
+        nxt = cur.copy()
+        for ax in range(3):
+            for s in (1, -1):
+                nxt &= _shift(cur, np.eye(3, dtype=int)[ax] * s, False)
+        cur = nxt
+    return d
+
+
+def _slices(d):
+    """(destination, source) slices moving a grid by offset d."""
+    dst, src = [], []
+    for k in d:
+        if k > 0:
+            dst.append(slice(k, None)); src.append(slice(0, -k))
+        elif k < 0:
+            dst.append(slice(0, k)); src.append(slice(-k, None))
+        else:
+            dst.append(slice(None)); src.append(slice(None))
+    return tuple(dst), tuple(src)
+
+
+SLICES = [_slices(d) for d in OFFS]
+
+
+def geodesic(solid, seeds, cost):
+    """Cheapest way from the seeds to every solid voxel, a step costing its length times the
+    cost of the voxel it enters (relaxation over the 26 neighbours until nothing changes)."""
+    D = np.full(solid.shape, np.inf, np.float32)
+    D[seeds] = 0
+    w = np.where(solid, cost, np.inf).astype(np.float32)
+    tmp = {}
+    for _ in range(4 * max(solid.shape)):
+        changed = False
+        for (dst, src), l in zip(SLICES, LENS):
+            wd = w[dst]
+            buf = tmp.get(wd.shape)
+            if buf is None:
+                buf = tmp[wd.shape] = np.empty(wd.shape, np.float32)
+            np.multiply(wd, np.float32(l), out=buf)      # one buffer per shape: little memory
+            np.add(buf, D[src], out=buf)
+            view = D[dst]
+            better = buf < view
+            if better.any():
+                np.minimum(view, buf, out=view)     # in place: later offsets see new values
+                changed = True
+        if not changed:
+            break
+    return D
+
+
+def _descend(D, start, solid):
+    """The way from `start` down D to a seed: voxel indices, start first."""
+    path = [tuple(start)]
+    cur = np.array(start)
+    shape = np.array(D.shape)
+    for _ in range(int(D.size)):
+        if D[tuple(cur)] == 0:
+            break
+        nb = cur + OFFS
+        ok = ((nb >= 0) & (nb < shape)).all(1)
+        nb = nb[ok]
+        vals = D[nb[:, 0], nb[:, 1], nb[:, 2]]
+        k = int(np.argmin(vals))
+        if vals[k] >= D[tuple(cur)]:
+            break
+        cur = nb[k]
+        path.append(tuple(cur))
+    return np.array(path)
+
+
+def _ends(Du, solid, h, count=12):
+    """Voxels farther (by Du) than all their neighbours within a radius: the body's ends."""
+    finite = np.where(np.isfinite(Du), Du, -1)
+    r = 3
+    local = finite.copy()
+    for dx in range(-r, r + 1):
+        for dy in range(-r, r + 1):
+            for dz in range(-r, r + 1):
+                if dx or dy or dz:
+                    np.maximum(local, _shift(finite, np.array([dx, dy, dz]), -1), out=local)
+    peaks = np.argwhere((finite >= local) & (finite > 0.15 * finite.max()))
+    peaks = peaks[np.argsort(-finite[tuple(peaks.T)])]
+    chosen = []
+    for p in peaks:                                   # one per end: well apart from the others
+        if all(np.linalg.norm(p - q) > 6 for q in chosen):
+            chosen.append(p)
+        if len(chosen) >= count:
+            break
+    return chosen
+
+
+def auto_rig(P, T):
+    P = np.asarray(P, float)
+    solid, origin, h = voxels(P, T)
+    H = float(np.ptp(P[:, 1]))
+    sole = float(P[:, 1].min())
+    world = lambda v: origin + (np.asarray(v, float) + 0.5) * h
+    ycell = lambda frac: int((sole + frac * H - origin[1]) / h)
+    dep = depth(solid)
+    # the torso's middle: the deepest voxel between 40 % and 75 % of the height, near the centre
+    band = np.zeros(solid.shape, bool)
+    band[:, ycell(0.4):ycell(0.75), :] = True
+    xs = (np.arange(solid.shape[0]) + 0.5) * h + origin[0]
+    band &= (np.abs(xs) < 0.15 * H)[:, None, None]
+    cand = np.where(band & solid, dep, 0)
+    if cand.max() <= 0:
+        raise RigError("No body found around the middle of the model: is it a standing character, upright (Y up)?")
+    root = np.unravel_index(int(np.argmax(cand)), cand.shape)
+    seeds = np.zeros(solid.shape, bool)
+    seeds[root] = True
+    Du = geodesic(solid, seeds, np.ones(solid.shape, np.float32))            # plain distance: ends
+    Dw = geodesic(solid, seeds, 1.0 / (1.0 + dep) ** 1.5)                     # through the middle
+    ends = _ends(Du, solid, h)
+    E = [(e, world(e)) for e in ends]
+    # feet: the two lowest ends, one each side
+    low = sorted(E, key=lambda e: e[1][1])
+    feet = [e for e in low if e[1][1] < sole + 0.2 * H]
+    footL = next((e for e in feet if e[1][0] > 0), None)
+    footR = next((e for e in feet if e[1][0] < 0), None)
+    if footL is None or footR is None:               # legs joined (a dress, a robe): the lowest
+        for s in (1, -1):                            # vertices each side, their most forward one
+            sel = P[(s * P[:, 0] > 0.02 * H) & (P[:, 1] < sole + 0.04 * H)]
+            if not len(sel):
+                raise RigError("Two feet were not found at the bottom: is the model a standing character, upright (Y up)?")
+            toe = sel[np.argmax(sel[:, 2])]
+            v = _nearest_solid(solid, origin, h, toe)
+            e = (v, toe)
+            if s == 1:
+                footL = e
+            else:
+                footR = e
+    rest = [e for e in E if e is not footL and e is not footR and e[1][1] > sole + 0.25 * H]
+    # hands: the most mirror-like pair of ends to each side; ends far behind the body are wings,
+    # capes or tails, ends far out of line with the other side a prop
+    zc = world(root)[2]
+    behind = lambda e: max(0.0, zc - e[1][2] - 0.08 * H) / H
+    pairs = [(abs(l[1][0] + r[1][0]) / H + abs(l[1][1] - r[1][1]) / H + abs(l[1][2] - r[1][2]) / H
+              + 3 * (behind(l) + behind(r)) - 0.15 * (l[1][0] - r[1][0]) / H, i, j)
+             for i, l in enumerate(rest) if l[1][0] > 0.12 * H
+             for j, r in enumerate(rest) if r[1][0] < -0.12 * H]
+    handL = handR = None
+    if pairs:
+        _, i, j = min(pairs)
+        handL, handR = rest[i], rest[j]
+    if handL is None or handR is None:
+        raise RigError("The hands were not found: the arms should stand away from the body (T-pose or A-pose).")
+    head = max((e for e in rest if abs(e[1][0]) < 0.12 * H and e is not handL and e is not handR),
+               key=lambda e: e[1][1], default=None)
+    top_y = float(P[:, 1].max())
+    if head is None or head[1][1] < sole + 0.75 * H:
+        head = (None, np.array([0.0, top_y, P[P[:, 1] > top_y - 0.05 * H][:, 2].mean()]))
+    paths = {k: _descend(Dw, e[0], solid) for k, e in (("handL", handL), ("handR", handR),
+                                                         ("footL", footL), ("footR", footR))}
+    paths = {k: np.array([world(v) for v in p]) for k, p in paths.items()}
+    J = {}
+    J.update(_legs(paths, sole, H))
+    J.update(_arms(paths, P, H, dep, origin, h))
+    J.update(_centre(J, P, H, head[1], top_y))
+    J["handendL"], J["handendR"] = handL[1], handR[1]
+    for s in "LR":
+        J["collar" + s] = J["upper" + s] + 0.65 * (np.array([J["neck"][0], J["upper" + s][1], J["upper" + s][2]]) - J["upper" + s])
+    part = segment(P, solid, origin, h, J)
+    return J, part
+
+
+def _nearest_solid(solid, origin, h, p):
+    idx = np.argwhere(solid)
+    c = origin + (idx + 0.5) * h
+    return idx[int(np.argmin(np.linalg.norm(c - p, axis=1)))]
+
+
+def _split(a, b):
+    """Index where two ways from their ends to the same root stop running apart (from the root
+    side: the first voxel they no longer share)."""
+    ra, rb = a[::-1], b[::-1]
+    n = 0
+    while n < min(len(ra), len(rb)) and np.linalg.norm(ra[n] - rb[n]) < 1e-6:
+        n += 1
+    return len(a) - n, len(b) - n
+
+
+def _at_length(path, length):
+    """The point `length` along a polyline from its first point."""
+    seg = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    cum = np.concatenate([[0], np.cumsum(seg)])
+    if length >= cum[-1]:
+        return path[-1]
+    i = int(np.searchsorted(cum, length) - 1)
+    t = (length - cum[i]) / max(seg[i], 1e-9)
+    return path[i] + t * (path[i + 1] - path[i])
+
+
+def _length(path):
+    return float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
+
+
+def _legs(paths, sole, H):
+    """Hip sockets, knees, ankles and toes along the legs' ways (foot end first)."""
+    iL, iR = _split(paths["footL"], paths["footR"])
+    J = {}
+    for s, i in (("L", iL), ("R", iR)):
+        leg = paths["foot" + s][:i + 1]              # toe .. crotch
+        J["toe" + s] = leg[0]
+        crotch_y = leg[-1][1]
+        if crotch_y < sole + 0.38 * H:               # legs joined low (a skirt): a human crotch
+            crotch_y = sole + 0.46 * H
+        # ankle: on the leg's upright part, at a human ankle's height
+        up = np.where(leg[:, 1] > sole + 0.09 * H)[0]
+        a = int(up[0]) if len(up) else 0
+        ankle = leg[a].copy()
+        ankle[1] = sole + 0.05 * H
+        # hip socket: above the split, where the thigh's middle line is
+        below = leg[(leg[:, 1] < crotch_y - 0.06 * H) & (leg[:, 1] > crotch_y - 0.12 * H)]
+        mid = below.mean(0) if len(below) else ankle
+        hip = np.array([mid[0], crotch_y + 0.02 * H, mid[2]])
+        J["foot" + s] = ankle
+        J["thigh" + s] = hip
+        J["shin" + s] = hip + 0.52 * (ankle - hip)
+    return J
+
+
+def _arms(paths, P, H, dep, origin, h):
+    """Shoulders, elbows and wrists along the arms' ways (hand end first)."""
+    iL, iR = _split(paths["handL"], paths["handR"])
+    J = {}
+    for s, i in (("L", iL), ("R", iR)):
+        arm = paths["hand" + s][:i + 1]              # fingertip .. middle of the chest
+        sign = 1 if s == "L" else -1
+        # the shoulder: where the way leaves the torso. The torso's half width at that height:
+        # the body's width just below the armpit, measured on the vertices
+        L = _length(arm)
+        # walk from the chest outwards until the way is outside the chest's width
+        chest_y = arm[-1][1]
+        near = P[(np.abs(P[:, 1] - (chest_y - 0.06 * H)) < 0.02 * H)]
+        half = np.percentile(np.abs(near[:, 0]), 90) if len(near) else 0.12 * H
+        rev = arm[::-1]
+        out = np.where(sign * rev[:, 0] > 0.72 * half)[0]
+        k = int(out[0]) if len(out) else len(rev) // 3
+        if SHOULDER == "depth":                      # where the way thins from torso to arm
+            idx = np.clip(np.floor((rev - origin) / h).astype(int), 0, np.array(dep.shape) - 1)
+            d = dep[idx[:, 0], idx[:, 1], idx[:, 2]]
+            n = len(rev)
+            arm_d = np.median(d[int(0.5 * n):int(0.8 * n)]) if n > 5 else d.min()
+            thin = np.where(d <= DEPTH_K * arm_d)[0]
+            if len(thin):
+                k = int(thin[0])
+        shoulder = rev[k].copy()
+        shoulder[1] += RAISE * H
+        sh_len = _length(rev[k:])                    # shoulder .. fingertip
+        tail = rev[k:]
+        J["upper" + s] = shoulder
+        J["fore" + s] = _at_length(tail, ELBOW * sh_len)
+        J["hand" + s] = _at_length(tail, WRIST * sh_len)
+    return J
+
+
+def _centre(J, P, H, head_end, top_y):
+    """Pelvis (hips), and the head joint (the base of the skull, Tekken's head row) on the
+    middle line."""
+    hipy = (J["thighL"][1] + J["thighR"][1]) / 2
+    sh = (J["upperL"] + J["upperR"]) / 2
+    pelvis = np.array([0.0, hipy + 0.027 * H, (J["thighL"][2] + J["thighR"][2]) / 2])
+    neck = np.array([0.0, sh[1] + NECK * (top_y - sh[1]), sh[2]])
+    return {"hips": pelvis, "neck": neck, "top": np.array([0.0, top_y, neck[2]])}
+
+
+# body parts: bones as segments between joints; every voxel takes the bone nearest through the body
+def _bones(J, P=None):
+    """[(part, a, b)]: the line segments each body part grows from. The spine runs up to the
+    head joint and out along the shoulder girdle, the pelvis to both hip sockets, the thighs
+    start a little below them, the feet reach back to the heel: as the parts of a skinned rig."""
+    sh = (J["upperL"] + J["upperR"]) / 2
+    nk = J["neck"] - sh                              # the jaw hangs below the head joint
+    out = [(("spine", None), J["hips"], J["neck"] - NECK_SPLIT[0] * nk),
+           (("head", None), J["neck"] - NECK_SPLIT[1] * nk, J["top"])]
+    for s in "LR":
+        hip, knee, ankle = J["thigh" + s], J["shin" + s], J["foot" + s]
+        heel = ankle.copy()
+        if P is not None:                            # the foot's back end, at the sole
+            near = P[(np.abs(P[:, 0] - ankle[0]) < 0.06 * np.ptp(P[:, 1])) & (P[:, 1] < ankle[1])]
+            if len(near):
+                heel = near[np.argmin(near[:, 2])]
+        out += [(("spine", None), sh, sh + 0.8 * (J["upper" + s] - sh)),
+                (("pelvis", None), J["hips"], hip),
+                (("collar", s), sh + 0.88 * (J["upper" + s] - sh), J["upper" + s]),
+                (("upper", s), J["upper" + s] + 0.15 * (J["fore" + s] - J["upper" + s]), J["fore" + s]),
+                (("fore", s), J["fore" + s], J["hand" + s]),
+                (("hand", s), J["hand" + s], J["handend" + s]),
+                (("thigh", s), hip + 0.25 * (knee - hip), knee),
+                (("shin", s), knee, ankle),
+                (("foot", s), ankle, J["toe" + s]),
+                (("foot", s), ankle, heel)]
+    return out
+
+
+def segment(P, solid, origin, h, J):
+    bones = _bones(J, P)
+    label = np.full(solid.shape, -1, np.int16)
+    for n, (_, a, b) in enumerate(bones):            # seeds: voxels on each bone's line
+        for t in np.linspace(0, 1, 40):
+            v = np.floor((a + t * (b - a) - origin) / h).astype(int)
+            if (v >= 0).all() and (v < solid.shape).all() and solid[tuple(v)] and label[tuple(v)] < 0:
+                label[tuple(v)] = n
+    # grow the labels through the solid, one layer at a time (6-neighbours)
+    for _ in range(4 * max(solid.shape)):
+        free = solid & (label < 0)
+        if not free.any():
+            break
+        grown = False
+        for ax in range(3):
+            for s in (1, -1):
+                src = _shift(label, np.eye(3, dtype=int)[ax] * s, -1)
+                take = free & (src >= 0) & (label < 0)
+                if take.any():
+                    label[take] = src[take]
+                    grown = True
+        if not grown:
+            break
+    idx = np.clip(np.floor((P - origin) / h).astype(int), 0, np.array(solid.shape) - 1)
+    lab = label[idx[:, 0], idx[:, 1], idx[:, 2]]
+    part = np.empty(len(P), dtype=object)
+    for i, l in enumerate(lab):
+        part[i] = bones[l][0] if l >= 0 else ("spine", None)
+    return part
+
+
+# ------------------------------------------------------------------ orientation and skeleton --
+
+def _rot(up, front):
+    """Rotation taking axis `up` to +Y and `front` to +Z (rows: the new X, Y, Z in old axes)."""
+    up, front = np.asarray(up, float), np.asarray(front, float)
+    left = np.cross(up, front)
+    return np.stack([left, up, front])
+
+
+def _pieces(pts, cell):
+    """Separate pieces of a slice of points (2D, joined when closer than ~2 cells)."""
+    if not len(pts):
+        return 0
+    g = np.floor((pts - pts.min(0)) / cell).astype(int)
+    occ = np.zeros(tuple(g.max(0) + 3), bool)
+    occ[g[:, 0] + 1, g[:, 1] + 1] = True
+    grown = occ.copy()                               # join specks of one piece
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            grown |= np.roll(np.roll(occ, dx, 0), dy, 1)
+    seen = np.zeros_like(grown)
+    n = 0
+    for start in np.argwhere(grown):
+        if seen[tuple(start)]:
+            continue
+        n += 1
+        stack = [tuple(start)]
+        seen[tuple(start)] = True
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                q = (x + dx, y + dy)
+                if 0 <= q[0] < grown.shape[0] and 0 <= q[1] < grown.shape[1] and grown[q] and not seen[q]:
+                    seen[q] = True
+                    stack.append(q)
+    return n
+
+
+def orient(P, T=None, up=None):
+    """The rotation (3x3, applied as P @ R.T) that stands a humanoid upright facing +Z. Up: the
+    axis whose low end is two feet (two pieces in a thin slice) and whose high end one head;
+    ties go to the tallest axis, then to the model's own +Y. Front: where the toes point."""
+    P = np.asarray(P, float)
+    if T is not None and len(T):                     # dense points on the surface, not only corners
+        H0 = float(np.ptp(P, axis=0).max())
+        S, _, _, _ = remesh.surface_samples(P, np.asarray(T), 0.006 * H0)
+    else:
+        S = P
+    # the body's volume: a standing human's lies above the middle (torso and head, thin legs)
+    vol = None
+    if T is not None and len(T):
+        hv = float(np.ptp(P, axis=0).max()) / 60
+        lo3 = P.min(0) - 2.5 * hv
+        shape = tuple(int(x) for x in np.ceil((P.max(0) - lo3) / hv) + 3)
+        sv, _, _, _ = remesh.surface_samples(P, np.asarray(T), hv)
+        vol = lo3 + (np.argwhere(remesh.solid(sv, lo3, hv, shape, close=1)) + 0.5) * hv
+    best = None
+    fixed = up
+    if fixed is not None:                            # the standard's up, unless the model lies down
+        others = [k for k in range(3) if abs(fixed[k]) < 0.5]
+        if np.ptp(P @ fixed) < 0.6 * np.ptp(P[:, others], axis=0).max():
+            fixed = None
+    for ax in range(3):
+        for sgn in (1, -1):
+            up = np.zeros(3)
+            up[ax] = sgn
+            if fixed is not None and not np.allclose(up, fixed):
+                continue                             # glTF files are Y up by the standard
+            y = P @ up
+            H = np.ptp(y)
+            if H <= 0:
+                continue
+            lo, hi = y.min(), y.max()
+            others = [k for k in range(3) if k != ax]
+            tall = H / max(np.ptp(P[:, others], axis=0).max(), 1e-9)
+            if tall < 0.45 and fixed is None:        # a standing figure is never thinnest upwards
+                continue
+            ys = S @ up
+            feet = _pieces(S[ys < lo + 0.02 * H][:, others], 0.008 * H)
+            head = _pieces(S[ys > hi - 0.02 * H][:, others], 0.008 * H)
+            score = 1.5 * (2 <= feet <= 4) + 0.5 * (head == 1) + 0.5 * min(tall, 2.0) + 0.3 * (ax == 1 and sgn == 1)
+            if vol is not None:
+                c = (float(np.mean(vol @ up)) - lo) / H
+                score += float(np.clip((c - 0.5) * 25, -3, 3))
+            if best is None or score > best[0]:
+                best = (score, up, others)
+    _, up, others = best
+    y = P @ up
+    H = np.ptp(y)
+    lo = y.min()
+    # left-right: the axis the two feet stand apart along (else the wider one), front the other
+    ys0 = S @ up
+    low = S[ys0 < lo + 0.04 * H][:, others]
+    widths = [np.ptp(P[y < lo + 0.5 * H][:, k]) for k in others]
+    side_i = int(np.argmax(widths))
+    if len(low) > 20:
+        c = low.mean(0)
+        a, b = low[low[:, 0] < c[0]], low[low[:, 0] >= c[0]]
+        for _ in range(10):                          # two clusters (2-means), seeded along each axis
+            ca, cb = a.mean(0) if len(a) else c, b.mean(0) if len(b) else c
+            near_a = np.linalg.norm(low - ca, axis=1) < np.linalg.norm(low - cb, axis=1)
+            a, b = low[near_a], low[~near_a]
+        if len(a) and len(b):
+            side_i = int(np.argmax(np.abs(a.mean(0) - b.mean(0))))
+    depth_ax = others[1 - side_i]
+    front = np.zeros(3)
+    front[depth_ax] = 1
+    # front: the feet reach farther ahead of the ankles (toes) than behind them (heels)
+    ys = S @ up
+    vote = 0.0
+    for sgn_side in (1, -1):
+        side = S @ np.eye(3)[others[side_i]] * sgn_side > 0
+        foot = S[side & (ys < lo + 0.04 * H)][:, depth_ax]
+        ankle = S[side & (ys > lo + 0.07 * H) & (ys < lo + 0.12 * H)][:, depth_ax]
+        if len(foot) > 10 and len(ankle) > 10:
+            a = np.median(ankle)
+            vote += (foot.max() - a) - (a - foot.min())
+    if vote < -0.02 * H:
+        front = -front                               # toes point the other way
+    return _rot(up, front)
+
+
+NAMES = {"collar": "Shoulder", "upper": "Arm", "fore": "ForeArm", "hand": "Hand", "thigh": "UpLeg",
+         "shin": "Leg", "foot": "Foot"}
+
+
+def skeleton(J, part):
+    """A skeleton named as Mixamo's at the joints, and every vertex weighted fully to its part's
+    bone: what a rigged file gives, so the rest of the importer takes the model as rigged."""
+    bones = []
+
+    def add(name, at, parent):
+        m = np.eye(4)
+        m[:3, 3] = at
+        bones.append({"name": name, "parent": parent, "matrix": m.tolist()})
+        return len(bones) - 1
+
+    sh = (J["upperL"] + J["upperR"]) / 2
+    hips = add("Hips", J["hips"], -1)
+    spine = add("Spine", J["hips"] + 0.4 * (sh - J["hips"]), hips)
+    chest = add("Spine2", sh - 0.1 * (sh - J["hips"]), spine)
+    neck = add("Neck", J["neck"], chest)
+    head = add("Head", J["neck"] + 0.35 * (J["top"] - J["neck"]), neck)
+    add("HeadTop_End", J["top"], head)
+    of = {("spine", None): spine, ("pelvis", None): hips, ("head", None): head}
+    for s, side in (("L", "Left"), ("R", "Right")):
+        prev = chest
+        for prt in ("collar", "upper", "fore", "hand"):
+            prev = of[(prt, s)] = add(side + NAMES[prt], J[prt + s], prev)
+        add(side + "HandMiddle4", J["handend" + s], prev)
+        prev = hips
+        for prt in ("thigh", "shin", "foot"):
+            prev = of[(prt, s)] = add(side + NAMES[prt], J[prt + s], prev)
+        add(side + "Toe_End", J["toe" + s], prev)
+    vbone = np.array([of.get(tuple(p), spine) for p in part])
+    weights = [{int(b): 1.0} for b in vbone]
+    return bones, weights, vbone
+
+
+# the joints a player can place by hand (the rest follow from them)
+MARKERS = ("neck", "hips", "upperL", "upperR", "foreL", "foreR", "handL", "handR", "handendL", "handendR",
+           "thighL", "thighR", "shinL", "shinR", "footL", "footR", "toeL", "toeR")
+
+
+def complete(J, P):
+    """Joints placed by hand -> the full set auto_rig makes (collars, the top of the head)."""
+    J = {k: np.asarray(v, float) for k, v in J.items()}
+    top_y = float(np.asarray(P)[:, 1].max())
+    J["top"] = np.array([J["neck"][0], top_y, J["neck"][2]])
+    for s in "LR":
+        J["collar" + s] = J["upper" + s] + 0.65 * (np.array([J["neck"][0], J["upper" + s][1], J["upper" + s][2]]) - J["upper" + s])
+    return J
+
+
+def rig(src, joints=None):
+    """Gives a model without a skeleton one: src (direct_import.load) gets "bones", "weights",
+    "vbone" and "auto_rig" (the joints, for the builder's view). joints: placed by hand
+    {name: [x, y, z]} (MARKERS), else found from the shape."""
+    P, T = np.asarray(src["P"], float), np.asarray(src["T"])
+    if joints:
+        missing = [k for k in MARKERS if k not in joints]
+        if missing:
+            raise RigError("Place every joint: " + ", ".join(missing) + ".")
+        J = complete(joints, P)
+        solid, origin, h = voxels(P, T)
+        part = segment(P, solid, origin, h, J)
+    else:
+        J, part = auto_rig(P, T)
+    src["bones"], src["weights"], src["vbone"] = skeleton(J, part)
+    src["auto_rig"] = {k: [round(float(x), 5) for x in v] for k, v in J.items()}
+    return src

@@ -58,6 +58,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   slots)` writes T3MV version 2 only when something moves; commandlist JSON `slots`, `movable` (no throws,
   by "[Throw]" in the name); field `move_buttons` {input: move key} (`BUTTONS_MAX` 16); UI `movelab.js showButtons`
   (`#buttons-list`). Cache `commandlist6-...`.
+- Automatic rig: `app/autorig.py` (`auto_rig`, `orient`, `skeleton`, `rig`, `MARKERS`, `RigError`); `direct_import`
+  `_auto_rig`, `set_rig`, `rig_view`, CLI `--rig`; server `clean_rig`, `set_model_rig` (`/api/model/rig`), `rig-<stem>.json`
+  beside upload/source/prev (`move_texture`, `run_import_tool`, packages); UI `ui/rigview.js` (`T3Rig.show`).
+  Benchmark: `tools/render/autorig_bench.py [--orient] [--only name]`.
 - TTT1 styles (patch 23): `custom_page.guest_styles`, `GUEST_STYLE_RE`; server field `guest_style`, `custom_entry` ("@key"),
   `clear_tekken3_files`, `/api/guest-styles`; UI `app.js loadGuestStyles`, `applyStyleKind`, `guestStyle`.
 - Intro and win pose: `command_list.poses`, `pose_swaps`, `INTRO_SLOTS` / `WIN_SLOTS`; commandlist JSON `poses`,

@@ -54,13 +54,15 @@ const T3Model = (() => {
     }
     const lock = $("model-lock");
     lock.className = "model-lock " + (info.rigged ? "ready" : "locked");
-    lock.textContent = info.rigged ? "✓ Rigged: ready to import"
-      : "🔒 Locked: this model is not rigged and cannot be imported";
+    lock.textContent = info.rigged ? (info.rig ? "✓ Rigged by the creator: check the skeleton below, then import"
+      : "✓ Rigged: ready to import")
+      : info.rig ? "🔒 Not rigged yet: place the joints below" : "🔒 Locked: this model is not rigged and cannot be imported";
     const problems = $("model-problems");
     problems.replaceChildren(...(info.problems || []).map(fact));
     const notes = $("model-notes");
     notes.replaceChildren(...(info.notes || []).map(fact));
     showParts(info);
+    T3Rig.show(info, (fresh) => { state.current.model_upload = fresh; showCheck(fresh); });
     $("model-import").disabled = busy || !info.rigged;
   }
 

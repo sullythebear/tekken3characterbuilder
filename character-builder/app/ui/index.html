@@ -13,6 +13,7 @@
 <script src="/ui/builder.js" defer></script>
 <script src="/ui/movelab.js" defer></script>
 <script src="/ui/app.js" defer></script>
+<script src="/ui/rigview.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
 </head>
 <body>
@@ -188,15 +189,18 @@
       <div class="editor-page" id="page-model" role="tabpanel" aria-labelledby="tab-model" hidden>
         <fieldset class="field">
           <legend>Own 3D model</legend>
-          <p class="hint">Give your fighter its own PS1-style 3D model. It must be <strong>rigged</strong>: a skeleton
-            with skin weights (for example from Mixamo: upload, auto-rig, then download as FBX Binary in T-pose).
-            The creator fits it to the fighting style's skeleton and replaces the style's model on the costume you choose.</p>
+          <p class="hint">Give your fighter its own PS1-style 3D model. A model with a skeleton (rigged) is used as it is;
+            a model <strong>without a skeleton is rigged by the creator</strong>: it stands the model upright, finds the
+            joints and shows them so you can check or move them. The creator fits it to the fighting style's skeleton and
+            replaces the style's model on the costume you choose.</p>
           <details class="model-help">
             <summary>What makes a model work well?</summary>
             <ul>
-              <li><strong>Rigged human shape:</strong> a skeleton with a head, two arms and two legs, and every vertex
-                weighted to a bone. Mixamo, Character Creator, Ready Player Me, VRoid and most game rigs work as they are; unusual bone names
-                are recognised from the skeleton's shape.</li>
+              <li><strong>Human shape:</strong> a head, two arms and two legs. With a skeleton (Mixamo, Character Creator,
+                Ready Player Me, VRoid and most game rigs) it is used as it is; unusual bone names are recognised from the
+                skeleton's shape. <strong>Without a skeleton</strong> the creator rigs it: it finds the head, hands and feet,
+                places the joints, and you can drag any joint that is off. Lying, upside-down or back-facing models are
+                turned upright (or turn them yourself with one click).</li>
               <li><strong>Standing in T-pose or A-pose</strong>, arms away from the body.</li>
               <li><strong>File:</strong> .fbx (FBX Binary), .glb or .vrm (VRoid), up to 16 MB, with the texture embedded. Models with
                 only material colours work too.</li>
@@ -223,6 +227,34 @@
               <ul class="model-facts" id="model-facts"></ul>
               <p class="model-lock" id="model-lock" role="status"></p>
               <ul class="model-problems" id="model-problems"></ul>
+              <div class="rig-view" id="rig-view" hidden>
+                <p class="rig-head"><span class="rig-badge" id="rig-badge"></span> <strong>Skeleton</strong> <span id="rig-status"></span></p>
+                <p class="hint">Your model came without a skeleton, so the creator made one: it found the head, hands and feet,
+                  followed the body to the shoulders and hips and put the joints in human proportions. Each dot should sit
+                  inside the body on its joint. <strong>Drag a dot</strong> to move it (front view: left-right and up-down;
+                  side view: front-back), then press <strong>Use these joints</strong>. <strong>Try a pose</strong> moves the
+                  model on its new skeleton: every part should follow its own bone.</p>
+                <div class="rig-canvases">
+                  <figure><canvas id="rig-front" width="300" height="380"></canvas><figcaption>Front</figcaption></figure>
+                  <figure><canvas id="rig-side" width="220" height="380"></canvas><figcaption>Side</figcaption></figure>
+                </div>
+                <div class="rig-controls">
+                  <label class="check-line"><input type="checkbox" id="rig-mirror" checked> Move both sides together</label>
+                  <label class="check-line"><input type="checkbox" id="rig-colours"> Colour the body parts</label>
+                </div>
+                <div class="portrait-buttons">
+                  <button class="btn btn-ghost" type="button" id="rig-pose">▶ Try a pose</button>
+                  <button class="btn btn-primary" type="button" id="rig-apply" disabled>Use these joints</button>
+                  <button class="btn btn-ghost" type="button" id="rig-auto" hidden>Rig automatically again</button>
+                </div>
+                <div class="portrait-buttons rig-turns">
+                  <span class="hint">Lying down, upside down or facing away?</span>
+                  <button class="btn btn-ghost mini" type="button" id="rig-turn-x" title="Turn 90 degrees around the left-right axis">⤵ Tip over</button>
+                  <button class="btn btn-ghost mini" type="button" id="rig-turn-z" title="Turn 90 degrees around the front-back axis">↻ Roll</button>
+                  <button class="btn btn-ghost mini" type="button" id="rig-turn-y" title="Turn 180 degrees: face the other way">⟲ Turn around</button>
+                </div>
+                <p class="hint" id="rig-progress" hidden></p>
+              </div>
               <ul class="model-facts" id="model-notes"></ul>
               <div class="portrait-buttons" id="model-texture-row" hidden>
                 <label class="btn btn-ghost file-btn" title="For models whose texture is a separate image file: it goes on every material without a texture of its own">Choose texture image<input type="file" id="model-texture" accept=".png,.jpg,.jpeg" hidden></label>
