@@ -143,6 +143,9 @@ def snap(v, samples, origin, h, shape, reach=2):
     # outside the grid, plus `reach` neighbours around it, must still land inside (2 * reach + 1;
     # reach + 1 indexed past the end for reach >= 2, KayKit's Mage)
     pad = 2 * reach + 1
+    if np.prod([n + 2 * pad for n in shape], dtype=float) > 1.5e8:      # > 1.2 GB per grid
+        raise ValueError("The model is far too big for its own detail (a lying model, or parts far from "
+                         "the body?): it cannot be reduced")
     reps = []
     for order in (np.argsort(-dc), np.argsort(dc)):
         rep = -np.ones(tuple(n + 2 * pad for n in shape), dtype=np.int64)

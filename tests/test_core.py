@@ -854,3 +854,29 @@ class TextureImageTests(unittest.TestCase):
         for bad in ({"x": 0}, {"1": 2}, {"1": "shiny"}, {"1": True}):
             with self.assertRaises(ValueError):
                 server.clean_texture_assign(bad, 2)
+
+
+class TextureSetTests(unittest.TestCase):
+    """Texture sets (Unreal, Substance): colour maps by their suffix, matched to materials by
+    their words; normal, mask and other maps never go on a model by themselves."""
+
+    def test_map_kinds_and_matching(self):
+        import direct_import as DI
+        self.assertEqual(DI.map_kind("T_CargoLying_Body_D.tga"), "colour")
+        self.assertEqual(DI.map_kind("T_CargoLying_Eye_Iris_D_Baked.tga"), "colour")
+        self.assertEqual(DI.map_kind("Hair_BaseColor.png"), "colour")
+        for other in ("CargoLying_1002_N.tga", "T_Body_M.tga", "Body_Roughness.png", "T_FaceAcc_StrandsN.tga"):
+            self.assertEqual(DI.map_kind(other), "other", other)
+        self.assertEqual(DI.map_kind("Shirt.png"), "plain")
+        names = ["CargoLying_1002_N.tga", "T_CargoLying_Body_N.tga", "T_CargoLying_Body_D.tga",
+                 "T_CargoLying_FaceAcc_Strands.tga", "T_CargoLying_FaceAcc_D.tga", "T_CargoLying_Eye_Iris_D_Baked.tga"]
+        DI.TEXTURE_IMAGES = [{"name": n, "png": b""} for n in names]
+        try:
+            kinds = [DI.map_kind(n) for n in names]
+            pick = lambda m: (lambda k: None if k is None else names[k])(DI._named_like(m, kinds))
+            self.assertEqual(pick("MI_CargoLying_Body"), "T_CargoLying_Body_D.tga")
+            self.assertEqual(pick("MI_CargoLying_FaceAcc_Alt_Under"), "T_CargoLying_FaceAcc_D.tga")
+            self.assertIsNone(pick("MI_CargoLying_EyeTeeth"))          # "eye" alone is not enough
+            self.assertIsNone(pick("MI_CargoLying_Head"))              # the normal map never
+        finally:
+            DI.TEXTURE_IMAGES = []

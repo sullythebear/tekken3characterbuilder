@@ -63,15 +63,74 @@ def _stem(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", Path(str(name).replace("\\", "/")).stem.lower())
 
 
+# texture sets (Unreal, Substance) name their maps by a suffix: only colour maps go on a model
+COLOUR_MAPS = {"d", "diff", "diffuse", "basecolor", "basecolour", "base", "albedo", "color", "colour", "col",
+               "bc", "alb", "c"}
+OTHER_MAPS = {"n", "nrm", "norm", "normal", "normals", "nm", "m", "mask", "masks", "s", "spec", "specular", "r",
+              "rough", "roughness", "ao", "occlusion", "metal", "metallic", "metalness", "h", "height", "disp",
+              "displacement", "bump", "e", "emissive", "emit", "emission", "orm", "arm", "mra", "rma", "tangent",
+              "gloss", "glossiness", "opacity", "alpha", "id", "sss", "cavity", "curvature", "strandsn"}
+NAME_NOISE = {"t", "tex", "texture", "mi", "mat", "material", "mt", "baked", "final", "lod0"}
+
+
+def _tokens(name: str) -> list[str]:
+    """A name's words: "T_CargoLying_Body_D.tga" -> ["t", "cargo", "lying", "body", "d"]."""
+    stem = Path(str(name).replace("\\", "/")).stem
+    stem = re.sub(r"([a-z])([A-Z])", r"\1 \2", stem)
+    return [w for w in re.split(r"[^a-z0-9]+", stem.lower()) if w and not w.isdigit()]
+
+
+def map_kind(name: str) -> str:
+    """"colour" (a diffuse / base colour map), "other" (normal, mask, roughness, ...) or "plain"
+    (no map suffix: a plain image), by the last words of an image's name."""
+    words = [w for w in _tokens(name) if w not in NAME_NOISE]
+    for w in reversed(words[-2:]):
+        if w in COLOUR_MAPS:
+            return "colour"
+        if w in OTHER_MAPS:
+            return "other"
+    return "plain"
+
+
+def _core(name: str) -> set:
+    """The words that say what a material or image is about (no prefixes, no map suffix)."""
+    words = [w for w in _tokens(name) if w not in NAME_NOISE]
+    if words and words[0] == "m":                    # M_Body: a material prefix
+        words = words[1:]
+    while words and (words[-1] in COLOUR_MAPS or words[-1] in OTHER_MAPS):
+        words = words[:-1]
+    return set(words)
+
+
+def _named_like(material: str, kinds: list) -> int | None:
+    """The image named like a material: all the image's words in the material's name, or all the
+    material's words in the image's; the most specific wins, a colour map before a plain image.
+    Normal, mask and other maps never."""
+    mat = _core(material)
+    best = None
+    for k, image in enumerate(TEXTURE_IMAGES):
+        if kinds[k] == "other":
+            continue
+        img = _core(image["name"])
+        if not mat or not img or not (img <= mat or mat <= img):
+            continue
+        score = (len(img & mat), -len(img ^ mat), kinds[k] == "colour")
+        if best is None or score > best[0]:
+            best = (score, k)
+    return None if best is None else best[1]
+
+
 def texture_plan(src: dict) -> dict:
     """What every material wears: {material: {"use": "own" | "colour" | image index, "how":
     "chosen" | "auto", "why": text}}. Automatic: the image the file asks for by name, else one
-    named like the material, else (one image only) the image on every material that has no
-    texture of its own but a UV map; the file's own texture stays."""
+    named like the material (map_kind: never a normal, mask or other map), else (one colour
+    image only) that image on every material that has no texture of its own but a UV map; the
+    file's own texture stays."""
     MAT, T, UV = np.asarray(src["MAT"]), np.asarray(src["T"]), np.asarray(src["UV"], float)
     names = src.get("material_names") or []
     wanted = src.get("missing_textures") or {}
     stems = [_stem(i["name"]) for i in TEXTURE_IMAGES]
+    kinds = [map_kind(i["name"]) for i in TEXTURE_IMAGES]
     plan = {}
     for mi in sorted(set(MAT.tolist())):
         own = mi in src["textures"]
@@ -84,13 +143,14 @@ def texture_plan(src: dict) -> dict:
         pick = None
         if mi in wanted and _stem(wanted[mi]) in stems:
             pick = (stems.index(_stem(wanted[mi])), f"the model asks for {Path(str(wanted[mi]).replace(chr(92), '/')).name}")
-        elif not own and name and _stem(name):
-            m = [k for k, s in enumerate(stems) if s and (s == _stem(name) or _stem(name) in s or s in _stem(name))]
-            if m:
-                pick = (m[0], f"named like the material {name}")
-        if (pick is None and not own and len(TEXTURE_IMAGES) == 1 and mapped and (not wanted or mi in wanted)
-                and 0 not in TEXTURE_ASSIGN.values()):     # not when the player put it somewhere already
-            pick = (0, "the only image, on a material without a texture")
+        elif not own and name:
+            k = _named_like(name, kinds)
+            if k is not None:
+                pick = (k, f"named like the material {name}")
+        usable = [k for k, kind in enumerate(kinds) if kind != "other"]
+        if (pick is None and not own and len(usable) == 1 and mapped and (not wanted or mi in wanted)
+                and usable[0] not in TEXTURE_ASSIGN.values()):     # not when the player put it somewhere already
+            pick = (usable[0], "the only colour image, on a material without a texture")
         if pick is not None:
             plan[mi] = {"use": pick[0], "how": "auto", "why": pick[1]}
         else:
@@ -264,6 +324,7 @@ def load(path: Path) -> dict:
     if out.get("bones"):
         _vrm_extras(out)
         _name_by_shape(out)
+        _align_skeleton(out)
         _upright(out)
     else:
         _auto_rig(out, Path(path).suffix.lower())
@@ -528,6 +589,62 @@ def merge_textures(src: dict) -> None:
         src["weights"] = newW
     if VB is not None:
         src["vbone"] = np.concatenate(newB)
+
+
+def _skin_fit(P, bones, vbone, R=None) -> float | None:
+    """How far the bones' joints lie from their own vertices (median over the bones with the
+    most vertices, as a share of the mesh's size), the skeleton turned by R."""
+    vb = np.asarray(vbone)
+    ids, counts = np.unique(vb[vb >= 0], return_counts=True)
+    top = ids[np.argsort(-counts)][:12]
+    top = [b for b in top if counts[list(ids).index(b)] >= 20]
+    if len(top) < 3:
+        return None
+    size = float(np.ptp(P, axis=0).max()) or 1.0
+    d = []
+    for b in top:
+        j = np.array([bones[b]["matrix"][k][3] for k in range(3)], float)
+        if R is not None:
+            j = R @ j
+        d.append(np.linalg.norm(j - np.median(P[vb == b], axis=0)))
+    return float(np.median(d)) / size
+
+
+def _axis_turns():
+    """The 24 rotations that swap and flip whole axes."""
+    import itertools
+    out = []
+    for perm in itertools.permutations(range(3)):
+        for signs in itertools.product((1, -1), repeat=3):
+            R = np.zeros((3, 3))
+            for i, (k, s) in enumerate(zip(perm, signs)):
+                R[i, k] = s
+            if np.linalg.det(R) > 0.5:
+                out.append(R)
+    return out
+
+
+def _align_skeleton(src: dict) -> None:
+    """Some exports (Unreal's) put the mesh and the skeleton in different axes: the mesh stands
+    Y up while the bones lie Z up, so turning the model by its skeleton laid the mesh down. When
+    the bones do not sit in their own vertices, the whole-axis turn of the skeleton alone that
+    fits them best is used (src["skeleton_turned"])."""
+    bones, vb = src.get("bones"), src.get("vbone")
+    if not bones or vb is None:
+        return
+    P = np.asarray(src["P"], float)
+    now = _skin_fit(P, bones, vb)
+    if now is None or now < 0.08:
+        return
+    fits = [(_skin_fit(P, bones, vb, R), i, R) for i, R in enumerate(_axis_turns())]
+    best, _, R = min(fits, key=lambda f: (f[0], f[1]))
+    if best >= 0.5 * now:
+        return
+    for b in bones:
+        M = np.array(b["matrix"], float)
+        M[:3, :] = R @ M[:3, :]
+        b["matrix"] = M.tolist()
+    src["skeleton_turned"] = (round(now, 3), round(best, 3))
 
 
 def _upright(src: dict) -> None:
@@ -832,6 +949,7 @@ def inspect(path: Path) -> dict:
     names, plan = src.get("material_names") or [], src.get("texture_plan") or {}
     MATS = np.asarray(src["MAT"])
     info["images"] = [i["name"] for i in TEXTURE_IMAGES]
+    info["image_kinds"] = [map_kind(i["name"]) for i in TEXTURE_IMAGES]
     info["materials"] = [{"index": int(mi), "name": names[mi] if mi < len(names) else f"Material {mi + 1}",
                           "triangles": int((MATS == mi).sum()), "own": mi in (src.get("textures_own") or ()),
                           "asks": Path(str((src.get("missing_textures") or {}).get(mi, "")).replace("\\", "/")).name or None,
@@ -950,8 +1068,13 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                                  "add them as texture images (.png, .jpg or .tga)")
     chosen = sorted({i for p_ in plan.values() if isinstance(p_["use"], int) for i in [p_["use"]]})
     if TEXTURE_IMAGES and len(chosen) < len(TEXTURE_IMAGES):
-        unused = [TEXTURE_IMAGES[i]["name"] for i in range(len(TEXTURE_IMAGES)) if i not in chosen]
-        add("Materials", "info", f"Not on any material yet: {', '.join(unused)} (choose it for a material below)")
+        unused = [i for i in range(len(TEXTURE_IMAGES)) if i not in chosen]
+        maps = [i for i in unused if map_kind(TEXTURE_IMAGES[i]["name"]) == "other"]
+        free = [TEXTURE_IMAGES[i]["name"] for i in unused if i not in maps]
+        if free:
+            add("Materials", "info", f"Not on any material yet: {', '.join(free)} (choose it for a material below)")
+        if maps:
+            add("Materials", "ok", f"{len(maps)} normal, mask or other maps left out: Tekken 3 draws colour only")
     UV = np.asarray(src["UV"], float)
     if len(UV) and n:
         tri = UV[T]
@@ -974,6 +1097,9 @@ def checks(src: dict, info: dict, weighted: int) -> list:
             f"{len(bones)} bones; {found} of the {len(NEEDED)} Tekken needs found")
         share = weighted / max(len(src["P"]), 1)
         add("Rigging", "ok" if share >= 0.95 else "bad", f"Skin weights on {share:.0%} of the vertices")
+        if src.get("skeleton_turned"):
+            add("Rigging", "info", "The skeleton lay in other axes than the mesh (as Unreal exports it): "
+                                   "turned to fit the mesh")
         if src.get("renamed"):
             add("Rigging", "warn", f"Bone names not standard: {len(src['renamed'])} bones recognised from the skeleton's shape")
     return out

@@ -250,7 +250,10 @@ const T3Model = (() => {
       const opts = [["auto", `Automatic (${m.how === "auto" ? wears(m.use) : "as found"})`]];
       if (m.own) opts.push(["own", "Its own texture"]);
       opts.push(["colour", "Plain colour"]);
-      images.forEach((n, k) => opts.push([String(k), n]));
+      // colour maps first; normal, mask and other maps last, marked (they hold no colours)
+      const kinds = info.image_kinds || [];
+      images.forEach((n, k) => { if (kinds[k] !== "other") opts.push([String(k), n]); });
+      images.forEach((n, k) => { if (kinds[k] === "other") opts.push([String(k), `${n} (not a colour map)`]); });
       for (const [v, label] of opts) {
         const o = document.createElement("option");
         o.value = v; o.textContent = label;

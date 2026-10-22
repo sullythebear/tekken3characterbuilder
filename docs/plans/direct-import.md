@@ -473,3 +473,16 @@ images are on no material.
   for "Hair" in the table; removing Shirt.tga kept Hair on Red.tga; the import gave red hair; the
   files moved to `texture-source-1.tga`; an exported package imported again built a byte-identical
   model. Unit tests `TextureImageTests`.
+- NIKKI (the user's own test, 2026-10-22): an Unreal export (44112 triangles, 381 bones, 16 TGA
+  maps of 16 MB: _D, _N, _M, _S, Strands, Tangent) failed with "Unable to allocate 11.1 GiB" in
+  `remesh.snap`. Cause: the FBX's mesh stands Y up but its skeleton lies Z up; `_upright` turned
+  the model by its skeleton and laid the mesh down (166 long along Z, 29 high), so the reduce grid
+  (voxels from the height) became 1571 x 416 x 2281. Fixes: `_align_skeleton` (before `_upright`)
+  measures how far the bones' joints are from their own vertices (`_skin_fit`, share of the size);
+  above 0.08 it tries the 24 whole-axis turns of the skeleton alone and takes one that fits at
+  least twice as well (NIKKI 0.757 -> 0.045; none of the 29 other rigged test models is turned);
+  `remesh.snap` refuses a grid over 1.5e8 cells with a clear message. Texture sets: `map_kind`
+  (colour by _D / BaseColor / Albedo, "other" for normal / mask / specular / roughness / AO / ...,
+  never put on automatically, marked "not a colour map" in the choice list and summed up in the
+  check), `_named_like` by words (CamelCase split, prefixes T_ / MI_ / M_ and map suffixes
+  dropped, one name's words all in the other's): NIKKI's Body and FaceAcc get their _D maps.
