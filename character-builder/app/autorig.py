@@ -402,11 +402,12 @@ def _arms(paths, P, H, dep, origin, h):
         n = len(arm)
         cum = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(arm, axis=0), axis=1))])
         ia = int(np.searchsorted(cum, 0.35 * cum[-1]))
-        d = arm[ia] - arm[0]
+        flat = np.array([1.0, 1.0, 0.0])               # seen from the front: a wiggle in depth (fur,
+        d = (arm[ia] - arm[0]) * flat                  # a sleeve) is no bend
         if np.linalg.norm(d) > 1e-9 and n > 8:
             d = d / np.linalg.norm(d)
             for i in range(ia, n - 3):
-                v = arm[i + 3] - arm[i]
+                v = (arm[i + 3] - arm[i]) * flat
                 if np.linalg.norm(v) > 1e-9 and np.dot(v / np.linalg.norm(v), d) < np.cos(np.radians(BEND)):
                     kb = n - 1 - i
                     below = rev[k][1] < rev[kb][1] - 0.05 * H
@@ -432,9 +433,15 @@ def _arms(paths, P, H, dep, origin, h):
             seg = np.array(cen) if len(cen) >= 3 else seg
             m = seg.mean(0)
             u = np.linalg.svd(seg - m)[2][0]
-            on = m + u * np.dot(shoulder - m, u)
-            if shoulder[1] - on[1] > ARM_LINE * H:   # only pull a shoulder down, onto the line
-                shoulder[1] = on[1]
+            line_y = lambda q: (m + u * np.dot(q - m, u))[1]
+            if shoulder[1] - line_y(shoulder) > ARM_LINE * H:  # above the line: onto it
+                shoulder[1] = line_y(shoulder)
+            elif line_y(shoulder) - shoulder[1] > 3 * ARM_LINE * H:
+                # far below it: the way runs down into the torso before the thickness says so
+                # (a fluffy arm as thick as a slim chest); out along the way to where it meets the line
+                while k < len(rev) - 1 and line_y(rev[k]) - rev[k][1] > ARM_LINE * H:
+                    k += 1
+                shoulder = rev[k].copy()
         shoulder[1] += RAISE * H
         sh_len = _length(rev[k:])                    # shoulder .. fingertip
         tail = rev[k:]

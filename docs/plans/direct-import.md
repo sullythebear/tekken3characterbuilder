@@ -406,3 +406,10 @@ a human height, so short legs stretched the whole model into a giant (2026-10-19
   height; CuteMoth (round feet, -0.031) was turned backwards, MushroomFairy votes +0.038.
   Thumbs and buttocks were measured as cues too: not reliable (signs mixed). Rotated copies
   without a hint: 134 / 168 right (**code**).
+- Shoulder, 2nd pass: the bend is measured in the front view only (x, y): a wiggle of the way in
+  depth (Two-Tails' fur) faked a bend halfway down the upper arm. A shoulder more than 6 % of the
+  height below the arm's line (the way ran down into the torso before thinning: a fluffy arm as
+  thick as a slim chest) moves out along the way to where it meets the line. Benchmark 3.44 ->
+  3.36 % joints, parts 81.9 %: Two-Tails 6.0 -> 4.4, Lydia 2.5 -> 2.1, MegaAngel 3.7 -> 3.5, no model
+  worse (a 4 % trigger moved A-pose shoulders: Soldier 1.9 -> 3.3; a 30 degree bend fired on Low
+  Poly's sloping shoulder).
