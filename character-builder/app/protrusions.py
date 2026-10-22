@@ -240,8 +240,12 @@ def _fold(P, part, angle_deg, body_P, body_N):
         return out
     if angle_deg is not None:
         return turned(float(angle_deg)), float(angle_deg)
+    # folding down never lifts a part: it already hangs this far from straight down
+    now = float(np.degrees(np.arccos(np.clip(-ax[1], -1, 1))))
     # the steepest hang whose points stay outside the body (in front of the nearest body point)
     for deg in range(10, 91, 5):
+        if deg >= now:                                 # nothing steeper clears it: as it hangs
+            return P[g].copy(), now
         Q = turned(deg)
         sample = Q[:: max(1, len(Q) // 150)]
         d2 = ((sample[:, None, :] - body_P[None]) ** 2).sum(2)
@@ -278,8 +282,12 @@ def apply(src, choices: dict | None = None, log=print) -> dict:
             drop[p["vertices"]] = True
             log(f"part {p['id']} ({p['label']}): removed")
         elif c["mode"] == "fold":
+            before = P[p["vertices"]].copy()
             P[p["vertices"]], used[p["id"]] = _fold(P, p, c.get("angle"), P[rest], N[rest])
-            log(f"part {p['id']} ({p['label']}): folded down, {used[p['id']]:.0f} degrees from straight down")
+            if np.array_equal(before, P[p["vertices"]]):
+                log(f"part {p['id']} ({p['label']}): already hangs down ({used[p['id']]:.0f} degrees), left as it is")
+            else:
+                log(f"part {p['id']} ({p['label']}): folded down, {used[p['id']]:.0f} degrees from straight down")
         else:
             log(f"part {p['id']} ({p['label']}): kept as modelled")
     if drop.any():

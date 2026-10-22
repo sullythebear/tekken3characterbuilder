@@ -413,3 +413,10 @@ a human height, so short legs stretched the whole model into a giant (2026-10-19
   3.36 % joints, parts 81.9 %: Two-Tails 6.0 -> 4.4, Lydia 2.5 -> 2.1, MegaAngel 3.7 -> 3.5, no model
   worse (a 4 % trigger moved A-pose shoulders: Soldier 1.9 -> 3.3; a 30 degree bend fired on Low
   Poly's sloping shoulder).
+- Fold-down fix (`protrusions._fold`, 2026-10-22): a part that already hangs down but is wide (the
+  unrigged Knight's cape, on the hips by the auto rig, 27 % of the height) was listed, no angle
+  cleared the body, and the fallback turned it to 90 degrees: straight back. Folding down now
+  never lifts a part above how it hangs; such a part is "already hangs down (25 degrees), left as
+  it is". **tested** KNIGHTTEST (the Knight without its skeleton, through the builder's API):
+  852 triangles, live fight (t3live) with own model installed, 0 of 5607 words differ; probe
+  renders: helmet, face, guard with both gauntlets up, cape on the back, sword at the hip.
