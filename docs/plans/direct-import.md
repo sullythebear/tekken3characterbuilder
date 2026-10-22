@@ -420,3 +420,25 @@ a human height, so short legs stretched the whole model into a giant (2026-10-19
   it is". **tested** KNIGHTTEST (the Knight without its skeleton, through the builder's API):
   852 triangles, live fight (t3live) with own model installed, 0 of 5607 words differ; probe
   renders: helmet, face, guard with both gauntlets up, cape on the back, sword at the hip.
+
+## Painter: colours by hand (2026-10-22, tested in the browser pane)
+
+Many 3D files online come without colours (or with a texture file missing). The user asked for an
+easy painter. On the 3D model page, after an upload's check: **🎨 Paint the model**.
+- The model in 3D (WebGL, every triangle flat in its own colour: the file's texture at the
+  triangle's middle, else grey), as the rig view stands it (upright, facing +Z).
+- Tools: 🖌 Paint (drag; brush size; a ring shows it), 🪣 Fill (the connected piece of about the
+  same colour: a shirt, a boot), 💧 Pick (a colour from the model), ✋ Turn (also right-drag;
+  wheel zooms at the pointer, Shift-drag moves). Front / Back / Left / Right views, Undo / Redo,
+  "Both sides at once" (the mirrored triangle by its middle point), 20 preset colours (skin, hair,
+  clothes) and any colour. Only triangles seen are painted (an ID buffer of the triangle numbers).
+- Saved as `colours-upload.json` `{"colours": ["#rrggbb"], "runs": [[first, count, colour]]}` over
+  the triangles as `_load` gives them; the import (`--colours`) gives each colour a plain swatch
+  material (`PAINT_MATERIAL` + index) with the painted triangles' corners split off, so merging,
+  reducing and baking treat it as any material. The check: "551 triangles painted by hand in 2
+  colours"; a file without any colour gets the hint to paint it. Moves to `colours-source.json`
+  on import and travels in `.t3char` packages.
+- **tested** (browser pane, PAINTTEST with Low Poly Character.fbx): fill made the shirt blue in one
+  click (sleeves too), the brush painted both knee bands at once, the painting came back after a
+  reload, the import (900 triangles) shows the blue shirt and yellow bands in the PS1 renders; no
+  console errors. Unit tests: `ColourPaintTests`.

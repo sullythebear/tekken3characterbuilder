@@ -61,6 +61,11 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - Automatic rig: `app/autorig.py` (`auto_rig`, `orient`, `skeleton`, `rig`, `MARKERS`, `RigError`); `direct_import`
   `_auto_rig`, `set_rig`, `rig_view`, CLI `--rig`; server `clean_rig`, `set_model_rig` (`/api/model/rig`), `rig-<stem>.json`
   beside upload/source/prev (`move_texture`, `run_import_tool`, packages); UI `ui/rigview.js` (`T3Rig.show`).
+- Painter (colours by hand): `direct_import` (`COLOURS`, `set_colours`, `painted_faces`, `_colour_paint` right after
+  `_load`: one swatch material `PAINT_MATERIAL`+colour per colour, painted corners split off; `face_colours`,
+  `paint_mesh`; CLI `--colours`, `--paint-mesh`); server `clean_colours`, `colour_mesh`, `set_model_colours`,
+  `/api/model/colour-mesh`, `/api/model/colours`, `colours-<upload|source>.json` (moves like the rig, in packages);
+  UI `ui/painter.js` (`T3Paint.show`: WebGL view, ID-buffer picking, brush / fill / pick / turn, mirror, undo).
   Branches (`_branches`), head region, the arm's bend (`BEND`), painting (`paint`, `PAINT_PARTS`; server `PAINT_MAX`).
   Chibis: `direct_import._human_legs` (`LEGS_FROM`, `LEGS_TO`, `P_rig`); autorig `CHIBI_SHOULDERS`, `_crotch`, `_joined`.
   Texture image only on materials the FBX names (`fbx.character` "missing_textures", `direct_import._external_texture`).

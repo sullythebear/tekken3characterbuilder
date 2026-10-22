@@ -766,3 +766,44 @@ class ChibiLegTests(unittest.TestCase):
                                np.ptp(P[P[:, 1] > np.percentile(P[:, 1], 90), 1]), delta=0.02)   # head unchanged
         self.assertGreater(head_size, 0)
         self.assertTrue(np.allclose(src["P_rig"], P))   # the rig view keeps the model as rigged
+
+
+class ColourPaintTests(unittest.TestCase):
+    """Colours painted on a model in the builder's painter: kept as runs, checked, and given to
+    the painted triangles as swatch materials with their corners split off."""
+
+    def test_painted_triangles_get_their_colour(self):
+        import numpy as np
+        import direct_import as DI
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], float)
+        src = {"P": P, "T": np.array([[0, 1, 2], [1, 3, 2]]), "UV": np.array([[0, 0], [1, 0], [0, 1], [1, 1]], float),
+               "MAT": np.array([0, 0]), "textures": {}, "weights": [{0: 1.0}] * 4, "vbone": np.zeros(4, int)}
+        self.assertEqual(DI.painted_faces({"runs": [[1, 5, 0]]}, 2).tolist(), [-1, 0])
+        DI.set_colours({"colours": ["#ff0000"], "runs": [[1, 1, 0]]})
+        try:
+            DI._colour_paint(src)
+        finally:
+            DI.set_colours(None)
+        self.assertEqual(src["painted"], 1)
+        self.assertEqual(src["MAT"].tolist(), [0, DI.PAINT_MATERIAL])
+        self.assertEqual(src["T"][0].tolist(), [0, 1, 2])            # the unpainted triangle keeps its corners
+        self.assertEqual(src["T"][1].tolist(), [4, 5, 6])            # the painted one gets its own
+        self.assertTrue(np.allclose(src["P"][4:], P[[1, 3, 2]]))
+        self.assertTrue(np.allclose(src["UV"][4:], 0.5))
+        self.assertTrue(np.allclose(src["UV"][:4], [[0, 0], [1, 0], [0, 1], [1, 1]]))
+        self.assertEqual(len(src["weights"]), 7)
+        self.assertEqual(len(src["vbone"]), 7)
+        from PIL import Image
+        im = Image.open(io.BytesIO(src["textures"][DI.PAINT_MATERIAL])).convert("RGB")
+        self.assertEqual(im.getpixel((0, 0)), (255, 0, 0))
+
+    def test_clean_colours(self):
+        self.assertIsNone(server.clean_colours(None))
+        self.assertIsNone(server.clean_colours({"colours": ["#123456"], "runs": []}))
+        self.assertEqual(server.clean_colours({"colours": ["#ABCDEF"], "runs": [[0, 3, 0]]}),
+                         {"colours": ["#abcdef"], "runs": [[0, 3, 0]]})
+        for bad in ({"colours": ["red"], "runs": [[0, 1, 0]]}, {"colours": ["#123456"], "runs": [[0, 1, 1]]},
+                    {"colours": ["#123456"], "runs": [[-1, 1, 0]]}, {"colours": ["#123456"], "runs": [[0, 0, 0]]},
+                    {"colours": ["#123456"], "runs": [[0, True, 0]]}):
+            with self.assertRaises(ValueError):
+                server.clean_colours(bad)

@@ -1271,9 +1271,10 @@ def move_texture(folder: Path, src: str, dst: str) -> None:
     texture = model_texture(folder, src)
     if texture:
         texture.replace(folder / f"texture-{dst}{texture.suffix}")
-    (folder / f"rig-{dst}.json").unlink(missing_ok=True)
-    if (folder / f"rig-{src}.json").is_file():
-        (folder / f"rig-{src}.json").replace(folder / f"rig-{dst}.json")
+    for kind in ("rig", "colours"):                  # joints placed and colours painted by hand
+        (folder / f"{kind}-{dst}.json").unlink(missing_ok=True)
+        if (folder / f"{kind}-{src}.json").is_file():
+            (folder / f"{kind}-{src}.json").replace(folder / f"{kind}-{dst}.json")
 
 
 def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
@@ -1287,6 +1288,9 @@ def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=No
         rig = Path(args[0]).parent / f"rig-{Path(args[0]).stem}.json"     # joints placed by hand
         if rig.is_file():
             args = [*args, "--rig", str(rig)]
+        colours = Path(args[0]).parent / f"colours-{Path(args[0]).stem}.json"     # painted by hand
+        if colours.is_file():
+            args = [*args, "--colours", str(colours)]
     cmd = [venv_python(root), str(APP / "direct_import.py"), *args, "--root", str(root)]
     try:
         if on_line is None:
@@ -1333,7 +1337,8 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This model file is too large (16 MB at most).")
-    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*"), *folder.glob("rig-upload.json")]:
+    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*"), *folder.glob("rig-upload.json"),
+                *folder.glob("colours-upload.json")]:
         old.unlink()
     target = folder / f"upload{ext}"
     target.write_bytes(raw)
@@ -1412,6 +1417,69 @@ def set_model_rig(cid: str, joints=None, turn="auto", paint=None) -> dict:
         path.unlink(missing_ok=True)
     else:
         path.write_text(json.dumps(rig), encoding="utf-8")
+    old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
+    return recheck_upload(root, folder, upload, old.get("file", upload.name))
+
+
+PAINT_COLOURS_MAX = 64                # colours in one painting
+HEX_COLOUR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def clean_colours(value) -> dict | None:
+    """Colours painted on a model: {"colours": ["#rrggbb", ...], "runs": [[first triangle, count,
+    colour index], ...]}, checked; None when nothing is painted."""
+    if not isinstance(value, dict):
+        return None
+    colours = value.get("colours")
+    runs = value.get("runs")
+    if not isinstance(colours, list) or not isinstance(runs, list) or not runs:
+        return None
+    if len(colours) > PAINT_COLOURS_MAX or not all(isinstance(c, str) and HEX_COLOUR.match(c) for c in colours):
+        raise ValueError(f"The painting needs colours as #rrggbb (at most {PAINT_COLOURS_MAX}).")
+    out = []
+    for r in runs[:500000]:
+        if (not isinstance(r, list) or len(r) != 3 or not all(isinstance(x, int) and not isinstance(x, bool) for x in r)
+                or r[0] < 0 or r[1] < 1 or not 0 <= r[2] < len(colours)):
+            raise ValueError("The painting is damaged.")
+        out.append(r)
+    return {"colours": [c.lower() for c in colours], "runs": out}
+
+
+def colour_mesh(cid: str) -> dict:
+    """The uploaded model for the painter: positions, triangles, colours (base64) and the
+    painting so far. Cached per upload."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    out = CACHE / f"colour-mesh-{folder.name}.json"
+    deps = [upload, *(f for f in (folder / "rig-upload.json", folder / "colours-upload.json") if f.is_file())]
+    texture = model_texture(folder, "upload")
+    if texture:
+        deps.append(texture)
+    if not out.is_file() or out.stat().st_mtime < max(f.stat().st_mtime for f in deps):
+        CACHE.mkdir(exist_ok=True)
+        problem, _ = run_import_tool(root, [str(upload), "--paint-mesh", str(out)], timeout=300)
+        if problem or not out.is_file():
+            raise ValueError(problem or "The model could not be read for painting.")
+    return json.loads(out.read_text(encoding="utf-8"))
+
+
+def set_model_colours(cid: str, paint) -> dict:
+    """Colours painted on the uploaded model (colours-upload.json); none = the file's own colours.
+    The check runs again with them."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    colours = clean_colours(paint)
+    path = folder / "colours-upload.json"
+    if colours is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(json.dumps(colours), encoding="utf-8")
     old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
     return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
@@ -2323,8 +2391,9 @@ def export_character(cid: str) -> tuple[str, bytes]:
             texture = model_texture(folder, "source")     # its texture image, if one was chosen
             if texture:
                 z.write(texture, texture.name)
-            if (folder / "rig-source.json").is_file():    # the joints placed by hand
-                z.write(folder / "rig-source.json", "rig-source.json")
+            for extra in ("rig-source.json", "colours-source.json"):   # joints placed, colours painted by hand
+                if (folder / extra).is_file():
+                    z.write(folder / extra, extra)
     return f"{folder.name}.t3char", buffer.getvalue()
 
 
@@ -2379,7 +2448,8 @@ def import_character(payload: str) -> dict:
     if len(raw) > MAX_IMPORT:
         raise ValueError("This package is too large.")
     allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
-               "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES), "rig-source.json"}
+               "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES), "rig-source.json",
+               "colours-source.json"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -2450,6 +2520,13 @@ def import_character(payload: str) -> dict:
                                                     encoding="utf-8")
         except (ValueError, UnicodeDecodeError, AttributeError):
             raise ValueError("rig-source.json is damaged.") from None
+    if "colours-source.json" in files:                    # colours painted by hand (checked)
+        try:
+            colours = clean_colours(json.loads(files["colours-source.json"].decode("utf-8")))
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            raise ValueError("colours-source.json is damaged.") from None
+        if colours:
+            (folder / "colours-source.json").write_text(json.dumps(colours), encoding="utf-8")
     own = data.get("own_model") if isinstance(data.get("own_model"), dict) else {}
     warnings = fit_source(saved["id"], folder / name, int(own.get("costume", 0) or 0), own.get("parts") or {},
                           str(own.get("file") or name)[:80], own.get("settings"))
@@ -2636,6 +2713,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/rig":
                 return self._json(set_model_rig(str(data.get("id", "")), data.get("joints"), data.get("turn", "auto"),
                                                 data.get("paint")))
+            if path == "/api/model/colours":
+                return self._json(set_model_colours(str(data.get("id", "")), data.get("paint")))
+            if path == "/api/model/colour-mesh":
+                return self._json(colour_mesh(str(data.get("id", ""))))
             if path == "/api/model/texture":
                 return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":

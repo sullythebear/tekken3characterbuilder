@@ -74,8 +74,102 @@ def set_rig(joints=None, turn="auto", paint=None) -> None:
     RIG_JOINTS, RIG_TURN, RIG_PAINT = joints or None, turn or "auto", paint or None
 
 
+# colours painted on the model by hand (the builder's painter): {"colours": ["#rrggbb", ...],
+# "runs": [[first triangle, count, colour index], ...]} over the file's triangles as _load gives them
+COLOURS: dict | None = None
+PAINT_MATERIAL = 10000                    # painted triangles: material PAINT_MATERIAL + colour index
+
+
+def set_colours(paint=None) -> None:
+    global COLOURS
+    COLOURS = paint or None
+
+
+def painted_faces(paint, n: int) -> np.ndarray:
+    """Per triangle the colour index painted on it, -1 where none (runs outside n are dropped)."""
+    out = np.full(n, -1, int)
+    for start, count, ci in (paint or {}).get("runs", []):
+        start, count = max(0, int(start)), int(count)
+        out[start:min(n, start + count)] = int(ci)
+    return out
+
+
+def _colour_paint(src: dict) -> None:
+    """The painted triangles get their colour: one plain swatch material per colour, their corners
+    split off (UVs on the swatch, the same weights), so the import bakes them like any material."""
+    if not COLOURS or not COLOURS.get("colours"):
+        return
+    from PIL import Image
+    T = np.asarray(src["T"])
+    face = painted_faces(COLOURS, len(T))
+    hit = np.where((face >= 0) & (face < len(COLOURS["colours"])))[0]
+    if not len(hit):
+        return
+    P, UV = np.asarray(src["P"], float), np.asarray(src["UV"], float)
+    MAT = np.asarray(src["MAT"]).copy()
+    corners = T[hit].ravel()
+    base = len(P)
+    src["P"] = np.concatenate([P, P[corners]])
+    src["UV"] = np.concatenate([UV, np.full((len(corners), 2), 0.5)])
+    if src.get("weights") is not None:
+        src["weights"] = list(src["weights"]) + [src["weights"][i] for i in corners]
+    if src.get("vbone") is not None:
+        src["vbone"] = np.concatenate([np.asarray(src["vbone"]), np.asarray(src["vbone"])[corners]])
+    T = T.copy()
+    T[hit] = base + np.arange(len(corners)).reshape(-1, 3)
+    for ci in sorted(set(face[hit].tolist())):
+        rgb = COLOURS["colours"][ci].lstrip("#")
+        buf = io.BytesIO()
+        Image.new("RGBA", (8, 8), tuple(int(rgb[k:k + 2], 16) for k in (0, 2, 4)) + (255,)).save(buf, "PNG")
+        src["textures"][PAINT_MATERIAL + ci] = buf.getvalue()
+        MAT[hit[face[hit] == ci]] = PAINT_MATERIAL + ci
+    src["T"], src["MAT"] = T, MAT
+    src["painted"] = int(len(hit))
+
+
+def face_colours(src: dict) -> np.ndarray:
+    """Every triangle's colour as the file gives it (its texture at the triangle's middle, else
+    grey): uint8 RGB, for the painter."""
+    from PIL import Image
+    T, MAT = np.asarray(src["T"]), np.asarray(src["MAT"])
+    UV = np.asarray(src["UV"], float)
+    out = np.full((len(T), 3), 150, np.uint8)
+    mid = UV[T].mean(1) if len(UV) else np.zeros((len(T), 2))
+    for mi in sorted(set(MAT.tolist())):
+        data = src["textures"].get(mi)
+        if not data:
+            continue
+        try:
+            im = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))
+        except Exception:
+            continue
+        sel = MAT == mi
+        u = np.clip(((mid[sel, 0] % 1) * im.shape[1]).astype(int), 0, im.shape[1] - 1)
+        v = np.clip(((mid[sel, 1] % 1) * im.shape[0]).astype(int), 0, im.shape[0] - 1)
+        out[sel] = im[v, u]
+    return out
+
+
+def paint_mesh(path: Path) -> dict:
+    """The model for the builder's painter: positions (as the rig view stands it: upright, facing
+    +Z), triangles, every triangle's own colour and the painting so far (base64 arrays)."""
+    import base64
+    keep = COLOURS
+    set_colours(None)
+    try:
+        src = load(Path(path))
+    finally:
+        set_colours(keep)
+    P = np.asarray(src.get("P_rig", src["P"]), np.float32)
+    T = np.asarray(src["T"], np.uint32)
+    b64 = lambda a: base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
+    return {"positions": b64(P), "triangles": b64(T), "colours": b64(face_colours(src)),
+            "count": int(len(T)), "paint": keep or {"colours": [], "runs": []}}
+
+
 def load(path: Path) -> dict:
     out = _load(path)
+    _colour_paint(out)
     if out.get("bones"):
         _vrm_extras(out)
         _name_by_shape(out)
@@ -642,6 +736,8 @@ def inspect(path: Path) -> dict:
         info["problems"].append("The model has no embedded texture: choose its texture image (if it came as a separate file), or it is drawn without one.")
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     info["checks"] = checks(src, info, weighted)
+    info["painted"] = int(src.get("painted", 0))       # triangles with colours painted by hand
+    info["colourless"] = not any(k < PAINT_MATERIAL for k in (src.get("textures") or {})) and not EXTERNAL_TEXTURE
     return info
 
 
@@ -721,12 +817,17 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                 add("Geometry", "warn", f"Short legs: the hips are at {share:.0%} of the height (Tekken 3 "
                                         "fighters about 50 %); the fighter keeps this build")
     # materials
-    mats = sorted(set(np.asarray(src["MAT"]).tolist()))
-    tex = src.get("textures") or {}
+    mats = sorted(m for m in set(np.asarray(src["MAT"]).tolist()) if m < PAINT_MATERIAL)
+    tex = {k: v for k, v in (src.get("textures") or {}).items() if k < PAINT_MATERIAL}
     bare = [m for m in mats if m not in tex]
     add("Materials", "ok" if not bare else "warn",
         f"{len(mats)} material{'s' if len(mats) != 1 else ''}, {len(tex)} embedded texture{'s' if len(tex) != 1 else ''}"
         + (f"; {len(bare)} without a texture are drawn in plain colour" if bare else ""))
+    if src.get("painted"):
+        add("Materials", "ok", f"{src['painted']} triangles painted by hand in "
+                               f"{len(set(int(m) for m in np.asarray(src['MAT']) if m >= PAINT_MATERIAL))} colours")
+    elif len(bare) == len(mats) and not EXTERNAL_TEXTURE:
+        add("Materials", "info", "The file has no colours of its own: paint the model with the painter (🎨 Paint)")
     if len(mats) > 1:
         add("Materials", "ok", f"The {len(mats)} materials share one 256 x 256 texture page (each gets a cell)")
     wanted = sorted({Path(str(f).replace("\\", "/")).name for f in (src.get("missing_textures") or {}).values() if f})
@@ -1251,14 +1352,22 @@ def main():
     ap.add_argument("--texture", type=Path, help="an image for the materials without a texture of their own")
     ap.add_argument("--settings", default="{}", help='JSON {"head": 4|2|1, "detail": 100|80|60} (reduced models)')
     ap.add_argument("--rig", type=Path, help='JSON {"joints": {name: [x, y, z]}, "turn": 3x3 | "auto"} for a model without a skeleton')
+    ap.add_argument("--colours", type=Path, help='JSON {"colours": ["#rrggbb"], "runs": [[triangle, count, colour]]} painted by hand')
+    ap.add_argument("--paint-mesh", type=Path, help="write the model for the builder's painter (JSON) and stop")
     a = ap.parse_args()
     set_external_texture(a.texture)
+    if a.colours and a.colours.is_file():
+        set_colours(json.loads(a.colours.read_text(encoding="utf-8")))
     if a.rig and a.rig.is_file():
         r = json.loads(a.rig.read_text(encoding="utf-8"))
         set_rig(r.get("joints"), r.get("turn", "auto"), r.get("paint"))
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))
+        return
+    if a.paint_mesh:
+        a.paint_mesh.write_text(json.dumps(paint_mesh(a.model_file)), encoding="utf-8")
+        print("OK paint mesh")
         return
     parts = json.loads(a.parts)
     if a.preview:

@@ -14,6 +14,7 @@
 <script src="/ui/movelab.js" defer></script>
 <script src="/ui/app.js" defer></script>
 <script src="/ui/rigview.js" defer></script>
+<script src="/ui/painter.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
 </head>
 <body>
@@ -266,6 +267,48 @@
                   <button class="btn btn-ghost mini" type="button" id="rig-turn-y" title="Turn 180 degrees: face the other way">⟲ Turn around</button>
                 </div>
                 <p class="hint" id="rig-progress" hidden></p>
+              </div>
+              <div class="paint-view" id="paint-view" hidden>
+                <p class="rig-head"><strong>🎨 Colours</strong> <span id="paint-summary"></span></p>
+                <button class="btn btn-ghost" type="button" id="paint-open">🎨 Paint the model</button>
+                <div class="paint-editor" id="paint-editor" hidden>
+                  <p class="hint">Pick a colour, then paint on the model. <b>🖌 Paint</b>: drag over it.
+                    <b>🪣 Fill</b>: click a piece to colour all of it (a shirt, a boot). <b>💧 Pick</b>: take a colour from
+                    the model. Turn the model: right-drag (or <b>✋ Turn</b>), zoom with the wheel, Shift-drag to move it.</p>
+                  <div class="paint-toolbar">
+                    <div class="paint-tools" id="paint-tools">
+                      <button type="button" data-tool="brush">🖌 Paint</button>
+                      <button type="button" data-tool="fill">🪣 Fill</button>
+                      <button type="button" data-tool="pick">💧 Pick</button>
+                      <button type="button" data-tool="turn">✋ Turn</button>
+                    </div>
+                    <label class="check-line" id="paint-size-row">Brush <input type="range" id="paint-size" min="2" max="40" value="10"></label>
+                    <label class="check-line"><input type="checkbox" id="paint-mirror" checked> Both sides at once</label>
+                  </div>
+                  <div class="paint-stage">
+                    <canvas id="paint-canvas" aria-label="The model to paint: drag to paint, right-drag to turn"></canvas>
+                    <div class="paint-ring" id="paint-ring" hidden></div>
+                  </div>
+                  <div class="portrait-buttons">
+                    <button class="btn btn-ghost mini" type="button" id="paint-front">Front</button>
+                    <button class="btn btn-ghost mini" type="button" id="paint-back">Back</button>
+                    <button class="btn btn-ghost mini" type="button" id="paint-left">Left side</button>
+                    <button class="btn btn-ghost mini" type="button" id="paint-right">Right side</button>
+                    <button class="btn btn-ghost mini" type="button" id="paint-undo">↶ Undo</button>
+                    <button class="btn btn-ghost mini" type="button" id="paint-redo">↷ Redo</button>
+                  </div>
+                  <div class="paint-colours">
+                    <span class="paint-current" id="paint-current" title="The colour on the brush"></span>
+                    <div class="paint-palette" id="paint-palette"></div>
+                    <label class="check-line" title="Any colour">Other <input type="color" id="paint-colour"></label>
+                  </div>
+                  <p class="hint" id="paint-status"></p>
+                  <div class="portrait-buttons">
+                    <button class="btn btn-primary" type="button" id="paint-apply" disabled>Use these colours</button>
+                    <button class="btn btn-ghost" type="button" id="paint-clear">Clear the painting</button>
+                    <button class="btn btn-ghost" type="button" id="paint-close">Close</button>
+                  </div>
+                </div>
               </div>
               <ul class="model-facts" id="model-notes"></ul>
               <div class="portrait-buttons" id="model-texture-row" hidden>

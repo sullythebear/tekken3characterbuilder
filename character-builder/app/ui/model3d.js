@@ -63,6 +63,7 @@ const T3Model = (() => {
     notes.replaceChildren(...(info.notes || []).map(fact));
     showParts(info);
     T3Rig.show(info, (fresh) => { state.current.model_upload = fresh; showCheck(fresh); });
+    T3Paint.show(info, (fresh) => { state.current.model_upload = fresh; showCheck(fresh); });
     $("model-import").disabled = busy || !info.rigged;
   }
 
