@@ -273,16 +273,19 @@
                 <button class="btn btn-ghost" type="button" id="paint-open">🎨 Paint the model</button>
                 <div class="paint-editor" id="paint-editor" hidden>
                   <p class="hint">Pick a colour, then paint on the model. <b>🖌 Paint</b>: drag over it.
-                    <b>🪣 Fill</b>: click a piece to colour all of it (a shirt, a boot). <b>💧 Pick</b>: take a colour from
+                    <b>🪣 Fill</b>: click a piece to colour all of it (a shirt, a boot). <b>🧍 Body part</b>: click to colour a whole
+                    part (head, upper arm, thigh…), handy for a model in one grey piece. <b>💧 Pick</b>: take a colour from
                     the model. Turn the model: right-drag (or <b>✋ Turn</b>), zoom with the wheel, Shift-drag to move it.</p>
                   <div class="paint-toolbar">
                     <div class="paint-tools" id="paint-tools">
                       <button type="button" data-tool="brush">🖌 Paint</button>
                       <button type="button" data-tool="fill">🪣 Fill</button>
+                      <button type="button" data-tool="part">🧍 Body part</button>
                       <button type="button" data-tool="pick">💧 Pick</button>
                       <button type="button" data-tool="turn">✋ Turn</button>
                     </div>
                     <label class="check-line" id="paint-size-row">Brush <input type="range" id="paint-size" min="2" max="40" value="10"></label>
+                    <label class="check-line" id="paint-creases-row" hidden><input type="checkbox" id="paint-creases"> Stop at sharp edges</label>
                     <label class="check-line"><input type="checkbox" id="paint-mirror" checked> Both sides at once</label>
                   </div>
                   <div class="paint-stage">

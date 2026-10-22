@@ -123,6 +123,12 @@ def _colour_paint(src: dict) -> None:
         Image.new("RGBA", (8, 8), tuple(int(rgb[k:k + 2], 16) for k in (0, 2, 4)) + (255,)).save(buf, "PNG")
         src["textures"][PAINT_MATERIAL + ci] = buf.getvalue()
         MAT[hit[face[hit] == ci]] = PAINT_MATERIAL + ci
+    for mi in sorted(set(MAT.tolist())):             # the file's materials without any colour stay grey
+        if mi not in src["textures"]:                # (a reduced model bakes only what has a texture)
+            buf = io.BytesIO()
+            Image.new("RGBA", (8, 8), (150, 150, 150, 255)).save(buf, "PNG")
+            src["textures"][mi] = buf.getvalue()
+            src.setdefault("plain", []).append(mi)
     src["T"], src["MAT"] = T, MAT
     src["painted"] = int(len(hit))
 
@@ -163,8 +169,43 @@ def paint_mesh(path: Path) -> dict:
     P = np.asarray(src.get("P_rig", src["P"]), np.float32)
     T = np.asarray(src["T"], np.uint32)
     b64 = lambda a: base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
+    names, part = face_parts(src)
     return {"positions": b64(P), "triangles": b64(T), "colours": b64(face_colours(src)),
+            "parts": b64(part.astype(np.int8)), "part_names": names,
             "count": int(len(T)), "paint": keep or {"colours": [], "runs": []}}
+
+
+def face_parts(src: dict) -> tuple[list, np.ndarray]:
+    """Every triangle's body part (by the bone of its first corner, or the nearest named bone
+    above it): (names such as "head", "upperL", per-triangle index or -1)."""
+    bones, vb = src.get("bones") or [], src.get("vbone")
+    T = np.asarray(src["T"])
+    if not bones or vb is None:
+        return [], np.full(len(T), -1)
+    names, index, of_bone = [], {}, {}
+
+    def named(b):
+        seen = 0
+        while 0 <= b and seen < 64:
+            prt, side = MI._part(bones[b]["name"])
+            if prt:
+                return prt + (side or "")
+            b, seen = bones[b]["parent"], seen + 1
+        return None
+    out = np.full(len(T), -1)
+    vb = np.asarray(vb)
+    for f, b in enumerate(vb[T[:, 0]]):
+        b = int(b)
+        if b not in of_bone:
+            of_bone[b] = named(b) if b >= 0 else None
+        n = of_bone[b]
+        if n is None:
+            continue
+        if n not in index:
+            index[n] = len(names)
+            names.append(n)
+        out[f] = index[n]
+    return names, out
 
 
 def load(path: Path) -> dict:
@@ -737,7 +778,8 @@ def inspect(path: Path) -> dict:
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     info["checks"] = checks(src, info, weighted)
     info["painted"] = int(src.get("painted", 0))       # triangles with colours painted by hand
-    info["colourless"] = not any(k < PAINT_MATERIAL for k in (src.get("textures") or {})) and not EXTERNAL_TEXTURE
+    info["colourless"] = (not any(k < PAINT_MATERIAL and k not in src.get("plain", []) for k in (src.get("textures") or {}))
+                          and not EXTERNAL_TEXTURE)
     return info
 
 
@@ -818,11 +860,11 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                                         "fighters about 50 %); the fighter keeps this build")
     # materials
     mats = sorted(m for m in set(np.asarray(src["MAT"]).tolist()) if m < PAINT_MATERIAL)
-    tex = {k: v for k, v in (src.get("textures") or {}).items() if k < PAINT_MATERIAL}
+    tex = {k: v for k, v in (src.get("textures") or {}).items() if k < PAINT_MATERIAL and k not in src.get("plain", [])}
     bare = [m for m in mats if m not in tex]
     add("Materials", "ok" if not bare else "warn",
         f"{len(mats)} material{'s' if len(mats) != 1 else ''}, {len(tex)} embedded texture{'s' if len(tex) != 1 else ''}"
-        + (f"; {len(bare)} without a texture are drawn in plain colour" if bare else ""))
+        + (f"; {len(bare)} without a texture {'is' if len(bare) == 1 else 'are'} drawn in plain colour" if bare else ""))
     if src.get("painted"):
         add("Materials", "ok", f"{src['painted']} triangles painted by hand in "
                                f"{len(set(int(m) for m in np.asarray(src['MAT']) if m >= PAINT_MATERIAL))} colours")

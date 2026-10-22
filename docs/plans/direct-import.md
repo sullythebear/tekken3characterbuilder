@@ -442,3 +442,11 @@ easy painter. On the 3D model page, after an upload's check: **🎨 Paint the mo
   click (sleeves too), the brush painted both knee bands at once, the painting came back after a
   reload, the import (900 triangles) shows the blue shirt and yellow bands in the PS1 renders; no
   console errors. Unit tests: `ColourPaintTests`.
+- 🧍 Body part tool (one click colours a whole part by the skeleton: head, upper arm, thigh...,
+  both sides with "Both sides at once"; `face_parts` sends each triangle's part): for a model in
+  one grey piece, where Fill would take everything. Fill can "Stop at sharp edges" (50 degrees).
+- Fix: a reduced model bakes only materials with a texture, so a colourless body took the paint's
+  colours (the grey Soldier came out red). Once painted, materials without any colour get a grey
+  swatch (`src["plain"]`, not counted as textures in the check). **tested**: a Soldier without
+  skeleton and materials, painted head / forearms / hips by body part, imports grey with the
+  three colours where painted.

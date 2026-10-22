@@ -13,7 +13,7 @@ const T3Paint = (() => {
     ["#1e4fc8", "Blue"], ["#1e8c3a", "Green"], ["#e8c81e", "Yellow"], ["#7a2ea8", "Purple"],
     ["#e8781e", "Orange"], ["#d84f9a", "Pink"], ["#2a1a5a", "Navy"], ["#c8a878", "Khaki"],
   ];
-  const TOOLS = { brush: "Paint", fill: "Fill a piece", pick: "Pick a colour", turn: "Turn" };
+  const TOOLS = { brush: "Paint", fill: "Fill a piece", part: "Colour a whole body part", pick: "Pick a colour", turn: "Turn" };
 
   let info = null, onInfo = null, mesh = null, gl = null, prog = null, idProg = null, fbo = null;
   let buffers = {}, idDirty = true, nT = 0;
@@ -24,7 +24,8 @@ const T3Paint = (() => {
   let yaw = 0, pitch = 0.15, zoom = 1, pan = [0, 0];
   let centre = [0, 0, 0], radius = 1;
   let undo = [], redo = [], stroke = null, changed = false, drag = null;
-  let adjacency = null, mirrorMap = null, cornerColour = null;
+  let adjacency = null, mirrorMap = null, cornerColour = null, faceNormal = null, creases = false;
+  let parts = null, partNames = [];   // every triangle's body part (index into partNames, -1 = none)
 
   // ------------------------------------------------------------------ the model
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)).buffer;
@@ -35,6 +36,8 @@ const T3Paint = (() => {
     const P = new Float32Array(b64(data.positions));
     const T = new Uint32Array(b64(data.triangles));
     base = new Uint8Array(b64(data.colours));
+    parts = data.parts ? new Int8Array(b64(data.parts)) : null;
+    partNames = data.part_names || [];
     nT = data.count;
     mesh = { P, T };
     painted = new Int16Array(nT).fill(-1);
@@ -58,6 +61,7 @@ const T3Paint = (() => {
     const { P, T } = mesh;
     const pos = new Float32Array(nT * 9), nrm = new Float32Array(nT * 9), ids = new Uint8Array(nT * 9);
     cornerColour = new Uint8Array(nT * 9);
+    faceNormal = new Float32Array(nT * 3);
     for (let f = 0; f < nT; f++) {
       const a = T[3 * f] * 3, b = T[3 * f + 1] * 3, c = T[3 * f + 2] * 3;
       const e1 = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]];
@@ -65,6 +69,7 @@ const T3Paint = (() => {
       let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
       const l = Math.hypot(...n) || 1;
       n = n.map((v) => v / l);
+      faceNormal.set(n, 3 * f);
       const id = f + 1;
       [a, b, c].forEach((v, k) => {
         const o = f * 9 + k * 3;
@@ -312,13 +317,30 @@ const T3Paint = (() => {
     const adj = neighbours();
     const c0 = faceRGB(start);
     const near = (f) => { const c = faceRGB(f); return Math.abs(c[0] - c0[0]) + Math.abs(c[1] - c0[1]) + Math.abs(c[2] - c0[2]) <= 24; };
+    // stop at sharp edges (if wanted): neighbours turned more than 50 degrees
+    const flat = (f, g) => !creases || faceNormal[3 * f] * faceNormal[3 * g] + faceNormal[3 * f + 1] * faceNormal[3 * g + 1]
+      + faceNormal[3 * f + 2] * faceNormal[3 * g + 2] > 0.64;
     const seen = new Uint8Array(nT), todo = [start], out = [];
     seen[start] = 1;
     while (todo.length) {
       const f = todo.pop();
       out.push(f);
-      for (const g of adj[f]) if (!seen[g] && near(g)) { seen[g] = 1; todo.push(g); }
+      for (const g of adj[f]) if (!seen[g] && near(g) && flat(f, g)) { seen[g] = 1; todo.push(g); }
     }
+    return out;
+  }
+
+  // every triangle of the body part clicked (the skeleton's: head, upper arm, thigh, ...)
+  function wholePart(start) {
+    if (!parts || parts[start] < 0) return fill(start);
+    const want = new Set([parts[start]]);
+    if (mirror) {
+      const name = partNames[parts[start]];
+      const other = name.endsWith("L") ? name.slice(0, -1) + "R" : name.endsWith("R") ? name.slice(0, -1) + "L" : null;
+      if (other && partNames.includes(other)) want.add(partNames.indexOf(other));
+    }
+    const out = [];
+    for (let f = 0; f < nT; f++) if (want.has(parts[f])) out.push(f);
     return out;
   }
 
@@ -373,8 +395,8 @@ const T3Paint = (() => {
       return;
     }
     stroke = [];
-    if (tool === "fill") {
-      if (hit.length) paintFaces(fill(hit[0]));
+    if (tool === "fill" || tool === "part") {
+      if (hit.length) paintFaces(tool === "fill" ? fill(hit[0]) : wholePart(hit[0]));
       endStroke();
       return;
     }
@@ -447,7 +469,10 @@ const T3Paint = (() => {
     tool = t;
     for (const b of document.querySelectorAll("#paint-tools button")) b.classList.toggle("on", b.dataset.tool === t);
     $("paint-canvas").style.cursor = t === "turn" ? "grab" : t === "pick" ? "copy" : "crosshair";
-    $("paint-size-row").hidden = t !== "brush";
+    // the brush size and the fill's edge stop share one place, so the panel does not jump
+    $("paint-size-row").hidden = t === "fill";
+    $("paint-size-row").style.visibility = t === "brush" ? "visible" : "hidden";
+    $("paint-creases-row").hidden = t !== "fill";
   }
 
   function view(y, p) { yaw = y; pitch = p; zoom = 1; pan = [0, 0]; idDirty = true; draw(); }
@@ -553,6 +578,7 @@ const T3Paint = (() => {
     $("paint-colour").addEventListener("input", (e) => setColour(e.target.value));
     $("paint-size").addEventListener("input", (e) => { size = Number(e.target.value); });
     $("paint-mirror").addEventListener("change", (e) => { mirror = e.target.checked; });
+    $("paint-creases").addEventListener("change", (e) => { creases = e.target.checked; });
     const canvas = $("paint-canvas");
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointermove", onMove);

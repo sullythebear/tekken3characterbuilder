@@ -796,6 +796,9 @@ class ColourPaintTests(unittest.TestCase):
         from PIL import Image
         im = Image.open(io.BytesIO(src["textures"][DI.PAINT_MATERIAL])).convert("RGB")
         self.assertEqual(im.getpixel((0, 0)), (255, 0, 0))
+        grey = Image.open(io.BytesIO(src["textures"][0])).convert("RGB")      # unpainted, no colour: grey,
+        self.assertEqual(grey.getpixel((0, 0)), (150, 150, 150))               # not baked from the paint
+        self.assertEqual(src["plain"], [0])
 
     def test_clean_colours(self):
         self.assertIsNone(server.clean_colours(None))
