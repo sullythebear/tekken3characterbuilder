@@ -398,3 +398,11 @@ a human height, so short legs stretched the whole model into a giant (2026-10-19
   the whole head counts as spine.)
 - `t3cb regress --unrigged`: every test model imported again without its skeleton (ids
   `ur-<name>`), through the automatic rig, turning, chibi legs and the build.
+- Turning upright: an FBX's GlobalSettings UpAxis/UpAxisSign is now the up hint (as glTF's Y):
+  all 7 test FBX files (Mixamo, Samba, Low Poly, Medea, Tommy Y up; Rogue Z up) match their
+  geometry. Without a hint, wings and long tails pull the volume rule to the depth axis
+  (Crowley, MeganTheFox, Two-Tails come out lying), so the hint matters; the importer reads no
+  OBJ, so every file has one. Front: the toe vote turns a model round only below -0.035 of the
+  height; CuteMoth (round feet, -0.031) was turned backwards, MushroomFairy votes +0.038.
+  Thumbs and buttocks were measured as cues too: not reliable (signs mixed). Rotated copies
+  without a hint: 134 / 168 right (**code**).
