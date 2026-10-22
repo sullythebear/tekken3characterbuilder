@@ -246,10 +246,12 @@ const T3Model = (() => {
       name.append(why);
       const cell = document.createElement("td");
       const sel = document.createElement("select");
-      const wears = (u) => (u === "own" ? "its own texture" : u === "colour" ? "plain colour" : images[u] || "?");
+      const wears = (u) => (u === "own" ? "its own texture" : u === "colour" ? "plain colour" : u === "hide" ? "left out"
+        : images[u] || "?");
       const opts = [["auto", `Automatic (${m.how === "auto" ? wears(m.use) : "as found"})`]];
       if (m.own) opts.push(["own", "Its own texture"]);
       opts.push(["colour", "Plain colour"]);
+      opts.push(["hide", "Leave out (see-through layers)"]);
       // colour maps first; normal, mask and other maps last, marked (they hold no colours)
       const kinds = info.image_kinds || [];
       images.forEach((n, k) => { if (kinds[k] !== "other") opts.push([String(k), n]); });
@@ -297,9 +299,10 @@ const T3Model = (() => {
     progress.hidden = false;
     try {
       let info = null;
-      for (const file of files) {
-        progress.textContent = `Adding ${file.name} and checking the model…`;
-        info = await api("/api/model/texture", { id: state.current.id, name: file.name, file: await readBase64(file) });
+      for (const [k, file] of files.entries()) {
+        const last = k === files.length - 1;     // the model is checked once, after the last image
+        progress.textContent = last ? `Adding ${file.name} and checking the model…` : `Adding ${file.name} (${k + 1} of ${files.length})…`;
+        info = await api("/api/model/texture", { id: state.current.id, name: file.name, file: await readBase64(file), recheck: last });
       }
       state.current.model_upload = info;
       busy = false;

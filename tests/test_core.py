@@ -878,5 +878,15 @@ class TextureSetTests(unittest.TestCase):
             self.assertEqual(pick("MI_CargoLying_FaceAcc_Alt_Under"), "T_CargoLying_FaceAcc_D.tga")
             self.assertIsNone(pick("MI_CargoLying_EyeTeeth"))          # "eye" alone is not enough
             self.assertIsNone(pick("MI_CargoLying_Head"))              # the normal map never
+            DI.TEXTURE_IMAGES += [{"name": n, "png": b""} for n in (
+                "T_CargoLying_Head_D.tga", "T_CargoLying_Teeth_D_Baked_REVISED.tga",
+                "T_CargoLying_Teeth_SRMO_Baked_REVISED.tga", "T_Cosmetics_eyelashMat_D.tga")]
+            names = [i["name"] for i in DI.TEXTURE_IMAGES]
+            kinds = [DI.map_kind(n) for n in names]
+            self.assertEqual(pick("MI_CargoLying_Head"), "T_CargoLying_Head_D.tga")
+            self.assertEqual(pick("MI_CargoLying_EyeTeeth"), "T_CargoLying_Teeth_D_Baked_REVISED.tga")
+            self.assertEqual(pick("MI_CargoLying_Eyelashes"), "T_Cosmetics_eyelashMat_D.tga")   # plural, other prefix
+            self.assertTrue(DI.see_through("MI_CargoLying_Eyeshell"))
+            self.assertFalse(DI.see_through("MI_CargoLying_Eyelashes"))
         finally:
             DI.TEXTURE_IMAGES = []

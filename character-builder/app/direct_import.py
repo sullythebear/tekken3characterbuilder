@@ -55,7 +55,7 @@ def set_texture_images(images, assign=None) -> None:
     global TEXTURE_IMAGES, TEXTURE_ASSIGN
     TEXTURE_IMAGES = [{"name": str(i["name"]), "png": _image_png(Path(i["path"]))} for i in images or []]
     TEXTURE_ASSIGN = {int(k): v for k, v in (assign or {}).items()
-                      if v in ("own", "colour") or (isinstance(v, int) and 0 <= v < len(TEXTURE_IMAGES))}
+                      if v in ("own", "colour", "hide") or (isinstance(v, int) and 0 <= v < len(TEXTURE_IMAGES))}
 
 
 def _stem(name: str) -> str:
@@ -69,8 +69,12 @@ COLOUR_MAPS = {"d", "diff", "diffuse", "basecolor", "basecolour", "base", "albed
 OTHER_MAPS = {"n", "nrm", "norm", "normal", "normals", "nm", "m", "mask", "masks", "s", "spec", "specular", "r",
               "rough", "roughness", "ao", "occlusion", "metal", "metallic", "metalness", "h", "height", "disp",
               "displacement", "bump", "e", "emissive", "emit", "emission", "orm", "arm", "mra", "rma", "tangent",
-              "gloss", "glossiness", "opacity", "alpha", "id", "sss", "cavity", "curvature", "strandsn"}
-NAME_NOISE = {"t", "tex", "texture", "mi", "mat", "material", "mt", "baked", "final", "lod0"}
+              "gloss", "glossiness", "opacity", "alpha", "id", "sss", "cavity", "curvature", "strandsn", "srmo",
+              "srm", "rmo", "mro"}
+NAME_NOISE = {"t", "tex", "texture", "mi", "mat", "material", "mt", "baked", "final", "lod", "lod0", "revised",
+              "new", "old", "copy", "export", "v"}
+# see-through layers (Unreal / MetaHuman eyes): the PS1 draws no see-through, they would cover the eyes
+SEE_THROUGH = ("eyeshell", "cornea", "tearline", "eyeocclusion", "eyeedge", "eyeblend", "eyelashshadow")
 
 
 def _tokens(name: str) -> list[str]:
@@ -92,29 +96,51 @@ def map_kind(name: str) -> str:
     return "plain"
 
 
+def _singular(w: str) -> str:
+    if w.endswith("es") and w[:-2].endswith(("sh", "ch", "x", "ss")):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+        return w[:-1]
+    return w
+
+
 def _core(name: str) -> set:
-    """The words that say what a material or image is about (no prefixes, no map suffix)."""
+    """The words that say what a material or image is about: no prefixes, no map words, no
+    noise ("Baked", "REVISED"), plurals made singular."""
     words = [w for w in _tokens(name) if w not in NAME_NOISE]
     if words and words[0] == "m":                    # M_Body: a material prefix
         words = words[1:]
-    while words and (words[-1] in COLOUR_MAPS or words[-1] in OTHER_MAPS):
-        words = words[:-1]
-    return set(words)
+    words = words[:1] + [w for w in words[1:] if w not in COLOUR_MAPS and w not in OTHER_MAPS]
+    return {_singular(w) for w in words}
+
+
+def see_through(material: str) -> bool:
+    """A see-through layer by its name (an eye's shell, cornea, tear line)."""
+    joined = "".join(_tokens(material))
+    return any(s in joined for s in SEE_THROUGH)
 
 
 def _named_like(material: str, kinds: list) -> int | None:
-    """The image named like a material: all the image's words in the material's name, or all the
-    material's words in the image's; the most specific wins, a colour map before a plain image.
+    """The image named like a material: best all the image's words in the material's name (or
+    the other way round), else a word they share that few images have (not the character's
+    name, which all of them carry); the most specific wins, a colour map before a plain image.
     Normal, mask and other maps never."""
     mat = _core(material)
+    cores = [_core(i["name"]) for i in TEXTURE_IMAGES]
+    seen = {}
+    for c in cores:
+        for w in c:
+            seen[w] = seen.get(w, 0) + 1
+    common = {w for w, n in seen.items() if n >= 2 and n >= len(cores) / 2}
     best = None
-    for k, image in enumerate(TEXTURE_IMAGES):
-        if kinds[k] == "other":
+    for k, img in enumerate(cores):
+        if kinds[k] == "other" or not mat or not img:
             continue
-        img = _core(image["name"])
-        if not mat or not img or not (img <= mat or mat <= img):
-            continue
-        score = (len(img & mat), -len(img ^ mat), kinds[k] == "colour")
+        subset = img <= mat or mat <= img
+        shared = (img & mat) - common
+        if not subset and (not shared or not (mat - common) <= img):
+            continue                                 # a shared word must be all the material says
+        score = (subset, len(shared), len(img & mat), -len(img ^ mat), kinds[k] == "colour")
         if best is None or score > best[0]:
             best = (score, k)
     return None if best is None else best[1]
@@ -153,6 +179,9 @@ def texture_plan(src: dict) -> dict:
             pick = (usable[0], "the only colour image, on a material without a texture")
         if pick is not None:
             plan[mi] = {"use": pick[0], "how": "auto", "why": pick[1]}
+        elif not own and see_through(name):
+            plan[mi] = {"use": "hide", "how": "auto", "why": "a see-through layer (an eye's shell): left out, "
+                                                            "the PS1 draws nothing see-through"}
         else:
             plan[mi] = {"use": "own" if own else "colour", "how": "auto",
                         "why": "its own texture" if own else "no image fits: plain colour" if mapped or not len(uv) else "no UV map: plain colour"}
@@ -170,6 +199,18 @@ def _apply_textures(src: dict) -> None:
             src["textures"][mi] = TEXTURE_IMAGES[p["use"]]["png"]
         elif p["use"] == "colour":
             src["textures"].pop(mi, None)
+    src["hidden_materials"] = sorted(mi for mi, p in plan.items() if p["use"] == "hide")
+
+
+def _drop_hidden(src: dict) -> None:
+    """The triangles of materials left out (texture_plan "hide") go, at the import only: the
+    painter and the paint runs count the file's triangles."""
+    hide = src.get("hidden_materials")
+    if not hide:
+        return
+    keep = ~np.isin(np.asarray(src["MAT"]), hide)
+    src["T"] = np.asarray(src["T"])[keep]
+    src["MAT"] = np.asarray(src["MAT"])[keep]
 
 
 # a model without a skeleton: the joints the player placed by hand ({name: [x, y, z]}, in the
@@ -1046,11 +1087,14 @@ def checks(src: dict, info: dict, weighted: int) -> list:
     own_ = set(src.get("textures_own") or ())
     added = sum(1 for m in mats if isinstance(plan_.get(m, {}).get("use"), int))
     embedded = sum(1 for m in mats if m in own_ and plan_.get(m, {}).get("use") == "own")
-    coloured = len(mats) - added - embedded - len(bare)
+    hidden = [m for m in mats if plan_.get(m, {}).get("use") == "hide"]
+    bare = [m for m in bare if m not in hidden]
+    coloured = len(mats) - added - embedded - len(bare) - len(hidden)
     add("Materials", "ok" if not bare else "warn",
         f"{len(mats)} material{'s' if len(mats) != 1 else ''}: {embedded} with a texture in the file"
         + (f", {added} with an added image" if added else "")
         + (f", {coloured} in a plain colour" if coloured else "")
+        + (f", {len(hidden)} left out" if hidden else "")
         + (f"; {len(bare)} without any colour {'is' if len(bare) == 1 else 'are'} drawn grey" if bare else ""))
     if src.get("painted"):
         add("Materials", "ok", f"{src['painted']} triangles painted by hand in "
@@ -1128,6 +1172,7 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
     src = load(Path(path))
     if not src.get("bones"):                          # not rigged, and the automatic rig failed
         raise ValueError(src.get("rig_error") or "The model has no skeleton.")
+    _drop_hidden(src)
     PR.apply(src, parts, log=log)
     if len(src["T"]) <= REDUCE_ABOVE:
         merge_textures(src)                           # one texture page (reduce bakes its own)

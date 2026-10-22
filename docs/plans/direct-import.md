@@ -491,3 +491,15 @@ images are on no material.
   FBX's colour is the default 0.8 grey. Body_D cannot stand in (the head's UVs fill the whole
   page). The check now warns for such a material (UV map, no texture, default light grey, >= 3 %
   of the triangles, while other materials are textured): add its colour map, choose one, or paint it.
+- NIKKI, round 2: the user has the whole set (Head_D, Teeth_D_Baked_REVISED, eyelashMat_D, SRMO,
+  ...; 30+ files) but only 16 images were allowed. Now 64; adding many images checks the model once,
+  after the last (`recheck: false` for the others). Matching by words: noise words (Baked, REVISED,
+  Mat, ...) and map words anywhere after the first word dropped, plurals made singular
+  (Eyelashes ~ eyelash), and besides "all words of one in the other" a word both share counts when it
+  is all the material says apart from words most images carry (the character's name): Eyelashes ->
+  T_Cosmetics_eyelashMat_D, EyeTeeth -> Teeth_D (not Eye_Iris: "eye" alone is not all of
+  "eye teeth"), Head -> Head_D. SRMO is not a colour map. A per-material **Leave out** (`"hide"`),
+  automatic for see-through layers by name (`SEE_THROUGH`: eyeshell, cornea, tearline,
+  eyeocclusion, ...; NIKKI's Eyeshell, a thin shell over the eyes, would be drawn white over them);
+  their triangles are dropped in `build` only (`_drop_hidden`), so painter and paint runs keep the
+  file's triangle numbers.

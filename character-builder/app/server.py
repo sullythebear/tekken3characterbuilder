@@ -1263,7 +1263,7 @@ MODEL_SOURCES = (".fbx", ".glb", ".vrm")
 # source.*) and prev (with source-prev.*, for Undo). Older builders kept one image as
 # texture-<stem>.<ext>: still read.
 TEXTURE_TYPES = {".png": bytes([0x89]) + b"PNG", ".jpg": bytes([0xFF, 0xD8]), ".jpeg": bytes([0xFF, 0xD8]), ".tga": None}
-TEXTURE_IMAGES_MAX = 16
+TEXTURE_IMAGES_MAX = 64                # texture sets (Unreal, Substance) ship 20-40 maps
 
 
 def texture_ok(ext: str, raw: bytes) -> bool:
@@ -1541,7 +1541,7 @@ def set_model_colours(cid: str, paint) -> dict:
     return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
 
-def upload_texture(cid: str, name: str, payload: str) -> dict:
+def upload_texture(cid: str, name: str, payload: str, recheck: bool = True) -> dict:
     """Adds a texture image (.png, .jpg or .tga) for the uploaded model; it goes on the material
     that asks for it by name, or that is named like it, or (the only image) on every material
     without a texture; the player can choose per material. The check runs again with it."""
@@ -1575,6 +1575,8 @@ def upload_texture(cid: str, name: str, payload: str) -> dict:
         images.append({"name": clean, "path": target})
     target.write_bytes(raw)
     save_textures(folder, "upload", images, assign)
+    if not recheck:                                   # more images follow: the check runs after the last
+        return {"ok": True, "stored": clean}
     old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
     return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
@@ -1587,7 +1589,7 @@ def clean_texture_assign(assign, count: int) -> dict:
             raise ValueError("Unknown material.")
         if v in ("auto", None):
             continue
-        if v in ("own", "colour") or (isinstance(v, int) and not isinstance(v, bool) and 0 <= v < count):
+        if v in ("own", "colour", "hide") or (isinstance(v, int) and not isinstance(v, bool) and 0 <= v < count):
             out[str(int(k))] = v
         else:
             raise ValueError("Choose a texture image that was added, the file's own texture or plain colour.")
@@ -2862,7 +2864,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/model/texture-choice":
                 return self._json(set_texture_choice(str(data.get("id", "")), data.get("assign"), data.get("remove")))
             if path == "/api/model/texture":
-                return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
+                return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", "")),
+                                                 data.get("recheck", True) is not False))
             if path == "/api/model/import":
                 return self._json(start_import(str(data.get("id", "")), int(data.get("costume", 0)), data.get("parts"),
                                                data.get("settings")))
