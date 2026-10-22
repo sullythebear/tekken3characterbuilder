@@ -178,3 +178,9 @@ kitbash or writer change.
 - `t3cb regress --all`: all 11 import models the same as approved (BrainStem locked, as before).
 - `t3cb kitregress`: all 7 Builder mixes the same.
 - Unit tests: 54 pass.
+- First `--unrigged` run (2026-10-22): 26 of 27 test models import without their skeleton (the
+  auto rig, turning, build; BrainStem the robot too). CesiumMan does not: stripped after loading,
+  its skinned mesh stays in bind space without the node's turn (lying along Z, arms along Y, 0.75)
+  and the glTF Y-up hint is kept; an unskinned export has its node transform applied. A height
+  ratio cannot tell lying from standing (Buffedwolf stands at 0.55 with its tail). `build` now
+  stops with the rig's reason when a model has no skeleton (was a KeyError in reduce).

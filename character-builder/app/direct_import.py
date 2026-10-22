@@ -911,6 +911,8 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
     1 times the detail on the head, "detail": 100, 80 or 60 % of the most the slot holds}."""
     settings = settings or {}
     src = load(Path(path))
+    if not src.get("bones"):                          # not rigged, and the automatic rig failed
+        raise ValueError(src.get("rig_error") or "The model has no skeleton.")
     PR.apply(src, parts, log=log)
     if len(src["T"]) <= REDUCE_ABOVE:
         merge_textures(src)                           # one texture page (reduce bakes its own)
