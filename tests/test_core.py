@@ -810,3 +810,47 @@ class ColourPaintTests(unittest.TestCase):
                     {"colours": ["#123456"], "runs": [[0, True, 0]]}):
             with self.assertRaises(ValueError):
                 server.clean_colours(bad)
+
+
+class TextureImageTests(unittest.TestCase):
+    """Texture images added beside a model (.png, .jpg, .tga): matched to materials by the name
+    the model asks for or the material's name, or chosen per material."""
+
+    def test_tga_is_checked_by_its_header(self):
+        tga = bytes([0, 0, 2]) + bytes(9) + struct.pack("<HH", 4, 4) + bytes([24, 0]) + bytes(48)
+        self.assertTrue(server.texture_ok(".tga", tga))
+        self.assertFalse(server.texture_ok(".tga", b"not an image at all"))
+        self.assertFalse(server.texture_ok(".tga", tga[:2] + bytes([7]) + tga[3:]))      # no such image type
+        self.assertTrue(server.texture_ok(".png", bytes([0x89]) + b"PNG...."))
+        self.assertFalse(server.texture_ok(".bmp", b"BM...."))
+
+    def test_plan_auto_and_chosen(self):
+        import numpy as np
+        import direct_import as DI
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("Body_D.tga", "Hair.png"):
+                Image.new("RGB", (4, 4), (10, 20, 30)).save(Path(d) / name)
+            src = {"MAT": np.array([0, 1, 2]), "T": np.arange(9).reshape(3, 3),
+                   "UV": np.random.default_rng(1).random((9, 2)), "textures": {2: b"own"},
+                   "material_names": ["Skin", "hair_mat", "Cloth"], "missing_textures": {0: r"C:\tex\body_d.TGA"}}
+            DI.set_texture_images([{"name": "Body_D.tga", "path": Path(d) / "Body_D.tga"},
+                                   {"name": "Hair.png", "path": Path(d) / "Hair.png"}])
+            try:
+                plan = DI.texture_plan(src)
+                self.assertEqual(plan[0]["use"], 0)                     # asked for by name (any case, any type)
+                self.assertEqual(plan[1]["use"], 1)                     # named like the material
+                self.assertEqual(plan[2]["use"], "own")                 # its own texture stays
+                DI.set_texture_images([{"name": "Body_D.tga", "path": Path(d) / "Body_D.tga"}], {2: 0, 0: "colour"})
+                plan = DI.texture_plan(src)
+                self.assertEqual((plan[2]["use"], plan[2]["how"]), (0, "chosen"))
+                self.assertEqual(plan[0]["use"], "colour")
+                self.assertEqual(plan[1]["use"], "colour")              # the only image is placed already
+            finally:
+                DI.set_texture_images([])
+
+    def test_clean_texture_assign(self):
+        self.assertEqual(server.clean_texture_assign({"3": 1, "4": "auto", "5": "own"}, 2), {"3": 1, "5": "own"})
+        for bad in ({"x": 0}, {"1": 2}, {"1": "shiny"}, {"1": True}):
+            with self.assertRaises(ValueError):
+                server.clean_texture_assign(bad, 2)

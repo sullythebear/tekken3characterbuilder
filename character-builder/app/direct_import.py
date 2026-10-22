@@ -25,41 +25,91 @@ import protrusions as PR
 PAIRS = MI.PAIRS
 
 
-# a texture image the player chose beside the model file (CLI --texture): PNG bytes for every
-# material that has no texture of its own (models often ship their texture as a separate file)
-EXTERNAL_TEXTURE: bytes | None = None
+# texture images the player added beside the model file (models often ship their textures as
+# separate files, .png, .jpg or .tga): [{"name": file name, "png": PNG bytes}], and per material
+# what it wears when the player chose it ({material: "own" | "colour" | image index}); the rest
+# is matched automatically (_apply_textures)
+TEXTURE_IMAGES: list = []
+TEXTURE_ASSIGN: dict = {}
 
 
-def set_external_texture(path: Path | None) -> None:
-    """Reads any image Pillow knows, at most 1024 px, as the external texture (None: none)."""
-    global EXTERNAL_TEXTURE
-    if path is None:
-        EXTERNAL_TEXTURE = None
-        return
+def _image_png(path: Path) -> bytes:
+    """Any image Pillow reads (PNG, JPEG, TGA, ...), at most 1024 px, as PNG bytes."""
     from PIL import Image
-    im = Image.open(path).convert("RGBA")
+    im = Image.open(path)
+    im.load()
+    im = im.convert("RGBA")
     im.thumbnail((1024, 1024))
     buf = io.BytesIO()
     im.save(buf, "PNG")
-    EXTERNAL_TEXTURE = buf.getvalue()
+    return buf.getvalue()
 
 
-def _external_texture(src: dict) -> None:
-    """The chosen texture image on every material without a texture of its own, as long as the
-    material has a UV map: one whose corners all share one UV (a colour-only material) would
-    show a single texel of the image, so it keeps its own colour."""
-    if EXTERNAL_TEXTURE is None:
-        return
+def set_external_texture(path: Path | None) -> None:
+    """One texture image for every material without one of its own (CLI --texture)."""
+    set_texture_images([{"name": Path(path).name, "path": path}] if path else [], {})
+
+
+def set_texture_images(images, assign=None) -> None:
+    """images: [{"name", "path"}]; assign: {material: "own" | "colour" | image index}."""
+    global TEXTURE_IMAGES, TEXTURE_ASSIGN
+    TEXTURE_IMAGES = [{"name": str(i["name"]), "png": _image_png(Path(i["path"]))} for i in images or []]
+    TEXTURE_ASSIGN = {int(k): v for k, v in (assign or {}).items()
+                      if v in ("own", "colour") or (isinstance(v, int) and 0 <= v < len(TEXTURE_IMAGES))}
+
+
+def _stem(name: str) -> str:
+    """A file or material name reduced for matching: "Textures/Body_D.TGA" -> "bodyd"."""
+    return re.sub(r"[^a-z0-9]", "", Path(str(name).replace("\\", "/")).stem.lower())
+
+
+def texture_plan(src: dict) -> dict:
+    """What every material wears: {material: {"use": "own" | "colour" | image index, "how":
+    "chosen" | "auto", "why": text}}. Automatic: the image the file asks for by name, else one
+    named like the material, else (one image only) the image on every material that has no
+    texture of its own but a UV map; the file's own texture stays."""
     MAT, T, UV = np.asarray(src["MAT"]), np.asarray(src["T"]), np.asarray(src["UV"], float)
+    names = src.get("material_names") or []
+    wanted = src.get("missing_textures") or {}
+    stems = [_stem(i["name"]) for i in TEXTURE_IMAGES]
+    plan = {}
     for mi in sorted(set(MAT.tolist())):
-        if mi in src["textures"]:
+        own = mi in src["textures"]
+        if mi in TEXTURE_ASSIGN and not (TEXTURE_ASSIGN[mi] == "own" and not own):
+            plan[mi] = {"use": TEXTURE_ASSIGN[mi], "how": "chosen", "why": "your choice"}
             continue
-        if src.get("missing_textures") and mi not in src["missing_textures"]:
-            continue                                 # the file names its texture's materials: only those
         uv = UV[T[MAT == mi].ravel()] if len(UV) else np.zeros((0, 2))
-        if len(uv) and np.ptp(uv, axis=0).max() < 1e-6:
-            continue                                 # no UV map: its colour, not one texel
-        src["textures"][mi] = EXTERNAL_TEXTURE
+        mapped = bool(len(uv)) and np.ptp(uv, axis=0).max() >= 1e-6
+        name = names[mi] if mi < len(names) else ""
+        pick = None
+        if mi in wanted and _stem(wanted[mi]) in stems:
+            pick = (stems.index(_stem(wanted[mi])), f"the model asks for {Path(str(wanted[mi]).replace(chr(92), '/')).name}")
+        elif not own and name and _stem(name):
+            m = [k for k, s in enumerate(stems) if s and (s == _stem(name) or _stem(name) in s or s in _stem(name))]
+            if m:
+                pick = (m[0], f"named like the material {name}")
+        if (pick is None and not own and len(TEXTURE_IMAGES) == 1 and mapped and (not wanted or mi in wanted)
+                and 0 not in TEXTURE_ASSIGN.values()):     # not when the player put it somewhere already
+            pick = (0, "the only image, on a material without a texture")
+        if pick is not None:
+            plan[mi] = {"use": pick[0], "how": "auto", "why": pick[1]}
+        else:
+            plan[mi] = {"use": "own" if own else "colour", "how": "auto",
+                        "why": "its own texture" if own else "no image fits: plain colour" if mapped or not len(uv) else "no UV map: plain colour"}
+    return plan
+
+
+def _apply_textures(src: dict) -> None:
+    """The added images on the materials texture_plan() gives them; "colour" drops a material's
+    own texture (it is drawn in its plain colour)."""
+    plan = texture_plan(src)
+    src["texture_plan"] = plan
+    src["textures_own"] = sorted(src["textures"])     # the file's own, before images go on
+    for mi, p in plan.items():
+        if isinstance(p["use"], int):
+            src["textures"][mi] = TEXTURE_IMAGES[p["use"]]["png"]
+        elif p["use"] == "colour":
+            src["textures"].pop(mi, None)
 
 
 # a model without a skeleton: the joints the player placed by hand ({name: [x, y, z]}, in the
@@ -515,8 +565,9 @@ def _load(path: Path) -> dict:
         import glb
         g = glb.read(path)
         out = {"P": g["positions"], "T": g["triangles"], "UV": g["uv"], "MAT": g["materials"],
-               "textures": g["textures"]}
-        _external_texture(out)
+               "textures": g["textures"], "material_names": g.get("material_names") or [],
+               "missing_textures": g.get("missing_textures") or {}}
+        _apply_textures(out)
         if "bones" in g:
             w = g["weights"]
             out["bones"], out["weights"] = g["bones"], w
@@ -535,10 +586,10 @@ def _load(path: Path) -> dict:
     UV[:, 1] = 1 - UV[:, 1]
     out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
            "textures": {k: v for k, (n, v) in c["textures"].items()},
-           "missing_textures": c.get("missing_textures") or {}}
+           "missing_textures": c.get("missing_textures") or {}, "material_names": c.get("material_names") or []}
     if c.get("up") in (0, 1, 2):                       # the file's own up axis (GlobalSettings)
         out["up"] = [float(c.get("up_sign") or 1) * (k == c["up"]) for k in range(3)]
-    _external_texture(out)
+    _apply_textures(out)
     _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:
         # a real rig (e.g. from Mixamo): joints and the strongest bone of every vertex
@@ -778,8 +829,16 @@ def inspect(path: Path) -> dict:
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
     info["checks"] = checks(src, info, weighted)
     info["painted"] = int(src.get("painted", 0))       # triangles with colours painted by hand
+    names, plan = src.get("material_names") or [], src.get("texture_plan") or {}
+    MATS = np.asarray(src["MAT"])
+    info["images"] = [i["name"] for i in TEXTURE_IMAGES]
+    info["materials"] = [{"index": int(mi), "name": names[mi] if mi < len(names) else f"Material {mi + 1}",
+                          "triangles": int((MATS == mi).sum()), "own": mi in (src.get("textures_own") or ()),
+                          "asks": Path(str((src.get("missing_textures") or {}).get(mi, "")).replace("\\", "/")).name or None,
+                          **{k: p_[k] for k in ("use", "how", "why")}}
+                         for mi, p_ in sorted(plan.items())]
     info["colourless"] = (not any(k < PAINT_MATERIAL and k not in src.get("plain", []) for k in (src.get("textures") or {}))
-                          and not EXTERNAL_TEXTURE)
+                          and not TEXTURE_IMAGES)
     return info
 
 
@@ -862,21 +921,37 @@ def checks(src: dict, info: dict, weighted: int) -> list:
     mats = sorted(m for m in set(np.asarray(src["MAT"]).tolist()) if m < PAINT_MATERIAL)
     tex = {k: v for k, v in (src.get("textures") or {}).items() if k < PAINT_MATERIAL and k not in src.get("plain", [])}
     bare = [m for m in mats if m not in tex]
+    plan_ = src.get("texture_plan") or {}
+    own_ = set(src.get("textures_own") or ())
+    added = sum(1 for m in mats if isinstance(plan_.get(m, {}).get("use"), int))
+    embedded = sum(1 for m in mats if m in own_ and plan_.get(m, {}).get("use") == "own")
+    coloured = len(mats) - added - embedded - len(bare)
     add("Materials", "ok" if not bare else "warn",
-        f"{len(mats)} material{'s' if len(mats) != 1 else ''}, {len(tex)} embedded texture{'s' if len(tex) != 1 else ''}"
-        + (f"; {len(bare)} without a texture {'is' if len(bare) == 1 else 'are'} drawn in plain colour" if bare else ""))
+        f"{len(mats)} material{'s' if len(mats) != 1 else ''}: {embedded} with a texture in the file"
+        + (f", {added} with an added image" if added else "")
+        + (f", {coloured} in a plain colour" if coloured else "")
+        + (f"; {len(bare)} without any colour {'is' if len(bare) == 1 else 'are'} drawn grey" if bare else ""))
     if src.get("painted"):
         add("Materials", "ok", f"{src['painted']} triangles painted by hand in "
                                f"{len(set(int(m) for m in np.asarray(src['MAT']) if m >= PAINT_MATERIAL))} colours")
-    elif len(bare) == len(mats) and not EXTERNAL_TEXTURE:
+    elif len(bare) == len(mats) and not TEXTURE_IMAGES:
         add("Materials", "info", "The file has no colours of its own: paint the model with the painter (🎨 Paint)")
     if len(mats) > 1:
         add("Materials", "ok", f"The {len(mats)} materials share one 256 x 256 texture page (each gets a cell)")
-    wanted = sorted({Path(str(f).replace("\\", "/")).name for f in (src.get("missing_textures") or {}).values() if f})
-    if wanted:
-        add("Materials", "ok" if EXTERNAL_TEXTURE else "warn",
-            ("Your texture image is used for the material" if EXTERNAL_TEXTURE else "The model asks for a texture file it does not contain")
-            + f" ({', '.join(wanted)})" + ("" if EXTERNAL_TEXTURE else ": choose it as the texture image"))
+    plan = src.get("texture_plan") or {}
+    asked = {mi: Path(str(f).replace("\\", "/")).name for mi, f in (src.get("missing_textures") or {}).items() if f}
+    found = sorted({f"{f} (as {TEXTURE_IMAGES[plan[mi]['use']]['name']})" if _stem(f) != _stem(TEXTURE_IMAGES[plan[mi]['use']]['name'])
+                    else f for mi, f in asked.items() if isinstance(plan.get(mi, {}).get("use"), int)})
+    lacking = sorted({f for mi, f in asked.items() if not isinstance(plan.get(mi, {}).get("use"), int)})
+    if found:
+        add("Materials", "ok", f"Texture images used where the model asks for them: {', '.join(found)}")
+    if lacking:
+        add("Materials", "warn", f"The model asks for texture files it does not contain ({', '.join(lacking)}): "
+                                 "add them as texture images (.png, .jpg or .tga)")
+    chosen = sorted({i for p_ in plan.values() if isinstance(p_["use"], int) for i in [p_["use"]]})
+    if TEXTURE_IMAGES and len(chosen) < len(TEXTURE_IMAGES):
+        unused = [TEXTURE_IMAGES[i]["name"] for i in range(len(TEXTURE_IMAGES)) if i not in chosen]
+        add("Materials", "info", f"Not on any material yet: {', '.join(unused)} (choose it for a material below)")
     UV = np.asarray(src["UV"], float)
     if len(UV) and n:
         tri = UV[T]
@@ -1394,12 +1469,16 @@ def main():
     ap.add_argument("--parts", default="{}", help="JSON {part id: {mode: fold|keep|remove, angle}}")
     ap.add_argument("--preview", type=Path, help="write a PNG of the model with the parts applied")
     ap.add_argument("--texture", type=Path, help="an image for the materials without a texture of their own")
+    ap.add_argument("--textures", type=Path, help='JSON {"images": [{"name", "path"}], "assign": {material: "own"|"colour"|index}}')
     ap.add_argument("--settings", default="{}", help='JSON {"head": 4|2|1, "detail": 100|80|60} (reduced models)')
     ap.add_argument("--rig", type=Path, help='JSON {"joints": {name: [x, y, z]}, "turn": 3x3 | "auto"} for a model without a skeleton')
     ap.add_argument("--colours", type=Path, help='JSON {"colours": ["#rrggbb"], "runs": [[triangle, count, colour]]} painted by hand')
     ap.add_argument("--paint-mesh", type=Path, help="write the model for the builder's painter (JSON) and stop")
     a = ap.parse_args()
     set_external_texture(a.texture)
+    if a.textures and a.textures.is_file():
+        spec = json.loads(a.textures.read_text(encoding="utf-8"))
+        set_texture_images(spec.get("images"), spec.get("assign"))
     if a.colours and a.colours.is_file():
         set_colours(json.loads(a.colours.read_text(encoding="utf-8")))
     if a.rig and a.rig.is_file():

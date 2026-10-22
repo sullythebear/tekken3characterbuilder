@@ -27,8 +27,7 @@ const T3Model = (() => {
     if (!info) return;
     $("model-file-name").textContent = info.file || "";
     $("model-texture-row").hidden = !info.ok;
-    $("model-texture-name").textContent = info.texture_file ? `Texture image: chosen (${info.texture_file.replace("texture-upload", "image")})`
-      : "Only needed when the model's texture is a separate file.";
+    showTextures(info);
     const facts = $("model-facts");
     facts.replaceChildren();
     if (info.ok && info.checks) {
@@ -218,15 +217,87 @@ const T3Model = (() => {
     } finally { busy = false; $("model-file").value = ""; }
   }
 
-  // a separate texture image for the uploaded model (models often ship one beside the file)
-  async function uploadTexture(file) {
-    if (!file || busy) return;
+  // texture images beside the model file (.png, .jpg, .tga; several): each goes on the material
+  // that asks for it or is named like it (automatic), or where the player puts it per material
+  function showTextures(info) {
+    const images = info.images || [], mats = info.materials || [];
+    $("model-texture-name").textContent = images.length ? `${images.length} image${images.length > 1 ? "s" : ""} added`
+      : mats.some((m) => m.asks) ? "The model asks for texture files: add them here." : "Only needed when the model's textures are separate files.";
+    const list = $("model-texture-images");
+    list.replaceChildren(...images.map((name, k) => {
+      const li = document.createElement("li");
+      li.textContent = name;
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "✕"; x.title = `Remove ${name}`;
+      x.addEventListener("click", () => textureChoice({ remove: k }, `Removing ${name}…`));
+      li.append(x);
+      return li;
+    }));
+    const table = $("model-materials");
+    table.hidden = !mats.length || (!images.length && !mats.some((m) => m.own));
+    const body = table.querySelector("tbody");
+    body.replaceChildren(...mats.map((m) => {
+      const tr = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = m.name;
+      const why = document.createElement("span");
+      why.className = "why";
+      why.textContent = `${m.triangles} triangles` + (m.asks ? ` · asks for ${m.asks}` : "");
+      name.append(why);
+      const cell = document.createElement("td");
+      const sel = document.createElement("select");
+      const wears = (u) => (u === "own" ? "its own texture" : u === "colour" ? "plain colour" : images[u] || "?");
+      const opts = [["auto", `Automatic (${m.how === "auto" ? wears(m.use) : "as found"})`]];
+      if (m.own) opts.push(["own", "Its own texture"]);
+      opts.push(["colour", "Plain colour"]);
+      images.forEach((n, k) => opts.push([String(k), n]));
+      for (const [v, label] of opts) {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = label;
+        sel.append(o);
+      }
+      sel.value = m.how === "chosen" ? String(m.use) : "auto";
+      sel.addEventListener("change", () => {
+        const v = sel.value;
+        textureChoice({ assign: { [m.index]: /^[0-9]+$/.test(v) ? Number(v) : v } }, `${m.name}: ${sel.selectedOptions[0].textContent}…`);
+      });
+      const note = document.createElement("span");
+      note.className = "why";
+      note.textContent = m.how === "auto" ? m.why : "your choice";
+      cell.append(sel, note);
+      tr.append(name, cell);
+      return tr;
+    }));
+  }
+
+  async function textureChoice(body, message) {
+    if (busy) return;
     busy = true;
     const progress = $("model-progress");
     progress.hidden = false;
-    progress.textContent = `Checking the model with ${file.name}…`;
+    progress.textContent = message;
     try {
-      const info = await api("/api/model/texture", { id: state.current.id, name: file.name, file: await readBase64(file) });
+      const info = await api("/api/model/texture-choice", { id: state.current.id, ...body });
+      state.current.model_upload = info;
+      busy = false;
+      showCheck(info);
+      progress.hidden = true;
+    } catch (e) {
+      progress.textContent = e.message;
+    } finally { busy = false; }
+  }
+
+  async function uploadTextures(files) {
+    if (!files.length || busy) return;
+    busy = true;
+    const progress = $("model-progress");
+    progress.hidden = false;
+    try {
+      let info = null;
+      for (const file of files) {
+        progress.textContent = `Adding ${file.name} and checking the model…`;
+        info = await api("/api/model/texture", { id: state.current.id, name: file.name, file: await readBase64(file) });
+      }
       state.current.model_upload = info;
       busy = false;
       showCheck(info);
@@ -295,7 +366,7 @@ const T3Model = (() => {
   }
 
   $("model-file").addEventListener("change", (e) => upload(e.target.files[0]));
-  $("model-texture").addEventListener("change", (e) => uploadTexture(e.target.files[0]));
+  $("model-texture").addEventListener("change", (e) => uploadTextures([...e.target.files]));
   $("model-import").addEventListener("click", importModel);
   $("model-remove").addEventListener("click", remove);
   $("model-undo").addEventListener("click", undo);

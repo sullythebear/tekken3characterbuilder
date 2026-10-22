@@ -314,9 +314,14 @@
                 </div>
               </div>
               <ul class="model-facts" id="model-notes"></ul>
-              <div class="portrait-buttons" id="model-texture-row" hidden>
-                <label class="btn btn-ghost file-btn" title="For models whose texture is a separate image file: it goes on every material without a texture of its own">Choose texture image<input type="file" id="model-texture" accept=".png,.jpg,.jpeg" hidden></label>
-                <span class="hint" id="model-texture-name"></span>
+              <div class="texture-box" id="model-texture-row" hidden>
+                <p class="rig-head"><strong>🖼 Textures</strong> <span class="hint" id="model-texture-name"></span></p>
+                <label class="btn btn-ghost file-btn" title="Texture images that came with the model (.png, .jpg or .tga); you can pick several at once">Add texture images<input type="file" id="model-texture" accept=".png,.jpg,.jpeg,.tga" multiple hidden></label>
+                <ul class="texture-images" id="model-texture-images"></ul>
+                <table class="texture-table" id="model-materials" hidden>
+                  <thead><tr><th>Material</th><th>Wears</th></tr></thead>
+                  <tbody></tbody>
+                </table>
               </div>
               <div class="model-parts" id="model-parts" hidden>
                 <p class="model-parts-title">Parts that stick out</p>

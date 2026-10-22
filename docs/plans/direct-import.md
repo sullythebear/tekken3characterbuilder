@@ -450,3 +450,26 @@ easy painter. On the 3D model page, after an upload's check: **🎨 Paint the mo
   swatch (`src["plain"]`, not counted as textures in the check). **tested**: a Soldier without
   skeleton and materials, painted head / forearms / hips by body part, imports grey with the
   three colours where painted.
+
+## Texture images: .tga, several, automatic and by hand (2026-10-22, tested in the browser pane)
+
+The user asked for .tga textures, added automatically and by hand. On the 3D model page
+(🖼 Textures): **Add texture images** takes several files at once (.png, .jpg, .tga; 16 per model,
+16 MB each; TGA has no signature, so the server checks its header). Each image goes, automatically:
+1. on the material that asks for it by file name (FBX RelativeFilename, glTF image uri; matched by
+   name without extension or case: `Shirt.tga` fits a model asking for `Shirt.png`);
+2. else on a material named like it (`hair_mat` <- `Hair.png`);
+3. else, the only image, on every material without a texture but with a UV map (as before), unless
+   the player put it on a material already.
+A table lists every material (triangles, "asks for X") with a choice: Automatic (what it gets and
+why), Its own texture, Plain colour, or any added image. Removing an image puts the materials that
+had it back on automatic (other choices keep their image). Stored as `texture-<stem>-<n>.<ext>` and
+`textures-<stem>.json`; they move with the model on import / undo and travel in `.t3char` packages.
+The materials check now says what each wears ("6 materials: 0 with a texture in the file, 1 with
+an added image, 5 in a plain colour"), which images the model asked for and got, and which added
+images are on no material.
+- **tested** (PAINTTEST, Low Poly Character.fbx, which asks for Shirt.png): Shirt.tga and Red.tga
+  added through the file field at once; Shirt.tga went on "Cloth A" automatically; Red.tga chosen
+  for "Hair" in the table; removing Shirt.tga kept Hair on Red.tga; the import gave red hair; the
+  files moved to `texture-source-1.tga`; an exported package imported again built a byte-identical
+  model. Unit tests `TextureImageTests`.

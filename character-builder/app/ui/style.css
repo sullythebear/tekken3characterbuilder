@@ -531,3 +531,12 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .paint-palette { display: flex; flex-wrap: wrap; gap: .2rem; max-width: 360px; }
 .paint-palette button { width: 1.5rem; height: 1.5rem; border: 2px solid transparent; border-radius: 3px; cursor: pointer; padding: 0; }
 .paint-palette button.on { border-color: #fff; box-shadow: 0 0 0 1px #000; }
+.texture-box { margin: .6rem 0; padding: .5rem; border: 1px solid #2c3142; border-radius: 4px; background: var(--panel); }
+.texture-images { list-style: none; margin: .4rem 0; padding: 0; display: flex; flex-wrap: wrap; gap: .3rem; }
+.texture-images li { display: flex; align-items: center; gap: .3rem; padding: .15rem .2rem .15rem .5rem; border: 1px solid #3a4054; border-radius: 3px; background: var(--panel-hi); font-size: .85rem; }
+.texture-images button { font: inherit; border: 0; background: none; color: #ff8a8a; cursor: pointer; padding: 0 .3rem; }
+.texture-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .3rem; }
+.texture-table th { text-align: left; color: var(--gold); font-weight: 600; padding: .2rem .3rem; border-bottom: 1px solid #2c3142; }
+.texture-table td { padding: .2rem .3rem; border-bottom: 1px solid #1f2330; vertical-align: middle; }
+.texture-table select { max-width: 100%; }
+.texture-table .why { display: block; color: #8d93a8; font-size: .78rem; }

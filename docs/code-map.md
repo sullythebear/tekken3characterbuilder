@@ -177,3 +177,10 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 
 - `README.txt`, `Start Dizzy Character Creator.cmd` (the app is named Dizzy Character Creator since 0.3.8; the folder stays `character-builder/`).
 - Repo `tools/`: helper scripts (see `docs/knowledge/testing.md`). `tools/t3moves.py`: basic moves and damage from a RAM dump (`knowledge/moves.md`).
+- Texture images (.png/.jpg/.tga, several per model): `direct_import` (`TEXTURE_IMAGES`, `TEXTURE_ASSIGN`,
+  `set_texture_images`, `texture_plan` (asked-for name > material name > the only image), `_apply_textures`;
+  CLI `--textures`; check info `images`, `materials`); `glb.py` material names and image uris as
+  `missing_textures`; server `texture_ok` (TGA by header), `model_textures`, `save_textures`, `drop_textures`,
+  `upload_texture`, `set_texture_choice` (`/api/model/texture-choice`: assign, remove), `clean_texture_assign`,
+  files `texture-<stem>-<n>.<ext>` + `textures-<stem>.json` (old single `texture-<stem>.<ext>` still read);
+  UI `model3d.js` `showTextures` (image list, per-material table).

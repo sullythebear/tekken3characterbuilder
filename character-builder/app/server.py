@@ -1254,23 +1254,77 @@ def donor_models() -> dict:
 MODEL_SOURCES = (".fbx", ".glb", ".vrm")
 
 
-# a texture image the player chose beside the model file: texture-upload.* (with upload.*),
-# texture-source.* (with source.*), texture-prev.* (with source-prev.*, for Undo)
-TEXTURE_TYPES = {".png": bytes([0x89]) + b"PNG", ".jpg": bytes([0xFF, 0xD8]), ".jpeg": bytes([0xFF, 0xD8])}
+# texture images the player added beside the model file: texture-<stem>-<n>.<ext> listed in
+# textures-<stem>.json {"images": [{"name": the file's own name, "file": stored name}], "assign":
+# {material: "own" | "colour" | image index}} for stem upload (with upload.*), source (with
+# source.*) and prev (with source-prev.*, for Undo). Older builders kept one image as
+# texture-<stem>.<ext>: still read.
+TEXTURE_TYPES = {".png": bytes([0x89]) + b"PNG", ".jpg": bytes([0xFF, 0xD8]), ".jpeg": bytes([0xFF, 0xD8]), ".tga": None}
+TEXTURE_IMAGES_MAX = 16
+
+
+def texture_ok(ext: str, raw: bytes) -> bool:
+    """The bytes are an image of that type: PNG/JPEG by their signature, TGA (no signature) by a
+    sane header: colour map 0/1, image type 1-3 or 9-11, a size and 8-32 bits per pixel."""
+    if ext not in TEXTURE_TYPES:
+        return False
+    if TEXTURE_TYPES[ext] is not None:
+        return raw.startswith(TEXTURE_TYPES[ext])
+    if len(raw) < 18:
+        return False
+    w, h = struct.unpack_from("<HH", raw, 12)
+    return raw[1] in (0, 1) and raw[2] in (1, 2, 3, 9, 10, 11) and w > 0 and h > 0 and raw[16] in (8, 15, 16, 24, 32)
 
 
 def model_texture(folder: Path, stem: str) -> Path | None:
+    """The single image of an older builder (texture-<stem>.<ext>)."""
     return next((folder / f"texture-{stem}{e}" for e in TEXTURE_TYPES if (folder / f"texture-{stem}{e}").is_file()), None)
 
 
+def model_textures(folder: Path, stem: str) -> tuple[list[dict], dict]:
+    """([{"name", "path"}], assign) of the texture images beside a model file."""
+    spec = folder / f"textures-{stem}.json"
+    if spec.is_file():
+        try:
+            data = json.loads(spec.read_text(encoding="utf-8"))
+            images = [{"name": str(i["name"]), "path": folder / str(i["file"])} for i in data.get("images", [])]
+            if all(i["path"].is_file() and i["path"].parent == folder for i in images):
+                return images, data.get("assign") or {}
+        except (ValueError, KeyError, TypeError):
+            pass
+        return [], {}
+    old = model_texture(folder, stem)
+    return ([{"name": old.name, "path": old}] if old else []), {}
+
+
+def save_textures(folder: Path, stem: str, images: list[dict], assign: dict) -> None:
+    """Writes textures-<stem>.json (images already stored as texture-<stem>-<n>.<ext>)."""
+    spec = folder / f"textures-{stem}.json"
+    if not images and not assign:
+        spec.unlink(missing_ok=True)
+        return
+    spec.write_text(json.dumps({"images": [{"name": i["name"], "file": Path(i["path"]).name} for i in images],
+                                "assign": assign}), encoding="utf-8")
+
+
+def drop_textures(folder: Path, stem: str) -> None:
+    for old in [*folder.glob(f"texture-{stem}.*"), *folder.glob(f"texture-{stem}-*"), folder / f"textures-{stem}.json"]:
+        if old.is_file():
+            old.unlink()
+
+
 def move_texture(folder: Path, src: str, dst: str) -> None:
-    """texture-<src>.* becomes texture-<dst>.* (any old texture-<dst>.* goes); the rig placed by
-    hand (rig-<src>.json) moves along."""
-    for old in folder.glob(f"texture-{dst}.*"):
-        old.unlink()
-    texture = model_texture(folder, src)
-    if texture:
-        texture.replace(folder / f"texture-{dst}{texture.suffix}")
+    """The texture images of <src> become <dst>'s (any old ones of <dst> go); the rig placed and
+    the colours painted by hand (rig-<src>.json, colours-<src>.json) move along."""
+    images, assign = model_textures(folder, src)
+    drop_textures(folder, dst)
+    moved = []
+    for n, image in enumerate(images, 1):
+        target = folder / f"texture-{dst}-{n}{image['path'].suffix.lower()}"
+        image["path"].replace(target)
+        moved.append({"name": image["name"], "path": target})
+    drop_textures(folder, src)
+    save_textures(folder, dst, moved, assign)
     for kind in ("rig", "colours"):                  # joints placed and colours painted by hand
         (folder / f"{kind}-{dst}.json").unlink(missing_ok=True)
         if (folder / f"{kind}-{src}.json").is_file():
@@ -1280,11 +1334,15 @@ def move_texture(folder: Path, src: str, dst: str) -> None:
 def run_import_tool(root: Path, args: list[str], timeout: int = 1800, on_line=None) -> tuple[str | None, str]:
     """Runs direct_import.py (own 3D models); returns (error or None, stdout). on_line(text) gets
     every line while it runs (the import's progress). A model file upload.* or source.* gets its
-    texture image (texture-upload.* / texture-source.*) when the player chose one."""
+    texture images (textures-upload.json / textures-source.json) when the player added some."""
     if args and Path(args[0]).stem in ("upload", "source"):
-        texture = model_texture(Path(args[0]).parent, Path(args[0]).stem)
-        if texture:
-            args = [*args, "--texture", str(texture)]
+        images, assign = model_textures(Path(args[0]).parent, Path(args[0]).stem)
+        if images:
+            CACHE.mkdir(exist_ok=True)
+            spec = CACHE / f"textures-{Path(args[0]).parent.name}-{Path(args[0]).stem}.json"
+            spec.write_text(json.dumps({"images": [{"name": i["name"], "path": str(i["path"])} for i in images],
+                                        "assign": assign}), encoding="utf-8")
+            args = [*args, "--textures", str(spec)]
         rig = Path(args[0]).parent / f"rig-{Path(args[0]).stem}.json"     # joints placed by hand
         if rig.is_file():
             args = [*args, "--rig", str(rig)]
@@ -1337,9 +1395,9 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > MAX_IMPORT:
         raise ValueError("This model file is too large (16 MB at most).")
-    for old in [*folder.glob("upload.*"), *folder.glob("texture-upload.*"), *folder.glob("rig-upload.json"),
-                *folder.glob("colours-upload.json")]:
+    for old in [*folder.glob("upload.*"), *folder.glob("rig-upload.json"), *folder.glob("colours-upload.json")]:
         old.unlink()
+    drop_textures(folder, "upload")
     target = folder / f"upload{ext}"
     target.write_bytes(raw)
     return recheck_upload(root, folder, target, Path(str(name)).name[:80])
@@ -1352,9 +1410,6 @@ def recheck_upload(root: Path, folder: Path, target: Path, name: str) -> dict:
         raise ValueError(problem)
     info = json.loads(out.strip().splitlines()[-1])
     info["file"] = name
-    texture = model_texture(folder, "upload")
-    if texture:
-        info["texture_file"] = texture.name
     (folder / "upload.json").write_text(json.dumps(info), encoding="utf-8")
     if not info.get("ok"):
         target.unlink(missing_ok=True)
@@ -1454,10 +1509,9 @@ def colour_mesh(cid: str) -> dict:
     if not root or not upload:
         raise ValueError("Upload a model first.")
     out = CACHE / f"colour-mesh-{folder.name}.json"
-    deps = [upload, *(f for f in (folder / "rig-upload.json", folder / "colours-upload.json") if f.is_file())]
-    texture = model_texture(folder, "upload")
-    if texture:
-        deps.append(texture)
+    deps = [upload, *(f for f in (folder / "rig-upload.json", folder / "colours-upload.json",
+                                   folder / "textures-upload.json") if f.is_file())]
+    deps += [i["path"] for i in model_textures(folder, "upload")[0]]
     if not out.is_file() or out.stat().st_mtime < max(f.stat().st_mtime for f in deps):
         CACHE.mkdir(exist_ok=True)
         problem, _ = run_import_tool(root, [str(upload), "--paint-mesh", str(out)], timeout=300)
@@ -1485,8 +1539,9 @@ def set_model_colours(cid: str, paint) -> dict:
 
 
 def upload_texture(cid: str, name: str, payload: str) -> dict:
-    """A texture image for the uploaded model (for materials without one of their own); the
-    check runs again with it."""
+    """Adds a texture image (.png, .jpg or .tga) for the uploaded model; it goes on the material
+    that asks for it by name, or that is named like it, or (the only image) on every material
+    without a texture; the player can choose per material. The check runs again with it."""
     root = project_root()
     folder = DATA / safe_id(cid)
     upload = model_upload(folder)
@@ -1494,13 +1549,74 @@ def upload_texture(cid: str, name: str, payload: str) -> dict:
         raise ValueError("Upload a model first.")
     ext = Path(str(name)).suffix.lower()
     raw = base64.b64decode(payload, validate=True)
-    if ext not in TEXTURE_TYPES or not raw.startswith(TEXTURE_TYPES[ext]):
-        raise ValueError("Use a .png or .jpg image as the texture.")
-    if len(raw) > MAX_UPLOAD:
-        raise ValueError("This texture image is too large.")
-    for old in folder.glob("texture-upload.*"):
-        old.unlink()
-    (folder / f"texture-upload{ext}").write_bytes(raw)
+    if not texture_ok(ext, raw):
+        raise ValueError("Use a .png, .jpg or .tga image as the texture.")
+    if len(raw) > MAX_IMPORT:
+        raise ValueError("This texture image is too large (16 MB at most).")
+    images, assign = model_textures(folder, "upload")
+    clean = Path(str(name).replace("\\", "/")).name[:80]
+    same = [k for k, i in enumerate(images) if i["name"].lower() == clean.lower()]
+    if not same and len(images) >= TEXTURE_IMAGES_MAX:
+        raise ValueError(f"At most {TEXTURE_IMAGES_MAX} texture images per model.")
+    if images and images[0]["path"].name.startswith("texture-upload."):       # an older builder's single image
+        legacy = images[0]["path"]
+        images[0]["path"] = folder / f"texture-upload-1{legacy.suffix.lower()}"
+        legacy.replace(images[0]["path"])
+    used = {i["path"].name for i in images}
+    n = next(k for k in range(1, 1000) if not any(u.startswith(f"texture-upload-{k}.") for u in used))
+    target = folder / f"texture-upload-{n}{ext}"
+    if same:                                          # the same file again: replaced in its place
+        images[same[0]]["path"].unlink(missing_ok=True)
+        images[same[0]] = {"name": clean, "path": target}
+    else:
+        images.append({"name": clean, "path": target})
+    target.write_bytes(raw)
+    save_textures(folder, "upload", images, assign)
+    old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
+    return recheck_upload(root, folder, upload, old.get("file", upload.name))
+
+
+def clean_texture_assign(assign, count: int) -> dict:
+    """{material: "own" | "colour" | image index}; "auto" (or nothing) leaves it to the importer."""
+    out = {}
+    for k, v in (assign or {}).items() if isinstance(assign, dict) else ():
+        if not str(k).isdigit() or int(k) > 4096:
+            raise ValueError("Unknown material.")
+        if v in ("auto", None):
+            continue
+        if v in ("own", "colour") or (isinstance(v, int) and not isinstance(v, bool) and 0 <= v < count):
+            out[str(int(k))] = v
+        else:
+            raise ValueError("Choose a texture image that was added, the file's own texture or plain colour.")
+    return out
+
+
+def set_texture_choice(cid: str, assign=None, remove=None) -> dict:
+    """The player's texture per material ({material: "own" | "colour" | image index | "auto"}),
+    and/or one added image removed (its index); the check runs again."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    if not root or not upload:
+        raise ValueError("Upload a model first.")
+    images, old_assign = model_textures(folder, "upload")
+    if remove is not None:
+        if not isinstance(remove, int) or isinstance(remove, bool) or not 0 <= remove < len(images):
+            raise ValueError("No such texture image.")
+        images.pop(remove)["path"].unlink(missing_ok=True)
+        shifted = {}
+        for k, v in old_assign.items():               # choices of the removed image go back to automatic
+            if isinstance(v, int):
+                if v == remove:
+                    continue
+                v = v - 1 if v > remove else v
+            shifted[k] = v
+        old_assign = shifted
+    if isinstance(assign, dict):
+        assign = {**old_assign, **{str(k): v for k, v in assign.items()}}
+    else:
+        assign = old_assign
+    save_textures(folder, "upload", images, clean_texture_assign(assign, len(images)))
     old = json.loads((folder / "upload.json").read_text(encoding="utf-8")) if (folder / "upload.json").is_file() else {}
     return recheck_upload(root, folder, upload, old.get("file", upload.name))
 
@@ -2110,7 +2226,7 @@ def remove_model(cid: str) -> dict:
     folder = DATA / safe_id(cid)
     for name in ("model.bin", "model-new.bin", "upload.json", "model-prev.bin", "model-prev.json"):
         (folder / name).unlink(missing_ok=True)
-    for pattern in ("source.*", "upload.*", "source-prev.*", "texture-*.*"):
+    for pattern in ("source.*", "upload.*", "source-prev.*", "texture-*.*", "textures-*.json"):
         for old in folder.glob(pattern):
             old.unlink()
     info = folder / "character.json"
@@ -2388,9 +2504,13 @@ def export_character(cid: str) -> tuple[str, bytes]:
         source = next((folder / f"source{e}" for e in MODEL_SOURCES if (folder / f"source{e}").is_file()), None)
         if source:
             z.write(source, source.name)
-            texture = model_texture(folder, "source")     # its texture image, if one was chosen
-            if texture:
-                z.write(texture, texture.name)
+            images, assign = model_textures(folder, "source")    # its texture images, if added
+            for n, image in enumerate(images, 1):
+                z.write(image["path"], f"texture-source-{n}{image['path'].suffix.lower()}")
+            if images:
+                z.writestr("textures-source.json", json.dumps({
+                    "images": [{"name": i["name"], "file": f"texture-source-{n}{i['path'].suffix.lower()}"}
+                               for n, i in enumerate(images, 1)], "assign": assign}))
             for extra in ("rig-source.json", "colours-source.json"):   # joints placed, colours painted by hand
                 if (folder / extra).is_file():
                     z.write(folder / extra, extra)
@@ -2449,7 +2569,7 @@ def import_character(payload: str) -> dict:
         raise ValueError("This package is too large.")
     allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
                "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES), "rig-source.json",
-               "colours-source.json"}
+               "colours-source.json", "textures-source.json"}
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -2460,10 +2580,11 @@ def import_character(payload: str) -> dict:
             if info.is_dir():
                 continue
             variant = re.fullmatch(r"portraits/([0-9-]{8,40})/(portrait|portrait-ps1|portrait-full)\.png", info.filename)
-            if info.filename not in allowed and not variant:
+            texture = re.fullmatch(r"texture-source-([1-9][0-9]?)\.(png|jpg|jpeg|tga)", info.filename)
+            if info.filename not in allowed and not variant and not texture:
                 raise ValueError(f"Unexpected file in package: {info.filename}. "
                                  "Packages may only contain a description, images and a 3D model source.")
-            if info.file_size > (MAX_IMPORT if info.filename.startswith("source.") else MAX_UPLOAD):
+            if info.file_size > (MAX_IMPORT if info.filename.startswith(("source.", "texture-source")) else MAX_UPLOAD):
                 raise ValueError("A file in the package is too large.")
             files[info.filename] = z.read(info)
     if sum(1 for n in files if n.startswith("portraits/")) > PORTRAIT_VARIANTS * len(PORTRAIT_FILES):
@@ -2509,10 +2630,26 @@ def import_character(payload: str) -> dict:
         return saved
     folder = DATA / saved["id"]
     (folder / name).write_bytes(files[name])
-    for ext, magic in TEXTURE_TYPES.items():              # the model's texture image (checked)
+    for ext in TEXTURE_TYPES:                             # an older package's single texture image (checked)
         texture = files.get(f"texture-source{ext}")
-        if texture and texture.startswith(magic):
+        if texture and texture_ok(ext, texture):
             (folder / f"texture-source{ext}").write_bytes(texture)
+    if "textures-source.json" in files:                   # the texture images (checked)
+        try:
+            spec = json.loads(files["textures-source.json"].decode("utf-8"))
+            images = []
+            for i in spec.get("images", [])[:TEXTURE_IMAGES_MAX]:
+                stored = str(i["file"])
+                image = files.get(stored)
+                if not re.fullmatch(r"texture-source-[1-9][0-9]?\.(png|jpg|jpeg|tga)", stored) or not image:
+                    raise ValueError
+                if not texture_ok(Path(stored).suffix, image):
+                    raise ValueError
+                (folder / stored).write_bytes(image)
+                images.append({"name": Path(str(i["name"]).replace("\\", "/")).name[:80], "path": folder / stored})
+            save_textures(folder, "source", images, clean_texture_assign(spec.get("assign"), len(images)))
+        except (ValueError, KeyError, TypeError, UnicodeDecodeError, AttributeError):
+            raise ValueError("textures-source.json is damaged.") from None
     if "rig-source.json" in files:                        # joints placed by hand (checked)
         try:
             r = json.loads(files["rig-source.json"].decode("utf-8"))
@@ -2717,6 +2854,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(set_model_colours(str(data.get("id", "")), data.get("paint")))
             if path == "/api/model/colour-mesh":
                 return self._json(colour_mesh(str(data.get("id", ""))))
+            if path == "/api/model/texture-choice":
+                return self._json(set_texture_choice(str(data.get("id", "")), data.get("assign"), data.get("remove")))
             if path == "/api/model/texture":
                 return self._json(upload_texture(str(data.get("id", "")), str(data.get("name", "")), str(data.get("file", ""))))
             if path == "/api/model/import":
