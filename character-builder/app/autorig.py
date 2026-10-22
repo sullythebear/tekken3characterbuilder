@@ -25,6 +25,7 @@ CELLS = 80                     # voxels over the model's height
 # shoulders and the top of the head, fitted on 22 rigged models (tools: scratch bench_rig.py)
 ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
+BEND = 35                          # degrees: where the arm's way turns into the torso (the shoulder)
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
 HEAD_LIFT, HEAD_WIDTH = 0.03, 0.5  # all above the head joint + lift, within this share of the shoulders: head
 
@@ -349,6 +350,21 @@ def _arms(paths, P, H, dep, origin, h):
             thin = np.where(d <= DEPTH_K * arm_d)[0]
             if len(thin):
                 k = int(thin[0])
+        # the bend: walking in from the fingertip the way runs straight along the arm, then turns
+        # down into the torso at the shoulder; a short, thin torso fools the thickness alone
+        n = len(arm)
+        cum = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(arm, axis=0), axis=1))])
+        ia = int(np.searchsorted(cum, 0.35 * cum[-1]))
+        d = arm[ia] - arm[0]
+        if np.linalg.norm(d) > 1e-9 and n > 8:
+            d = d / np.linalg.norm(d)
+            for i in range(ia, n - 3):
+                v = arm[i + 3] - arm[i]
+                if np.linalg.norm(v) > 1e-9 and np.dot(v / np.linalg.norm(v), d) < np.cos(np.radians(BEND)):
+                    kb = n - 1 - i
+                    if kb > k and rev[k][1] < rev[kb][1] - 0.05 * H:
+                        k = kb                          # thickness put it well below the arm: the bend
+                    break
         shoulder = rev[k].copy()
         shoulder[1] += RAISE * H
         sh_len = _length(rev[k:])                    # shoulder .. fingertip

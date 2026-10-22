@@ -333,3 +333,24 @@ to correct it.
   most) and win over the automatic parts (each painted cell 1/60 of the height and its
   neighbours). Browser-tested: Michelle without a skeleton, part of an arm painted Head, applied:
   24 strokes stored, the server's parts as the view showed them.
+
+### An FBX without a skeleton (2026-10-22, tested in game)
+
+- "Stylized Low Poly Character" (CC-BY 4.0, `testmodels/dl-bps-StylizedChar`): `Low Poly
+  Character.fbx` has no skeleton, `..._Rigged.fbx` is its Mixamo twin (in the benchmark as truth).
+- **tested** The check rigged the FBX by itself (already Y up, no turn). Its cartoon build (big
+  head, short thin torso) put the shoulders on the hips: the thickness rule fired at once. New
+  rule: walking in from the fingertip the arm's way runs straight, then bends into the torso at
+  the shoulder (35 degrees); when the thickness rule puts the shoulder more than 5 % of the height
+  below that bend, the bend wins. Benchmark: this model 6.4 -> 3.6 %, "test" 2.8 -> 2.0 %, the rest
+  unchanged; 23 models: joints 3.34 %, parts 82.7 %.
+- **tested** Imported (900 triangles from 2226) and fought in Arcade against Lei: punches, kicks
+  and a knock-down; arms, legs and head follow their bones.
+- **tested, fixed** With Shirt.png chosen as the texture image the whole model came out one
+  blue-green: the image went on all six materials, and the five colour-only ones read one texel.
+  `fbx.character` now names the materials whose texture file is not in the FBX
+  ("missing_textures": {1: "Shirt.png"}); the chosen image goes on those only (else, when the
+  file names none, on every material without a texture that has a UV map). The check says which
+  file a model asks for. After the fix: skin, hair, the patterned shirt, black trousers, in the
+  builder's 3D view and in the fight. The rigged twin, imported without the image, was right
+  before the fix: the colours were never the rig's.

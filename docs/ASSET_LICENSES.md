@@ -28,6 +28,10 @@ LICENSE.txt in the KayKit GitHub repo) and 100Avatars R1 Rose, Lydia, Witch, Hor
 (Polygonal Mind, licence CC0 in toxsam/open-source-avatars, files on arweave.net). Added
 2026-10-20: 100Avatars R3 Vladi, Crowley (CC0, same source) and Seed-san (VirtualCast, VRM Public
 License 1.0, its meta allows modification and redistribution; from vrm-c/vrm-specification).
+Added 2026-10-22: "Stylized Low Poly Character" by Brett Post Script (CC-BY 4.0: attribution
+required; opengameart.org/content/stylized-low-poly-character, low_poly_character_fbx_files.zip):
+the FBX without a skeleton, its rigged twin and Shirt.png, in `dl-bps-StylizedChar` (local tests
+of the automatic rig only, not shipped).
 
 Candidate sources to check one by one before any download (licence per asset, not per site):
 Kenney (CC0), Quaternius (CC0), Poly Haven (CC0), OpenGameArt (mixed), Sketchfab (mixed).

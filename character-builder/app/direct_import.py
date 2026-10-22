@@ -45,11 +45,21 @@ def set_external_texture(path: Path | None) -> None:
 
 
 def _external_texture(src: dict) -> None:
+    """The chosen texture image on every material without a texture of its own, as long as the
+    material has a UV map: one whose corners all share one UV (a colour-only material) would
+    show a single texel of the image, so it keeps its own colour."""
     if EXTERNAL_TEXTURE is None:
         return
-    for mi in sorted(set(np.asarray(src["MAT"]).tolist())):
-        if mi not in src["textures"]:
-            src["textures"][mi] = EXTERNAL_TEXTURE
+    MAT, T, UV = np.asarray(src["MAT"]), np.asarray(src["T"]), np.asarray(src["UV"], float)
+    for mi in sorted(set(MAT.tolist())):
+        if mi in src["textures"]:
+            continue
+        if src.get("missing_textures") and mi not in src["missing_textures"]:
+            continue                                 # the file names its texture's materials: only those
+        uv = UV[T[MAT == mi].ravel()] if len(UV) else np.zeros((0, 2))
+        if len(uv) and np.ptp(uv, axis=0).max() < 1e-6:
+            continue                                 # no UV map: its colour, not one texel
+        src["textures"][mi] = EXTERNAL_TEXTURE
 
 
 # a model without a skeleton: the joints the player placed by hand ({name: [x, y, z]}, in the
@@ -350,7 +360,8 @@ def _load(path: Path) -> dict:
     UV = uv.reshape(-1, 2).copy()
     UV[:, 1] = 1 - UV[:, 1]
     out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
-           "textures": {k: v for k, (n, v) in c["textures"].items()}}
+           "textures": {k: v for k, (n, v) in c["textures"].items()},
+           "missing_textures": c.get("missing_textures") or {}}
     _external_texture(out)
     _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:
@@ -673,6 +684,11 @@ def checks(src: dict, info: dict, weighted: int) -> list:
         + (f"; {len(bare)} without a texture are drawn in plain colour" if bare else ""))
     if len(mats) > 1:
         add("Materials", "ok", f"The {len(mats)} materials share one 256 x 256 texture page (each gets a cell)")
+    wanted = sorted({Path(str(f).replace("\\", "/")).name for f in (src.get("missing_textures") or {}).values() if f})
+    if wanted:
+        add("Materials", "ok" if EXTERNAL_TEXTURE else "warn",
+            ("Your texture image is used for the material" if EXTERNAL_TEXTURE else "The model asks for a texture file it does not contain")
+            + f" ({', '.join(wanted)})" + ("" if EXTERNAL_TEXTURE else ": choose it as the texture image"))
     UV = np.asarray(src["UV"], float)
     if len(UV) and n:
         tri = UV[T]

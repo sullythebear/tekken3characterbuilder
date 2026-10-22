@@ -282,6 +282,7 @@ def character(path: Path) -> dict:
         corner_uvs += cuv
         materials += [local[m] if m < len(local) else (local[0] if local else 0) for m in mts]
         weights += w
+    wanted = {}                                       # material -> texture file not embedded
     for mid, k in material_ids.items():
         props = _props70(objs[mid])                   # a material's own colour (no texture: Mixamo's bots)
         dc = props.get("DiffuseColor") or props.get("Diffuse")
@@ -296,7 +297,9 @@ def character(path: Path) -> dict:
                 content = objs.get(vid).value("Content") if objs.get(vid) is not None else None
                 if content:
                     textures[k] = (object_name(objs[tid]), content)
-    return {"positions": positions, "triangles": triangles, "corner_uvs": corner_uvs, "materials": materials,
+            if k not in textures:                      # a texture file that is not in the FBX
+                wanted[k] = objs[tid].value("RelativeFilename") or objs[tid].value("FileName") or ""
+    return {"positions": positions, "missing_textures": wanted, "triangles": triangles, "corner_uvs": corner_uvs, "materials": materials,
             "material_names": names, "bones": bones, "weights": weights,
             "textures": textures, "colours": colours, "up": s["settings"].get("UpAxis", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}
 
