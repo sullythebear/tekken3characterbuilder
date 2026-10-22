@@ -486,3 +486,8 @@ images are on no material.
   never put on automatically, marked "not a colour map" in the choice list and summed up in the
   check), `_named_like` by words (CamelCase split, prefixes T_ / MI_ / M_ and map suffixes
   dropped, one name's words all in the other's): NIKKI's Body and FaceAcc get their _D maps.
+- NIKKI's face came out white: her "Head" material has its own UV map but none of the 16 added
+  images is its colour map (only `CargoLying_1002_N`, the normal map of UDIM tile 1002), and the
+  FBX's colour is the default 0.8 grey. Body_D cannot stand in (the head's UVs fill the whole
+  page). The check now warns for such a material (UV map, no texture, default light grey, >= 3 %
+  of the triangles, while other materials are textured): add its colour map, choose one, or paint it.

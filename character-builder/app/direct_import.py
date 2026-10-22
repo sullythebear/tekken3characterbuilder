@@ -534,7 +534,10 @@ def _colour_swatches(src: dict, colours: dict, linear: bool = True) -> None:
         Image.new("RGBA", (8, 8), tuple(int(round(c * 255)) for c in srgb) + (255,)).save(buf, "PNG")
         src["textures"][mi] = buf.getvalue()
         src["UV"] = np.asarray(src["UV"], float).copy()
-        src["UV"][np.unique(src["T"][np.asarray(src["MAT"]) == mi])] = 0.5
+        corners = np.unique(src["T"][np.asarray(src["MAT"]) == mi])
+        mapped = len(corners) and np.ptp(src["UV"][corners], axis=0).max() >= 1e-6
+        src.setdefault("plain_colour", {})[mi] = ([float(c) for c in srgb], bool(mapped))
+        src["UV"][corners] = 0.5
 
 
 def merge_textures(src: dict) -> None:
@@ -1067,6 +1070,17 @@ def checks(src: dict, info: dict, weighted: int) -> list:
         add("Materials", "warn", f"The model asks for texture files it does not contain ({', '.join(lacking)}): "
                                  "add them as texture images (.png, .jpg or .tga)")
     chosen = sorted({i for p_ in plan.values() if isinstance(p_["use"], int) for i in [p_["use"]]})
+    # a material laid out for a texture (UV map) that has none, and only the file's default
+    # light grey: it shows as a white patch (an Unreal head whose colour map was not added)
+    names_ = src.get("material_names") or []
+    MAT_ = np.asarray(src["MAT"])
+    textured = any(isinstance(p_.get("use"), int) or p_.get("use") == "own" for p_ in plan.values())
+    for mi, (rgb, mapped_) in sorted((src.get("plain_colour") or {}).items()):
+        if (textured and mapped_ and min(rgb) > 0.7 and max(rgb) - min(rgb) < 0.05
+                and plan.get(mi, {}).get("use") == "colour" and (MAT_ == mi).mean() >= 0.03):
+            name_ = names_[mi] if mi < len(names_) else f"Material {mi + 1}"
+            add("Materials", "warn", f"{name_} has a UV map but no texture: it is drawn plain white. Add its colour "
+                                     "map (often *_D, *_BaseColor or *_Albedo), choose one below, or paint it (🎨 Paint)")
     if TEXTURE_IMAGES and len(chosen) < len(TEXTURE_IMAGES):
         unused = [i for i in range(len(TEXTURE_IMAGES)) if i not in chosen]
         maps = [i for i in unused if map_kind(TEXTURE_IMAGES[i]["name"]) == "other"]
