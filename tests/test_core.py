@@ -737,3 +737,28 @@ class AutoRigTests(unittest.TestCase):
         self.assertEqual(rig["paint"], [[0.85, 1.43, 0.05, "head"]])
         with self.assertRaises(ValueError):
             server.clean_rig(None, "auto", [[0, 0, 0, "tail"]])
+
+
+class ChibiLegTests(unittest.TestCase):
+    def test_short_legs_are_made_longer(self):
+        import numpy as np
+        import autorig
+        import direct_import as DI
+        P, T = _figure()
+        P = P.copy()
+        low = P[:, 1] < 0.97                            # the figure's legs, squashed to a chibi's
+        P[low, 1] *= 0.3
+        P[~low, 1] -= 0.97 * 0.7
+        head = P[:, 1] > 1.49 - 0.97 * 0.7              # and a chibi's big head
+        P[head, 1] = 0.79 + (P[head, 1] - 0.79) * 3.5
+        src = autorig.rig({"P": P, "T": T})
+        self.assertLess(DI.hips_share(src), DI.LEGS_FROM)
+        head_size = np.ptp(src["P"][src["P"][:, 1] > src["auto_rig"]["neck"][1], 1])
+        DI._human_legs(src)
+        self.assertAlmostEqual(DI.hips_share(src), DI.LEGS_TO, delta=0.02)
+        self.assertEqual(src["legs"][1], round(DI.hips_share(src), 3))
+        moved = np.asarray(src["P"])
+        self.assertAlmostEqual(np.ptp(moved[moved[:, 1] > np.percentile(moved[:, 1], 90), 1]),
+                               np.ptp(P[P[:, 1] > np.percentile(P[:, 1], 90), 1]), delta=0.02)   # head unchanged
+        self.assertGreater(head_size, 0)
+        self.assertTrue(np.allclose(src["P_rig"], P))   # the rig view keeps the model as rigged

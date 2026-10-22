@@ -25,6 +25,7 @@ CELLS = 80                     # voxels over the model's height
 # shoulders and the top of the head, fitted on 22 rigged models (tools: scratch bench_rig.py)
 ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
+CHIBI_SHOULDERS = 0.58             # shoulders under this share of the height: a chibi (41-57 %; others 59 % and up)
 BEND = 35                          # degrees: where the arm's way turns into the torso (the shoulder)
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
 HEAD_LIFT, HEAD_WIDTH = 0.03, 0.5  # all above the head joint + lift, within this share of the shoulders: head
@@ -230,8 +231,9 @@ def auto_rig(P, T):
                                                          ("footL", footL), ("footR", footR))}
     paths = {k: np.array([world(v) for v in p]) for k, p in paths.items()}
     J = {}
-    J.update(_legs(paths, sole, H))
     J.update(_arms(paths, P, H, dep, origin, h))
+    shoulders = (J["upperL"][1] + J["upperR"][1]) / 2
+    J.update(_legs(paths, sole, H, chibi=shoulders < sole + CHIBI_SHOULDERS * H, solid=(solid, origin, h)))
     J.update(_centre(J, P, H, head[1], top_y))
     J["handendL"], J["handendR"] = handL[1], handR[1]
     for s in "LR":
@@ -300,16 +302,59 @@ def _length(path):
     return float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
 
 
-def _legs(paths, sole, H):
+def _joined(solid, origin, h, a, b):
+    """Whether points a and b lie in one piece of the solid's horizontal slice through a."""
+    va = np.floor((a - origin) / h).astype(int)
+    vb = np.floor((b - origin) / h).astype(int)
+    if not ((va >= 0).all() and (va < solid.shape).all() and (vb >= 0).all() and (vb < solid.shape).all()):
+        return False
+    sl = solid[:, va[1], :]
+    if not sl[va[0], va[2]] or not sl[vb[0], vb[2]]:
+        return False
+    seen = np.zeros_like(sl)
+    seen[va[0], va[2]] = True
+    stack = [(va[0], va[2])]
+    while stack:
+        x, z = stack.pop()
+        if (x, z) == (vb[0], vb[2]):
+            return True
+        for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            q = (x + dx, z + dz)
+            if 0 <= q[0] < sl.shape[0] and 0 <= q[1] < sl.shape[1] and sl[q] and not seen[q]:
+                seen[q] = True
+                stack.append(q)
+    return False
+
+
+def _crotch(paths, solid, origin, h, sole, H):
+    """The lowest height at which the two legs' ways lie in one piece of the solid's slice: where
+    the legs join (a wide torso lets the ways run apart far above it)."""
+    L, R = paths["footL"], paths["footR"]
+    for y in np.arange(sole + 0.08 * H, sole + 0.7 * H, h):
+        pa, pb = L[np.argmin(np.abs(L[:, 1] - y))], R[np.argmin(np.abs(R[:, 1] - y))]
+        if abs(pa[1] - y) > h or abs(pb[1] - y) > h:
+            continue
+        a = np.array([pa[0], y, pa[2]])
+        b = np.array([pb[0], y, pb[2]])
+        if _joined(solid, origin, h, a, b):
+            return float(y)
+    return None
+
+
+def _legs(paths, sole, H, chibi=False, solid=None):
     """Hip sockets, knees, ankles and toes along the legs' ways (foot end first)."""
     iL, iR = _split(paths["footL"], paths["footR"])
+    joined = _crotch(paths, *solid, sole, H) if solid is not None and chibi else None    # wide, short torsos only
     J = {}
     for s, i in (("L", iL), ("R", iR)):
         leg = paths["foot" + s][:i + 1]              # toe .. crotch
         J["toe" + s] = leg[0]
         crotch_y = leg[-1][1]
-        if crotch_y < sole + 0.38 * H:               # legs joined low (a skirt): a human crotch
-            crotch_y = sole + 0.46 * H
+        if joined is not None and joined < crotch_y:
+            crotch_y = (crotch_y + joined) / 2        # a chibi: the ways part too high, the slices join
+                                                      # too low (feet close, a robe); halfway fits best
+        if crotch_y < sole + 0.38 * H and not chibi:  # legs joined low (a skirt): a human crotch
+            crotch_y = sole + 0.46 * H                # (a chibi's low shoulders say its legs are short)
         # ankle: on the leg's upright part, at a human ankle's height
         up = np.where(leg[:, 1] > sole + 0.09 * H)[0]
         a = int(up[0]) if len(up) else 0

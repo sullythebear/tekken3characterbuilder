@@ -82,7 +82,45 @@ def load(path: Path) -> dict:
         _upright(out)
     else:
         _auto_rig(out, Path(path).suffix.lower())
+    if out.get("bones"):
+        _human_legs(out)
     return out
+
+
+LEGS_FROM, LEGS_TO = 0.33, 0.40      # hips below this share of the height: legs made this long
+
+
+def _human_legs(src: dict) -> None:
+    """A chibi (hips under a third of the height) gets longer legs: Tekken's animations put the
+    pelvis at a human height, so short legs stretch the whole model into a giant. The legs (and
+    the pelvis below the hip line) are stretched until the hips sit at LEGS_TO of the height; the
+    rest of the body moves up whole, so the big head and short arms stay as they are. Bones
+    move with their vertices; src["legs"] = (share before, share after)."""
+    share = hips_share(src)
+    if share is None or not 0.05 < share < LEGS_FROM:
+        return
+    P = np.asarray(src["P"], float).copy()
+    sole, H = float(P[:, 1].min()), float(np.ptp(P[:, 1]))
+    hip = sole + share * H
+    new = LEGS_TO * (H - share * H) / (1 - LEGS_TO)       # hip height giving LEGS_TO of the new height
+    k, lift = new / (share * H), new - share * H
+    leg = lambda prt: prt in ("thigh", "shin", "foot")
+    parts = [MI._part(src["bones"][int(b)]["name"])[0] if b >= 0 else None for b in np.asarray(src["vbone"])]
+    for i, prt in enumerate(parts):
+        y = P[i, 1]
+        if leg(prt) or (prt == "pelvis" and y < hip):
+            P[i, 1] = sole + (min(y, hip) - sole) * k + max(0.0, y - hip)
+        else:
+            P[i, 1] = y + lift
+    for b in src["bones"]:
+        y = b["matrix"][1][3]
+        if leg(MI._part(b["name"])[0]):
+            b["matrix"][1][3] = sole + (min(y, hip) - sole) * k + max(0.0, y - hip)
+        else:
+            b["matrix"][1][3] = y + lift
+    src["P_rig"] = src["P"]                          # the rig view shows (and places joints on) the model as rigged
+    src["P"] = P
+    src["legs"] = (round(share, 3), round(hips_share(src) or LEGS_TO, 3))
 
 
 def _auto_rig(out: dict, suffix: str) -> None:
@@ -586,7 +624,7 @@ def inspect(path: Path) -> dict:
         info["problems"].append("The skeleton misses bones Tekken needs: " + ", ".join(info["missing"]) + ".")
     elif weighted < 0.95 * len(src["P"]):
         info["problems"].append("The skin weights are missing for part of the model: weight every vertex to a bone.")
-    elif (share := hips_share(src)) is not None and share < CHIBI_HIPS:
+    elif (share := hips_share(src)) is not None and share < CHIBI_HIPS and not src.get("legs"):
         info["problems"].append(f"Chibi build: the hips are at {share:.0%} of the height (Tekken 3 fighters about "
                                 "50 %). Tekken's animations stretch such a model into a giant; use a model with a "
                                 "human build.")
@@ -615,7 +653,7 @@ def rig_view(src: dict) -> dict | None:
     side (z, y), for the builder's rig view. None for a rigged file."""
     if not (src.get("auto_rig") or src.get("rig_error")):
         return None
-    P = np.asarray(src["P"], float)
+    P = np.asarray(src.get("P_rig", src["P"]), float)
     step = max(1, len(P) // 2500)
     pick = P[::step]
     r = lambda a: np.round(a, 4).tolist()
@@ -668,7 +706,11 @@ def checks(src: dict, info: dict, weighted: int) -> list:
         # build: Tekken 3's fighters have the hips at about half their height; the import keeps
         # the model's own build (100Avatars' Lydia: hips at 73 %, she comes out on stilts)
         share = hips_share(src)
-        if share is not None:
+        if src.get("legs"):
+            add("Geometry", "info", f"Chibi build: the hips were at {src['legs'][0]:.0%} of the height; the legs are "
+                                    f"made longer, to {src['legs'][1]:.0%} (Tekken 3 fighters about 50 %), so Tekken's "
+                                    "animations do not stretch the model into a giant. Head and arms stay as they are")
+        elif share is not None:
             if share > 0.62:
                 add("Geometry", "warn", f"Long legs: the hips are at {share:.0%} of the height (Tekken 3 "
                                         "fighters about 50 %); the fighter keeps this build and looks stretched")

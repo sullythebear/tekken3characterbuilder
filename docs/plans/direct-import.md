@@ -354,3 +354,29 @@ to correct it.
   file a model asks for. After the fix: skin, hair, the patterned shirt, black trousers, in the
   builder's 3D view and in the fight. The rigged twin, imported without the image, was right
   before the fix: the colours were never the rig's.
+
+## Chibi builds get longer legs (2026-10-22, tested in game)
+
+Chibis (KayKit, 100Avatars Vladi / CuteMoth) were refused: Tekken's animations put the pelvis at
+a human height, so short legs stretched the whole model into a giant (2026-10-19).
+- `direct_import._human_legs` (after the rig, own or automatic): hips under `LEGS_FROM` (33 %) of
+  the height are brought to `LEGS_TO` (40 %): vertices and bones of the legs (and the pelvis below
+  the hip line) stretched along Y from the soles, everything else moved up whole, so the big head
+  and short arms stay. The rig view keeps the model as rigged (`P_rig`): joints placed and parts
+  painted there apply before the stretch. The check says it ("Chibi build: the hips were at 19 %
+  ... made longer, to 40 %") instead of refusing. Hip shares measured: Mage 19 %, Knight 21 %,
+  Rogue 23 %, Vladi 25 %, CuteMoth 15 %.
+- **tested** KayKit Mage (rigged) in a fighter: 846 triangles from 4509, the builder's 3D view
+  right (hat, face, robe, longer boots); in Arcade against Eddy about his size, punches and kicks
+  with the big hat following the head; no giant.
+- Automatic rig of a chibi without a skeleton: its legs part low, so the dress rule (crotch at
+  46 %) must not fire. Shoulders say it: chibis' are at 41-57 % of the height, everyone else's at
+  59 % and more (25 skeletons measured) -> `CHIBI_SHOULDERS` 0.58. For a chibi the crotch is
+  halfway between where the legs' ways part (too high on a wide short torso) and the lowest slice
+  in which both legs' ways lie in one piece (too low: feet close, a robe): KayKit Knight / Mage /
+  Rogue 19 / 17 / 25 % against their skeletons' 21 / 19 / 23 %. Unrigged copies of the Mage and the
+  Knight are rigged and get their legs made longer.
+- Benchmark with the chibis (28 models): joints 4.2 %, parts 79 % (without them 3.34 % / 82.7 %
+  as before). Knight 21 %: his weapon end is taken for a hand (drag it in the rig view); CuteMoth
+  and Vladi without a skeleton fall just outside the chibi test (shoulders 58 / 63 %), so their
+  hips come out high; with their own skeleton the legs are made longer as they should.

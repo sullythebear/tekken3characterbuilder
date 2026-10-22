@@ -62,6 +62,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `_auto_rig`, `set_rig`, `rig_view`, CLI `--rig`; server `clean_rig`, `set_model_rig` (`/api/model/rig`), `rig-<stem>.json`
   beside upload/source/prev (`move_texture`, `run_import_tool`, packages); UI `ui/rigview.js` (`T3Rig.show`).
   Branches (`_branches`), head region, the arm's bend (`BEND`), painting (`paint`, `PAINT_PARTS`; server `PAINT_MAX`).
+  Chibis: `direct_import._human_legs` (`LEGS_FROM`, `LEGS_TO`, `P_rig`); autorig `CHIBI_SHOULDERS`, `_crotch`, `_joined`.
   Texture image only on materials the FBX names (`fbx.character` "missing_textures", `direct_import._external_texture`).
   Benchmark: `tools/render/autorig_bench.py [--orient] [--only name]`.
 - TTT1 styles (patch 23): `custom_page.guest_styles`, `GUEST_STYLE_RE`; server field `guest_style`, `custom_entry` ("@key"),

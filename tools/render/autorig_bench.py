@@ -7,7 +7,7 @@ Per model: the joints' mean distance from the skeleton's (% of the height), the 
 the share of vertices given the skeleton's body part. At the end the mean offset per joint (to
 tune autorig's proportions) and the parts most often confused. --orient also turns every model
 six ways (Z up, facing -Z, upside down, ...) and checks that autorig.orient stands it up again.
-Test models: <game>/character-builder/testmodels/ and the fighters' source.fbx (chibis skipped)."""
+Test models: <game>/character-builder/testmodels/ and the fighters' source.fbx."""
 import sys
 import time
 from pathlib import Path
@@ -23,7 +23,7 @@ X.setup(GAME)
 import direct_import as DI  # noqa: E402
 import autorig as A  # noqa: E402
 
-SKIP = ("Knight", "Mage", "Rogue", "Vladi", "CuteMoth", "BrainStem")      # chibis, no usable skeleton
+SKIP = ("BrainStem",)                       # no usable skeleton
 JOINTS = ["hips", "neck"] + [p + s for p in ("upper", "fore", "hand", "thigh", "shin", "foot") for s in "LR"]
 
 
