@@ -711,6 +711,10 @@ class AutoRigTests(unittest.TestCase):
             P2 = P @ Q.T
             P3 = P2 @ autorig.orient(P2, T).T
             self.assertTrue(np.allclose(P3 - P3.mean(0), P - P.mean(0), atol=1e-6), Q)
+        Q = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])                  # an FBX that says Z up
+        P2 = P @ Q.T
+        P3 = P2 @ autorig.orient(P2, T, up=np.array([0.0, 0, 1])).T
+        self.assertTrue(np.allclose(P3 - P3.mean(0), P - P.mean(0), atol=1e-6))
 
     def test_rig_gives_a_skeleton(self):
         import autorig

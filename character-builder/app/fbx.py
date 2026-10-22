@@ -301,7 +301,8 @@ def character(path: Path) -> dict:
                 wanted[k] = objs[tid].value("RelativeFilename") or objs[tid].value("FileName") or ""
     return {"positions": positions, "missing_textures": wanted, "triangles": triangles, "corner_uvs": corner_uvs, "materials": materials,
             "material_names": names, "bones": bones, "weights": weights,
-            "textures": textures, "colours": colours, "up": s["settings"].get("UpAxis", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}
+            "textures": textures, "colours": colours, "up": s["settings"].get("UpAxis", [1])[0],
+            "up_sign": s["settings"].get("UpAxisSign", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}
 
 
 if __name__ == "__main__":

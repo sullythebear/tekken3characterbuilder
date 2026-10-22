@@ -380,3 +380,21 @@ a human height, so short legs stretched the whole model into a giant (2026-10-19
   as before). Knight 21 %: his weapon end is taken for a hand (drag it in the rig view); CuteMoth
   and Vladi without a skeleton fall just outside the chibi test (shoulders 58 / 63 %), so their
   hips come out high; with their own skeleton the legs are made longer as they should.
+
+## Auto rig v2.2 (2026-10-22): big heads, shoulders, short legs
+
+- `_ends` keeps up to 24 body ends (was 12): a big helmet's corners (5 ends) and two ends per
+  foot (toe, heel) pushed a hand out, and the helmet's corners became the hands (Knight).
+- Shoulder: the bend rule also fires when the way climbs steeply into a big head after the bend
+  (the torso's middle is then in the helmet). The shoulder is put on the arm's own line, measured
+  on the mesh (the middle of the vertices around the way between 10 and 45 % of the arm from the
+  fingertip), when the way runs more than `ARM_LINE` (2 %) of the height above it.
+- The human-crotch rule (crotch at 46 % when the legs' ways join low) only fires below 25 % of the
+  height (Vladi: knees together under a dress, 15 %); between 25 and 38 % short legs are real
+  (Knight / Mage: their thighs 40 % in the stretched model, no longer forced to 48 %).
+- Benchmark (28 models): joints 4.24 -> 3.44 %, parts 79.0 -> 81.8 %, no model worse. Knight
+  21.4 -> 4.1 %, Mage 5.7 -> 5.0, Buffedwolf 7.4 -> 5.2, Crowley 4.2 -> 3.2, Rogue 4.7 -> 3.9.
+  (**code**; CuteMoth's 56 % parts is the benchmark's: its skeleton has no bone named as a head, so
+  the whole head counts as spine.)
+- `t3cb regress --unrigged`: every test model imported again without its skeleton (ids
+  `ur-<name>`), through the automatic rig, turning, chibi legs and the build.

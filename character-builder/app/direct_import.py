@@ -130,8 +130,9 @@ def _auto_rig(out: dict, suffix: str) -> None:
     P, T = np.asarray(out["P"], float), np.asarray(out["T"])
     if isinstance(RIG_TURN, (list, tuple, np.ndarray)):
         R = np.asarray(RIG_TURN, float)
-    else:                                            # glTF is Y up by its standard
-        R = autorig.orient(P, T, up=np.array([0.0, 1, 0]) if suffix in (".glb", ".vrm") else None)
+    else:                                            # glTF is Y up by its standard, an FBX says
+        hint = [0.0, 1, 0] if suffix in (".glb", ".vrm") else out.get("up")   # its own up axis
+        R = autorig.orient(P, T, up=None if hint is None else np.array(hint, float))
     out["P"] = P @ R.T
     out["turn"] = R.tolist()
     try:
@@ -400,6 +401,8 @@ def _load(path: Path) -> dict:
     out = {"P": P2, "T": T2, "UV": UV, "MAT": np.array(c["materials"]),
            "textures": {k: v for k, (n, v) in c["textures"].items()},
            "missing_textures": c.get("missing_textures") or {}}
+    if c.get("up") in (0, 1, 2):                       # the file's own up axis (GlobalSettings)
+        out["up"] = [float(c.get("up_sign") or 1) * (k == c["up"]) for k in range(3)]
     _external_texture(out)
     _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:

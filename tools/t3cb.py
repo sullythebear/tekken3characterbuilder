@@ -8,7 +8,7 @@ results only. Stdlib only (the import command runs Expanded's venv itself).
   python tools/t3cb.py report   [--game G]            summarise logs/test-report.md in a few lines
   python tools/t3cb.py import   FBX|GLB --character ID --model N [--game G]  rigged model -> model.bin (deployed)
   python tools/t3cb.py setmodel FILE --character ID [--game G]            put a T3CM model file on a character
-  python tools/t3cb.py regress  [--only id,id] [--approve] [--all] [--game G]  re-import every own model, check holes,
+  python tools/t3cb.py regress  [--only id,id] [--approve] [--all] [--unrigged] [--game G]  re-import every own model, check holes,
                                 speckles and fit against the approved state (tools/render/regress.py)
   python tools/t3cb.py kitregress [--approve]  build a fixed set of Character Builder mixes and compare them
                                 with their approved results (tools/render/kitregress.py)
@@ -138,7 +138,7 @@ def import_fbx(game: Path, fbx: Path, character: str, model: int) -> None:
         setmodel(game, out, character)
 
 
-def regress(game: Path, only: str | None, approve: bool, everything: bool = False) -> None:
+def regress(game: Path, only: str | None, approve: bool, everything: bool = False, unrigged: bool = False) -> None:
     py = game / ".setup" / "venv" / "Scripts" / "python.exe"
     if not py.is_file():
         py = game / ".setup" / "venv" / "bin" / "python"
@@ -146,6 +146,7 @@ def regress(game: Path, only: str | None, approve: bool, everything: bool = Fals
     cmd += ["--only", only] if only else []
     cmd += ["--approve"] if approve else []
     cmd += ["--all"] if everything else []
+    cmd += ["--unrigged"] if unrigged else []
     sys.exit(subprocess.run(cmd).returncode)
 
 
@@ -169,6 +170,7 @@ def main() -> None:
     ap.add_argument("--approve", action="store_true")
     ap.add_argument("--debug", action="store_true", help="build: the debug build t3live uses (build-opt-dbg)")
     ap.add_argument("--all", action="store_true", help="regress: also the files in character-builder/testmodels")
+    ap.add_argument("--unrigged", action="store_true", help="regress: the test models again without their skeleton (auto rig)")
     a = ap.parse_args()
     if a.command == "deploy":
         deploy(a.game)
@@ -183,7 +185,7 @@ def main() -> None:
     elif a.command == "import":
         import_fbx(a.game, a.file, a.character, a.model)
     elif a.command == "regress":
-        regress(a.game, a.only, a.approve, a.all)
+        regress(a.game, a.only, a.approve, a.all, a.unrigged)
     elif a.command == "kitregress":
         kitregress(a.game, a.approve)
 

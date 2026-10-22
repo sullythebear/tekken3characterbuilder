@@ -642,8 +642,9 @@ def orient(P, T=None, up=None):
         if len(foot) > 10 and len(ankle) > 10:
             a = np.median(ankle)
             vote += (foot.max() - a) - (a - foot.min())
-    if vote < -0.02 * H:
-        front = -front                               # toes point the other way
+    if vote < -0.035 * H:
+        front = -front                               # toes point the other way (a weak vote, round
+                                                     # feet without toes, keeps the file's own front)
     return _rot(up, front)
 
 

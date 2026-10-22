@@ -1,11 +1,13 @@
 """Regression check of the model import (Expanded's venv): every character in the test folder
 that has its own model and a source file is imported again, then checked the PlayStation way.
 
-  regress.py [--game G] [--only id,id] [--approve] [--all]
+  regress.py [--game G] [--only id,id] [--approve] [--all] [--unrigged]
 
 --all also imports the rigged files in <game>/character-builder/testmodels/ (over Nina's model
 10; ids tm-<name>; locked files are listed and skipped): Michelle/Soldier/Xbot (Mixamo glb),
 CesiumMan (shape-named bones), ...
+--unrigged imports every test model again as if its file had no skeleton (ids ur-<name>): the
+automatic rig (autorig.py), turning it upright, chibi legs and the build in one go.
 
 Per character:
   fits     the import fitted without the flat-shading fallback (degrade)
@@ -43,9 +45,26 @@ HOLE_SLACK = 20        # pixels of new holes tolerated (anti-aliasing of thin sl
 SPECKLE_SLACK = 0.002  # share of texels
 
 
+def _no_skeleton(load):
+    """DI._load as for a file without a skeleton (the mesh as it stands in its bind pose)."""
+    def f(path, *a, **k):
+        out = load(path, *a, **k)
+        for key in ("bones", "weights", "vbone"):
+            out.pop(key, None)
+        return out
+    return f
+
+
 def build(cid, info, src_file):
     """Imports src_file as the app does. -> (model bytes, reference RGB, degraded?)"""
     cap = {}
+    if cid.startswith("ur-"):
+        load = DI._load
+        DI._load = _no_skeleton(load)
+        try:
+            return build("x" + cid, info, src_file)
+        finally:
+            DI._load = load
     quant = TB.quantise_groups
 
     def q(rgb, owner, *a, **k):
@@ -121,6 +140,11 @@ def holes(path, model, png):
     return int((bg & ~full).sum())
 
 
+def old_ok(out):
+    """An approved state exists: the character imported before."""
+    return (out / "approved.json").is_file()
+
+
 def main():
     root = GAME / "character-builder"
     only = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else None
@@ -145,13 +169,23 @@ def main():
                 print(f"tm-{f.stem:11} locked (not rigged as Tekken needs), skipped")
                 continue
             items.append((f"tm-{f.stem}", {"model": 10}, f, None))
+    if "--unrigged" in sys.argv:
+        tm = root / "testmodels"
+        for f in sorted([*tm.glob("*"), *tm.glob("*/*")]):
+            if f.suffix.lower() in (".glb", ".fbx", ".vrm"):
+                items.append((f"ur-{f.stem}", {"model": 10}, f, None))
     for name, info, src, current in items:
         if only and name not in only:
             continue
         out = root / "cache" / "regress" / name
         out.mkdir(parents=True, exist_ok=True)
         t = time.time()
-        data, rgb, owner, degraded = build(name, info, src)
+        try:
+            data, rgb, owner, degraded = build(name, info, src)
+        except Exception as e:                           # an unrigged shape autorig cannot rig
+            print(f"{name:14} NOT IMPORTED: {e}")
+            worse |= bool(old_ok(out))
+            continue
         (out / "new.bin").write_bytes(data)
         res = {"fits": not degraded,
                "holes": holes(out / "new.bin", info["model"], out / "new.png"),

@@ -92,6 +92,9 @@ textured), `stock.py` (a stock model with textures and wireframe).
   (`NOCULL=1`), so gaps between arm and body do not count; **speckle** = share of texels whose
   colour decoded with the polygon's own CLUT is > 20 Lab from the quantiser's input;
   **same** = byte-equal to the approved model.
+- `--unrigged` (2026-10-22): also every test model as if its file had no skeleton (ids `ur-<name>`):
+  the automatic rig, turning upright, chibi legs and the build; a model that no longer imports counts
+  as worse.
 - Approved state: `<game>/character-builder/cache/regress/<id>/approved.{bin,json,png}`
   (`--approve` stores the current results); exit 1 and `WORSE: ...` when a check got worse
   (slack: 20 hole pixels, 0.2 % speckle). `sheet.png` = new above approved.
