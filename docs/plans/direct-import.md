@@ -455,7 +455,7 @@ easy painter. On the 3D model page, after an upload's check: **🎨 Paint the mo
 
 The user asked for .tga textures, added automatically and by hand. On the 3D model page
 (🖼 Textures): **Add texture images** takes several files at once (.png, .jpg, .tga; 16 per model,
-16 MB each; TGA has no signature, so the server checks its header). Each image goes, automatically:
+64 MB each (2026-10-22: was 16, too small for an uncompressed 2048 x 2048 TGA; packages up to 96 MB); TGA has no signature, so the server checks its header). Each image goes, automatically:
 1. on the material that asks for it by file name (FBX RelativeFilename, glTF image uri; matched by
    name without extension or case: `Shirt.tga` fits a model asking for `Shirt.png`);
 2. else on a material named like it (`hair_mat` <- `Hair.png`);

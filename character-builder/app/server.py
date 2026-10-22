@@ -39,6 +39,9 @@ NAME_RE = re.compile(r"^[A-EG-PR-Z2 .\-]{1,15}$")
 CUSTOM_PAGE_MAX = 12
 MAX_UPLOAD = 12 * 1024 * 1024
 MAX_IMPORT = 16 * 1024 * 1024
+MAX_TEXTURE = 64 * 1024 * 1024 + 65536    # a texture image: an uncompressed 4096 x 4096 TGA is 64 MB and its header
+MAX_PACKAGE = 96 * 1024 * 1024        # a .t3char package: the model's source with its texture images
+MAX_REQUEST = MAX_PACKAGE * 4 // 3 + 1024 * 1024     # base64 in JSON
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 lock = threading.Lock()
@@ -1551,8 +1554,8 @@ def upload_texture(cid: str, name: str, payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
     if not texture_ok(ext, raw):
         raise ValueError("Use a .png, .jpg or .tga image as the texture.")
-    if len(raw) > MAX_IMPORT:
-        raise ValueError("This texture image is too large (16 MB at most).")
+    if len(raw) > MAX_TEXTURE:
+        raise ValueError("This texture image is too large (64 MB at most).")
     images, assign = model_textures(folder, "upload")
     clean = Path(str(name).replace("\\", "/")).name[:80]
     same = [k for k, i in enumerate(images) if i["name"].lower() == clean.lower()]
@@ -2558,14 +2561,14 @@ def backup_packages(payload: str) -> list[bytes] | None:
         names = [i.filename for i in z.infolist() if not i.is_dir()]
         if not names or not all(n.endswith(".t3char") and "/" not in n for n in names):
             return None
-        if len(names) > 200 or any(i.file_size > MAX_IMPORT for i in z.infolist()):
+        if len(names) > 200 or any(i.file_size > MAX_PACKAGE for i in z.infolist()):
             raise ValueError("This backup holds too many or too large packages.")
         return [z.read(n) for n in names]
 
 
 def import_character(payload: str) -> dict:
     raw = base64.b64decode(payload, validate=True)
-    if len(raw) > MAX_IMPORT:
+    if len(raw) > MAX_PACKAGE:
         raise ValueError("This package is too large.")
     allowed = {"character.json", "portrait.png", "portrait-ps1.png", "portrait-full.png", "namecall.wav",
                "source.fbx", "source.glb", "source.vrm", *(f"texture-source{e}" for e in TEXTURE_TYPES), "rig-source.json",
@@ -2584,7 +2587,9 @@ def import_character(payload: str) -> dict:
             if info.filename not in allowed and not variant and not texture:
                 raise ValueError(f"Unexpected file in package: {info.filename}. "
                                  "Packages may only contain a description, images and a 3D model source.")
-            if info.file_size > (MAX_IMPORT if info.filename.startswith(("source.", "texture-source")) else MAX_UPLOAD):
+            limit = (MAX_IMPORT if info.filename.startswith("source.") else
+                     MAX_TEXTURE if info.filename.startswith("texture-source") else MAX_UPLOAD)
+            if info.file_size > limit:
                 raise ValueError("A file in the package is too large.")
             files[info.filename] = z.read(info)
     if sum(1 for n in files if n.startswith("portraits/")) > PORTRAIT_VARIANTS * len(PORTRAIT_FILES):
@@ -2785,7 +2790,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_host() or self.headers.get("X-T3CB-Token") != TOKEN:
             return self._error("Request refused.", 403)
         length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_IMPORT * 2:
+        if length > MAX_REQUEST:
             return self._error("Request too large.", 413)
         try:
             data = json.loads(self.rfile.read(length) or b"{}")
