@@ -26,6 +26,7 @@ CELLS = 80                     # voxels over the model's height
 ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
 CHIBI_SHOULDERS = 0.58             # shoulders under this share of the height: a chibi (41-57 %; others 59 % and up)
+ARM_LINE = 0.02                    # shoulder this far (share of the height) above the arm's line: put on it
 BEND = 35                          # degrees: where the arm's way turns into the torso (the shoulder)
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
 HEAD_LIFT, HEAD_WIDTH = 0.03, 0.5  # all above the head joint + lift, within this share of the shoulders: head
@@ -146,7 +147,7 @@ def _descend(D, start, solid):
     return np.array(path)
 
 
-def _ends(Du, solid, h, count=12):
+def _ends(Du, solid, h, count=24):
     """Voxels farther (by Du) than all their neighbours within a radius: the body's ends."""
     finite = np.where(np.isfinite(Du), Du, -1)
     r = 3
@@ -353,8 +354,9 @@ def _legs(paths, sole, H, chibi=False, solid=None):
         if joined is not None and joined < crotch_y:
             crotch_y = (crotch_y + joined) / 2        # a chibi: the ways part too high, the slices join
                                                       # too low (feet close, a robe); halfway fits best
-        if crotch_y < sole + 0.38 * H and not chibi:  # legs joined low (a skirt): a human crotch
-            crotch_y = sole + 0.46 * H                # (a chibi's low shoulders say its legs are short)
+        if crotch_y < sole + 0.25 * H and not chibi:  # legs touching far down (knees together under a
+            crotch_y = sole + 0.46 * H                # dress): a human crotch. Higher up short legs are
+                                                      # real (a chibi, a big helmet)
         # ankle: on the leg's upright part, at a human ankle's height
         up = np.where(leg[:, 1] > sole + 0.09 * H)[0]
         a = int(up[0]) if len(up) else 0
@@ -407,10 +409,32 @@ def _arms(paths, P, H, dep, origin, h):
                 v = arm[i + 3] - arm[i]
                 if np.linalg.norm(v) > 1e-9 and np.dot(v / np.linalg.norm(v), d) < np.cos(np.radians(BEND)):
                     kb = n - 1 - i
-                    if kb > k and rev[k][1] < rev[kb][1] - 0.05 * H:
-                        k = kb                          # thickness put it well below the arm: the bend
+                    below = rev[k][1] < rev[kb][1] - 0.05 * H
+                    above = rev[k][1] > rev[kb][1] + 0.05 * H and v[1] > 0.7 * np.linalg.norm(v)
+                    if kb > k and (below or above):
+                        k = kb                          # thickness put it well below the arm, or up the
+                                                        # way into a big head (a chibi's helmet): the bend
                     break
         shoulder = rev[k].copy()
+        # the way drifts towards the body's deepest part (a big head pulls it up): the shoulder lies
+        # on the arm's own line, carried on from the stretch between wrist and elbow
+        c0, c1 = np.searchsorted(cum, 0.1 * cum[-1]), np.searchsorted(cum, 0.45 * cum[-1])
+        if ARM_LINE and c1 - c0 >= 3:
+            seg = arm[c0:c1 + 1]
+            u = seg[-1] - seg[0]
+            u = u / max(np.linalg.norm(u), 1e-9)
+            cen = []                                 # the arm's middle on the mesh: the centre of the
+            for q in seg:                            # vertices around each point of the way
+                d = P - q
+                near = P[(np.abs(d @ u) < h) & (np.linalg.norm(d - np.outer(d @ u, u), axis=1) < 0.08 * H)]
+                if len(near) >= 4:
+                    cen.append((near.min(0) + near.max(0)) / 2)
+            seg = np.array(cen) if len(cen) >= 3 else seg
+            m = seg.mean(0)
+            u = np.linalg.svd(seg - m)[2][0]
+            on = m + u * np.dot(shoulder - m, u)
+            if shoulder[1] - on[1] > ARM_LINE * H:   # only pull a shoulder down, onto the line
+                shoulder[1] = on[1]
         shoulder[1] += RAISE * H
         sh_len = _length(rev[k:])                    # shoulder .. fingertip
         tail = rev[k:]
