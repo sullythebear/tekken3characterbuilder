@@ -99,12 +99,25 @@ def bone_rows(bones, left_rows):
 
 
 def joint(bones, part, side=None):
-    """Bind position of the first bone of a part (and side)."""
-    for b in bones:
-        p, s = _part(b["name"])
-        if p == part and (side is None or s == side):
-            return np.array([b["matrix"][k][3] for k in range(3)])
-    return None
+    """Bind position of the first bone of a part (and side): of the bones of the part with no
+    other bone of the part above them, the one with the most below it. A face rig lists its bones under the
+    head before the head itself (MetaHuman: FACIAL_C_Forehead first, on the forehead), and a
+    necklace hangs from the spine: neither is where the head turns."""
+    mine = [i for i, b in enumerate(bones) if (lambda p: p[0] == part and (side is None or p[1] == side))(_part(b["name"]))]
+    if not mine:
+        return None
+    own = set(mine)
+    below = {}
+    for i in mine:                                  # the highest bone of the part above each
+        top, j = i, bones[i].get("parent", -1)
+        while j >= 0:
+            if j in own:
+                top = j
+            j = bones[j].get("parent", -1)
+        below[top] = below.get(top, 0) + 1
+    roots = sorted(below, key=lambda i: (-below[i], mine.index(i)))
+    b = bones[roots[0]]
+    return np.array([b["matrix"][k][3] for k in range(3)])
 
 
 def finger_points(bones, side):
@@ -191,8 +204,9 @@ class Budget(Exception):
     pass
 
 
-def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log=print) -> tuple[bytes, bytes, dict]:
-    """(stock model, new model, report)."""
+def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log=print, ch=None) -> tuple[bytes, bytes, dict]:
+    """(stock model, new model, report). ch: the character as fbx.character gives it, already
+    loaded (direct_import.as_character: any format, its skeleton aligned, its textures)."""
     import fbx
     import remesh
     import lowpoly
@@ -200,7 +214,8 @@ def build(root: Path, model: int, fbx_path: Path, target: int | None = None, log
     rid = X.FIRST_MODEL_RECORD + 4 * model
     m = X.records(root, [rid])[rid]
     W = donor_frames(root, m)
-    ch = fbx.character(fbx_path)
+    if ch is None:
+        ch = fbx.character(fbx_path)
     P = np.array(ch["positions"]).reshape(-1, 3)
     Tr = np.array(ch["triangles"]).reshape(-1, 3)
     bones = ch["bones"]

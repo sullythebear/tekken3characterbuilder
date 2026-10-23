@@ -39,6 +39,7 @@ Facts are marked **tested** (seen in game), **code** (read in source) or **infer
 
 - `own-models.md` – FBX import: status, next steps (paused).
 - `direct-import.md` – PS1-style rigged models imported as they are; builder 3D model page (current).
+- `conversion-engine.md` – the conversion-engine directive against what exists, order of work, implementation log.
 - `kitbash.md` – new fighters from Namco parts (dropped by the user).
 - `later.md` – TTT1 styles as donors, open donor issues.
 

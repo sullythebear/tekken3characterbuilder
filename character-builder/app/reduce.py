@@ -372,9 +372,10 @@ def _materials(V, F, colour, area, k=8):
     return lbl
 
 
-def _charts(V, F, head, limit=65.0):  # head: per-face class, never mixed in a chart
+def _charts(V, F, head, limit=65.0, partner=None):  # head: per-face class, never mixed in a chart
     """Faces grouped by similar normals (region growing over shared edges), at most `limit`
-    degrees from the chart's first face; head and body faces never share a chart."""
+    degrees from the chart's first face; head and body faces never share a chart. partner: per
+    face the other half of its quad (-1: none), which always joins the same chart."""
     fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
     area = np.linalg.norm(fn, axis=1) / 2
     fn = fn / (np.linalg.norm(fn, axis=1, keepdims=True) + 1e-12)
@@ -397,6 +398,9 @@ def _charts(V, F, head, limit=65.0):  # head: per-face class, never mixed in a c
         todo = [seed]
         while todo:
             f = todo.pop()
+            if partner is not None and partner[f] >= 0 and chart[partner[f]] < 0:
+                chart[partner[f]] = nc                 # the other half of a quad comes along
+                todo.append(partner[f])
             for g in nb[f]:
                 if chart[g] < 0 and head[g] == head[seed] and fn[g] @ (acc / np.linalg.norm(acc)) > cos \
                         and fn[g] @ fn[seed] > cos:
@@ -524,12 +528,10 @@ def _raster(UV, fn_point, offset=(0.5, 0.5)):
             fn_point(f, np.floor(px[ins]).astype(int), Lc / Lc.sum(1, keepdims=True))
 
 
-def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) -> dict:
-    import time
-    t0 = time.time()
-    lap = lambda what: log(f"  {what}: {time.time() - t0:.0f} s")
+def original(src: dict, log=print) -> dict:
+    """The original as the low models are made from it: welded (Pw, weld, Tw), its height H, its
+    textures (RGBA arrays), its opaque triangles and a sampler S over those."""
     from PIL import Image
-    import model_import as MI
     P, T, UV, MAT = src["P"], src["T"], src["UV"], src["MAT"]
     Pw, weld = _weld(P)
     Tw = weld[T]
@@ -548,6 +550,138 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     if loose.any() and loose.mean() < 0.15:
         opaque &= ~loose
         log(f"{int(loose.sum())} triangles of loose cloth/props left out")
+    S = RM.Sampler(Pw, Tw[opaque], H / 400)
+    return {"Pw": Pw, "weld": weld, "Tw": Tw, "H": H, "textures": textures, "opaque": opaque, "S": S}
+
+
+def bake_atlas(V, F, src, base, neck_y, head_detail=4.0, log=print, lap=lambda what: None, face=None, partner=None,
+               see_through=None):
+    """A texture atlas for the low model (V, F) baked from the original: UVs per corner (texels),
+    the page as PNG bytes and the face triangles. base: original(src); face: the face triangles when
+    the caller knows them; partner: per triangle the other half of its quad (-1: none); see_through:
+    (per low triangle, per original triangle) masks: rays from the first pass through the second."""
+    from PIL import Image
+    P, T, UV, MAT = src["P"], src["T"], src["UV"], src["MAT"]
+    Pw, Tw, H, S, opaque, textures = (base[k] for k in ("Pw", "Tw", "H", "S", "opaque", "textures"))
+    # texture atlas
+    # the face (front of the head below the hair line) gets its own charts at 5x the texel density,
+    # the rest of the head 2x: Namco gives the face most of the page
+    cen = V[F].mean(1)
+    fn0 = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+    fn0 /= np.linalg.norm(fn0, axis=1, keepdims=True) + 1e-12
+    top = V[:, 1].max()
+    head = cen[:, 1] > neck_y
+    if face is None:
+        face = head & (fn0[:, 2] > 0.3) & (cen[:, 1] < neck_y + 0.78 * (top - neck_y))
+    head = head | face
+    kind = np.where(face, 2, np.where(head, 1, 0))
+    # each face's colour on the original (nearest surface point, 4 samples): charts split by
+    # material as well (the face keeps its own charts whole)
+    colour = np.zeros((len(F), 3))
+    for bc in ((1 / 3, 1 / 3, 1 / 3), (2 / 3, 1 / 6, 1 / 6), (1 / 6, 2 / 3, 1 / 6), (1 / 6, 1 / 6, 2 / 3)):
+        h = S.lookup(np.einsum("k,fkd->fd", np.asarray(bc), V[F]))
+        tri = np.where(opaque)[0][np.maximum(h[:, 0], 0).astype(int)]
+        u, v = h[:, 1:2], h[:, 2:3]
+        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
+        colour += _texel(textures, MAT[tri], uv)[:, :3] / 4
+    farea = np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1) / 2
+    material = np.where(kind == 2, 0, _materials(V, F, colour, farea))
+    if head_detail < 4.0:                 # the head row ran out of texture coordinates: one
+        material[kind == 1] = 0           # material for the hair (fewer chart borders)
+    if partner is not None:                       # both halves of a quad: one material, one chart
+        half = partner >= 0
+        material[partner[half]] = material[half]
+    chart, fn = _charts(V, F, kind * 16 + material, partner=partner)
+    density = np.choose(kind, [1.0, 2.0, 5.0])
+    UVl = _pack(V, F, chart, fn, density)
+    lap("charts and packing")
+    log(f"{chart.max() + 1} texture charts, face at 5x and head at 2x density")
+    # bake: rays from outside inwards onto the full original (transparent texels let it through)
+    # short rays (the shell lies on the original) and a fine grid: a ray's cell and its
+    # neighbours cover it when the cell is over half its length
+    caster_len = 0.03 * H
+    caster = RM.Caster(Pw, Tw, caster_len * 0.55)
+    Vn = _vertex_normals(V, F)
+    pts, xys, fids = [], [], []
+    def collect(f, xy, bc):
+        fids.append(np.full(len(bc), f))
+        p = bc @ V[F[f]]
+        n = bc @ Vn[F[f]]
+        n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
+        pts.append(np.concatenate([p, n], 1))
+        xys.append(xy)
+    for off in ((0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)):   # 4 rays per texel
+        _raster(UVl, collect, off)
+    PN = np.concatenate(pts)
+    XY = np.concatenate(xys)
+    # rays from these low faces pass through those original triangles (rebuild.py: hair hanging
+    # over the chest and shoulders, which Namco would not paint onto them)
+    through = None
+    if see_through is not None:
+        through = see_through[0][np.concatenate(fids)]
+    origin = PN[:, :3] + PN[:, 3:] * (caster_len / 2)
+    dirs = -PN[:, 3:]
+    col = np.zeros((len(PN), 3))
+    done = np.zeros(len(PN), bool)
+    start = origin.copy()
+    for _ in range(6 if through is None else 48):   # pass through transparent texels of hair cards
+        todo = np.where(~done)[0]
+        if not len(todo):
+            break
+        h = caster.first_hit(start[todo], dirs[todo], caster_len)
+        got = h[:, 0] >= 0
+        if not got.any():
+            break
+        idx = todo[got]
+        tri = h[got, 0].astype(int)
+        u, v = h[got, 1:2], h[got, 2:3]
+        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
+        rgba = _texel(textures, MAT[tri], uv)
+        solid = rgba[:, 3] > 128
+        if through is not None:
+            solid &= ~(through[idx] & see_through[1][tri])
+        col[idx[solid]] = rgba[solid, :3]
+        done[idx[solid]] = True
+        start[idx[~solid]] = start[idx[~solid]] + dirs[idx[~solid]] * (h[got][~solid, 3:4] + 1e-4 * H)
+    miss = np.where(~done)[0]
+    if len(miss):                          # nothing opaque on the ray: the nearest surface point
+        h = S.lookup(PN[miss, :3])
+        ok = h[:, 0] >= 0
+        tri = np.where(opaque)[0][h[ok, 0].astype(int)]
+        u, v = h[ok, 1:2], h[ok, 2:3]
+        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
+        col[miss[ok]] = _texel(textures, MAT[tri], uv)[:, :3]
+    img = np.zeros((ATLAS, ATLAS, 3))
+    cnt = np.zeros((ATLAS, ATLAS))
+    np.add.at(img, (XY[:, 1], XY[:, 0]), col)
+    np.add.at(cnt, (XY[:, 1], XY[:, 0]), 1)
+    painted = cnt > 0
+    img[painted] /= cnt[painted][:, None]
+    for _ in range(GUTTER + 2):            # bleed into the gutter
+        grow = np.zeros_like(img)
+        n = np.zeros(cnt.shape)
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            grow += np.roll(np.roll(img * painted[..., None], dy, 0), dx, 1)
+            n += np.roll(np.roll(painted, dy, 0), dx, 1)
+        new = ~painted & (n > 0)
+        img[new] = grow[new] / n[new][:, None]
+        painted |= new
+    buf = io.BytesIO()
+    Image.fromarray(img.clip(0, 255).astype(np.uint8)).save(buf, "PNG")
+    lap("bake")
+    log(f"texture baked: {int(done.sum())} of {len(done)} samples hit the original directly")
+    return UVl, buf.getvalue(), face
+
+
+def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) -> dict:
+    import time
+    t0 = time.time()
+    lap = lambda what: log(f"  {what}: {time.time() - t0:.0f} s")
+    from PIL import Image
+    import model_import as MI
+    P, T, UV, MAT = src["P"], src["T"], src["UV"], src["MAT"]
+    base = original(src, log)
+    Pw, weld, Tw, H, textures, opaque = (base[k] for k in ("Pw", "weld", "Tw", "H", "textures", "opaque"))
     if _SHELL.get("src") is not src:                  # the shell is the same for every target
         groups = _limb_groups(src, Tw, weld)[opaque]
         V, F = _shell(Pw, Tw[opaque], groups, cells=180)
@@ -579,7 +713,7 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
         log(f"  non-manifold edges: collapse 2 {_nm(F)}")
     used = np.unique(F)
     # relax along the surface, then back onto the original
-    S = RM.Sampler(Pw, Tw[opaque], H / 400)
+    S = base["S"]
     To = Tw[opaque]
     for _ in range(3):
         acc = np.zeros_like(V)
@@ -733,100 +867,7 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     V, F, weights = _mittens(V, F, weights, src, log)
     if __import__("os").environ.get("T3CB_DEBUG"):
         log(f"  non-manifold edges: after mittens {_nm(F)}")
-    # texture atlas
-    # the face (front of the head below the hair line) gets its own charts at 5x the texel density,
-    # the rest of the head 2x: Namco gives the face most of the page
-    cen = V[F].mean(1)
-    fn0 = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
-    fn0 /= np.linalg.norm(fn0, axis=1, keepdims=True) + 1e-12
-    top = V[:, 1].max()
-    head = cen[:, 1] > neck_y
-    face = head & (fn0[:, 2] > 0.3) & (cen[:, 1] < neck_y + 0.78 * (top - neck_y))
-    kind = np.where(face, 2, np.where(head, 1, 0))
-    # each face's colour on the original (nearest surface point, 4 samples): charts split by
-    # material as well (the face keeps its own charts whole)
-    colour = np.zeros((len(F), 3))
-    for bc in ((1 / 3, 1 / 3, 1 / 3), (2 / 3, 1 / 6, 1 / 6), (1 / 6, 2 / 3, 1 / 6), (1 / 6, 1 / 6, 2 / 3)):
-        h = S.lookup(np.einsum("k,fkd->fd", np.asarray(bc), V[F]))
-        tri = np.where(opaque)[0][np.maximum(h[:, 0], 0).astype(int)]
-        u, v = h[:, 1:2], h[:, 2:3]
-        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
-        colour += _texel(textures, MAT[tri], uv)[:, :3] / 4
-    farea = np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1) / 2
-    material = np.where(kind == 2, 0, _materials(V, F, colour, farea))
-    if head_detail < 4.0:                 # the head row ran out of texture coordinates: one
-        material[kind == 1] = 0           # material for the hair (fewer chart borders)
-    chart, fn = _charts(V, F, kind * 16 + material)
-    density = np.choose(kind, [1.0, 2.0, 5.0])
-    UVl = _pack(V, F, chart, fn, density)
-    lap("charts and packing")
-    log(f"{chart.max() + 1} texture charts, face at 5x and head at 2x density")
-    # bake: rays from outside inwards onto the full original (transparent texels let it through)
-    # short rays (the shell lies on the original) and a fine grid: a ray's cell and its
-    # neighbours cover it when the cell is over half its length
-    caster_len = 0.03 * H
-    caster = RM.Caster(Pw, Tw, caster_len * 0.55)
-    Vn = _vertex_normals(V, F)
-    pts, xys = [], []
-    def collect(f, xy, bc):
-        p = bc @ V[F[f]]
-        n = bc @ Vn[F[f]]
-        n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
-        pts.append(np.concatenate([p, n], 1))
-        xys.append(xy)
-    for off in ((0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)):   # 4 rays per texel
-        _raster(UVl, collect, off)
-    PN = np.concatenate(pts)
-    XY = np.concatenate(xys)
-    origin = PN[:, :3] + PN[:, 3:] * (caster_len / 2)
-    dirs = -PN[:, 3:]
-    col = np.zeros((len(PN), 3))
-    done = np.zeros(len(PN), bool)
-    start = origin.copy()
-    for _ in range(6):                     # pass through transparent texels of hair cards
-        todo = np.where(~done)[0]
-        if not len(todo):
-            break
-        h = caster.first_hit(start[todo], dirs[todo], caster_len)
-        got = h[:, 0] >= 0
-        if not got.any():
-            break
-        idx = todo[got]
-        tri = h[got, 0].astype(int)
-        u, v = h[got, 1:2], h[got, 2:3]
-        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
-        rgba = _texel(textures, MAT[tri], uv)
-        solid = rgba[:, 3] > 128
-        col[idx[solid]] = rgba[solid, :3]
-        done[idx[solid]] = True
-        start[idx[~solid]] = start[idx[~solid]] + dirs[idx[~solid]] * (h[got][~solid, 3:4] + 1e-4 * H)
-    miss = np.where(~done)[0]
-    if len(miss):                          # nothing opaque on the ray: the nearest surface point
-        h = S.lookup(PN[miss, :3])
-        ok = h[:, 0] >= 0
-        tri = np.where(opaque)[0][h[ok, 0].astype(int)]
-        u, v = h[ok, 1:2], h[ok, 2:3]
-        uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
-        col[miss[ok]] = _texel(textures, MAT[tri], uv)[:, :3]
-    img = np.zeros((ATLAS, ATLAS, 3))
-    cnt = np.zeros((ATLAS, ATLAS))
-    np.add.at(img, (XY[:, 1], XY[:, 0]), col)
-    np.add.at(cnt, (XY[:, 1], XY[:, 0]), 1)
-    painted = cnt > 0
-    img[painted] /= cnt[painted][:, None]
-    for _ in range(GUTTER + 2):            # bleed into the gutter
-        grow = np.zeros_like(img)
-        n = np.zeros(cnt.shape)
-        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-            grow += np.roll(np.roll(img * painted[..., None], dy, 0), dx, 1)
-            n += np.roll(np.roll(painted, dy, 0), dx, 1)
-        new = ~painted & (n > 0)
-        img[new] = grow[new] / n[new][:, None]
-        painted |= new
-    buf = io.BytesIO()
-    Image.fromarray(img.clip(0, 255).astype(np.uint8)).save(buf, "PNG")
-    lap("bake")
-    log(f"texture baked: {int(done.sum())} of {len(done)} samples hit the original directly")
+    UVl, png, face = bake_atlas(V, F, src, base, neck_y, head_detail, log, lap)
     # below the knees the legs are apart: a triangle with corners on both legs is a web the
     # fighting stance stretches between them (knees or calves that touch: the auto-rigged
     # Soldier), so it goes
@@ -850,7 +891,7 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     Tc = np.arange(len(Pc)).reshape(-1, 3)
     W = [weights[v] for v in F.ravel()]
     out = {"P": Pc, "T": Tc, "UV": UVl.reshape(-1, 2) / ATLAS, "MAT": np.zeros(len(Tc), int),
-           "textures": {0: buf.getvalue()}, "bones": src["bones"], "weights": W,
+           "textures": {0: png}, "bones": src["bones"], "weights": W,
            "vbone": np.array([max(w, key=w.get) if w else -1 for w in W]), "reduced": True,
            "face_tris": np.where(face)[0].tolist()}
     return out

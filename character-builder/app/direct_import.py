@@ -191,13 +191,13 @@ def texture_plan(src: dict) -> dict:
         if (pick is None and not own and len(usable) == 1 and mapped and (not wanted or mi in wanted)
                 and usable[0] not in TEXTURE_ASSIGN.values()):     # not when the player put it somewhere already
             pick = (usable[0], "the only colour image, on a material without a texture")
-        if pick is not None:
+        if _stand(src, mi):              # also when it has an image (the elf's base asks for ce.jpg)
+            plan[mi] = {"use": "hide", "how": "auto", "why": "a stand under the feet: left out"}
+        elif pick is not None:
             plan[mi] = {"use": pick[0], "how": "auto", "why": pick[1]}
         elif not own and see_through(name):
             plan[mi] = {"use": "hide", "how": "auto", "why": "a see-through layer (an eye's shell): left out, "
                                                             "the PS1 draws nothing see-through"}
-        elif _stand(src, mi):
-            plan[mi] = {"use": "hide", "how": "auto", "why": "a stand under the feet: left out"}
         else:
             plan[mi] = {"use": "own" if own else "colour", "how": "auto",
                         "why": "its own texture" if own else "no image fits: plain colour" if mapped or not len(uv) else "no UV map: plain colour"}
@@ -1104,6 +1104,7 @@ def inspect(path: Path) -> dict:
     if not info["textured"]:
         info["problems"].append("The model has no embedded texture: choose its texture image (if it came as a separate file), or it is drawn without one.")
     info["parts"] = PR.summary(PR.find(src)) if info["rigged"] else []
+    info["rig_map"] = rig_map(src) if src.get("bones") else []
     info["checks"] = checks(src, info, weighted)
     info["painted"] = int(src.get("painted", 0))       # triangles with colours painted by hand
     names, plan = src.get("material_names") or [], src.get("texture_plan") or {}
@@ -1152,6 +1153,90 @@ def hips_share(src: dict) -> float | None:
     if not hips or not len(P) or np.ptp(P[:, 1]) <= 0:
         return None
     return (float(np.mean(hips)) - P[:, 1].min()) / float(np.ptp(P[:, 1]))
+
+
+RIG_PARTS = [("Hips", "pelvis", None), ("Spine", "spine", None), ("Head", "head", None)] +     [(f"{nm} {sd}", prt, sd) for sd in "LR" for nm, prt in (("Collar", "collar"), ("Upper arm", "upper"),
+     ("Forearm", "fore"), ("Hand", "hand"), ("Thigh", "thigh"), ("Shin", "shin"), ("Foot", "foot"))]
+
+
+def rig_map(src: dict) -> list:
+    """Per Tekken body part the source bone it comes from, how it was found and how sure that is:
+    [{"part", "bone", "how", "confidence" ("high", "medium" or "low"), "note"}]. Automatic rigs:
+    the joints by shape (medium) or by hand (high)."""
+    out = []
+    bones = src.get("bones") or []
+    if src.get("auto_rig"):
+        how, conf = ("placed by hand", "high") if RIG_JOINTS else ("automatic rig (shape)", "medium")
+        for label, prt, sd in RIG_PARTS:
+            out.append({"part": label, "bone": "-", "how": how, "confidence": conf, "note": ""})
+        return _rig_sense(src, out)
+    renamed = set((src.get("renamed") or {}).values())
+    at = lambda b: np.array([b["matrix"][k][3] for k in range(3)])
+    for label, prt, sd in RIG_PARTS:
+        mine = [i for i, b in enumerate(bones) if MI._part(b["name"]) == (prt, sd)]
+        if not mine:
+            note = "" if prt in ("spine", "collar") else "Tekken needs this part"
+            out.append({"part": label, "bone": "-", "how": "not found",
+                        "confidence": "medium" if prt in ("spine", "collar") else "low",
+                        "note": note or "made from its neighbours"})
+            continue
+        p = MI.joint(bones, prt, sd)
+        pick = min(mine, key=lambda i: np.linalg.norm(at(bones[i]) - p))
+        own = set(mine)
+        roots = []                           # distinct places (a file with a skeleton per mesh repeats them)
+        for i in mine:
+            if not any(j in own for j in _ancestors(bones, i)) and                     all(np.linalg.norm(at(bones[i]) - at(bones[k])) > 1e-4 for k in roots):
+                roots.append(i)
+        # twist and helper bones are single leaves next to the chain: not a real second candidate
+        below = {r: sum(1 for i in mine if i == r or r in _ancestors(bones, i)) for r in roots}
+        roots = [r for r in roots if below[r] > 1 or len(roots) == 1]
+        how, conf, note = "by name", "high", ""
+        if bones[pick]["name"] in renamed:
+            how, conf = "by the skeleton's shape", "medium"
+        if len(roots) > 1:
+            conf = "medium" if conf == "high" else conf
+            note = f"{len(roots)} candidates; the one with the most bones below it"
+        if sd and prt in ("upper", "thigh"):
+            # left bones on the model's left (+X, the model faces +Z) - else the sides are swapped
+            if (p[0] < 0) == (sd == "L"):
+                conf, note = "low", "on the other side of the body than its name says"
+        out.append({"part": label, "bone": bones[pick]["name"], "how": how, "confidence": conf, "note": note})
+    return _rig_sense(src, out)
+
+
+TORSO_SHARE = (0.15, 0.45)      # hips to neck joint, share of the height (Namco's fighters ~0.3)
+
+
+def _rig_sense(src: dict, out: list) -> list:
+    """Whole-body checks on the joints: a torso far shorter or longer than a body's, or a spine
+    below the hips, is a rig to check (the elf's automatic rig: torso 6 % of the height, spine
+    below the hips; the head bone then took the sweater)."""
+    bones = src.get("bones") or []
+    if "P" not in src or not len(src["P"]):
+        return out
+    P = np.asarray(src["P"], float)
+    H = float(np.ptp(P[:, 1])) or 1.0
+    hips, neck, spine = MI.joint(bones, "pelvis"), MI.joint(bones, "head"), MI.joint(bones, "spine")
+    flags = {}
+    if hips is not None and neck is not None:
+        share = (neck[1] - hips[1]) / H
+        if not TORSO_SHARE[0] <= share <= TORSO_SHARE[1]:
+            note = f"the torso (hips to neck) is {share:.0%} of the height; a body's is about 30 %"
+            for part in ("Hips", "Spine", "Head"):
+                flags[part] = note
+    if hips is not None and spine is not None and neck is not None and spine[1] < hips[1] - 0.01 * H < neck[1]:
+        flags.setdefault("Spine", "the spine is below the hips")
+    for r in out:
+        if r["part"] in flags and r["how"] != "placed by hand":       # joints placed by hand stand
+            r["confidence"], r["note"] = "low", flags[r["part"]]
+    return out
+
+
+def _ancestors(bones, i):
+    j = bones[i].get("parent", -1)
+    while j >= 0:
+        yield j
+        j = bones[j].get("parent", -1)
 
 
 def checks(src: dict, info: dict, weighted: int) -> list:
@@ -1283,14 +1368,33 @@ def checks(src: dict, info: dict, weighted: int) -> list:
                                    "turned to fit the mesh")
         if src.get("renamed"):
             add("Rigging", "warn", f"Bone names not standard: {len(src['renamed'])} bones recognised from the skeleton's shape")
+    rmap = info.get("rig_map") or []
+    if rmap:
+        low = [r["part"] for r in rmap if r["confidence"] == "low"]
+        mid = [r["part"] for r in rmap if r["confidence"] == "medium"]
+        if low:
+            add("Rigging", "warn", "Body parts to check: " + ", ".join(low) + " (see the mapping table)")
+        else:
+            add("Rigging", "ok", f"Body parts mapped: {len(rmap) - len(mid)} sure, {len(mid)} likely (see the mapping table)")
     return out
+
+
+def as_character(src: dict) -> dict:
+    """The loaded model as fbx.character gives it, for the template build (model_import.build):
+    positions, triangles, bones, weights per vertex, corner UVs, materials and textures."""
+    return {"positions": src["P"].ravel().tolist(), "triangles": src["T"].ravel().tolist(),
+            "bones": src["bones"], "weights": src["weights"],
+            "corner_uvs": src["UV"][src["T"]].ravel().tolist(), "materials": src["MAT"].tolist(),
+            "textures": {k: (str(k), v) for k, v in src.get("textures", {}).items()}}
 
 
 def build(root: Path, model: int, path: Path, log=print, parts=None, settings=None):
     """Imports a model file over a donor model; a high-poly file is reduced first (reduce.py),
     smaller and smaller until it fits the donor's slot. parts: choices for the parts that stick
     out (protrusions.py; default: folded down). settings (reduced models only): {"head": 4, 2 or
-    1 times the detail on the head, "detail": 100, 80 or 60 % of the most the slot holds}."""
+    1 times the detail on the head, "detail": 100, 80 or 60 % of the most the slot holds, "method":
+    "reduce" (default) or "rebuild": the donor's own Namco model fitted to it (rebuild.py), and for
+    "rebuild" "shape": {"head", "arms", "legs", "hands", "feet": per cent} (rebuild._shape)}."""
     settings = settings or {}
     src = load(Path(path))
     if not src.get("bones"):                          # not rigged, and the automatic rig failed
@@ -1300,6 +1404,35 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
     if len(src["T"]) <= REDUCE_ABOVE:
         merge_textures(src)                           # one texture page (reduce bakes its own)
         return _build(root, model, src, log)
+    if settings.get("method") == "rebuild":
+        # Tekken rebuild: the donor's own Namco model fitted to this one (rebuild.py); quads of
+        # Namco's that bend more are kept as quads when the GPU packets do not fit
+        import rebuild as RB
+        low = RB.rebuild(root, model, src, log=log, shape=settings.get("shape"))
+        for bend in RB.QUAD_BENDS:
+            low["quad_bend"] = bend
+            try:
+                return _build(root, model, low, log, degrade=bend == RB.QUAD_BENDS[-1])
+            except MI.Budget as error:
+                log(f"{error}; quads bent up to {bend:g} degrees did not fit" +
+                    ("" if bend == RB.QUAD_BENDS[-1] else ", trying more"))
+        for flat in RB.FLAT_BELOW:                    # then the flattest polygons flat-shaded
+            low["flat_below"] = flat
+            try:
+                return _build(root, model, low, log, degrade=True)
+            except MI.Budget as error:
+                log(f"{error}; flat shading below {flat:g} degrees did not fit")
+        low.pop("flat_below", None)
+        for n in RB.FEWER:                            # then the smallest polygons left out
+            low = RB.rebuild(root, model, src, log=log, shape=settings.get("shape"), fewer=n)
+            low["quad_bend"] = RB.QUAD_BENDS[-1]
+            try:
+                return _build(root, model, low, log, degrade=True)
+            except MI.Budget as error:
+                log(f"{error}; without the {n} smallest polygons it did not fit")
+        # the donor's polygons do not fit this slot even so: the free reduction instead, which
+        # fits by taking fewer triangles
+        log("Tekken rebuild does not fit this fighting style's slot: built with the free reduction instead")
     import reduce as RD
     # a first guess from what reduced models need (flat quads included): ~35.5 bytes of GPU packets
     # and ~25.5 bytes of model per triangle; then 7 % fewer per failed try
@@ -1327,16 +1460,12 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
     raise MI.Budget("The model does not fit this fighting style's slot.")
 
 
-def _build(root: Path, model: int, src: dict, log=print, degrade=True):
-    from fmt import row
-    import texture_bake as TB
-    from PIL import Image
-    rid = X.FIRST_MODEL_RECORD + 4 * model
-    m = X.records(root, [rid])[rid]
-    # the pose the donor was modelled in (its own seam vertices meet), not the builder's
-    # standing frames: those mirror collarbones and hips and tilt the head (bind_pose.py)
+def frames(root: Path, m: bytes, src: dict, log=print) -> dict:
+    """The import's joints and row frames in game space (T-pose), as the donor's slot needs them:
+    W (the donor's modelled pose), Q, s, g (file -> game), J, F, ends (head top, hand and toe
+    ends per row), J0 (joints in the file), part and vrow (per vertex), rows_of(part, side)."""
+    P = src["P"]
     W = BP.solve(m, MI.donor_frames(root, m))
-    P, T, UV = src["P"], src["T"], src["UV"]
     if "bones" not in src:                           # load() rigs every model; this one could not be
         raise ValueError(src.get("rig_error") or "The model has no skeleton.")
     J0, part = rig_from_skeleton(src["bones"], src["vbone"], P)
@@ -1396,6 +1525,21 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     vrow = []
     for prt, side in part:
         vrow.append({"spine": 1, "pelvis": 3, "head": 19}.get(prt) or rows_of(prt, side or "L"))
+    return {"W": W, "Q": Q, "s": s, "g": g, "J": J, "F": F, "ends": ends, "J0": J0, "part": part,
+            "vrow": vrow, "rows_of": rows_of, "left_rows": left_rows}
+
+
+def _build(root: Path, model: int, src: dict, log=print, degrade=True):
+    from fmt import row
+    import texture_bake as TB
+    from PIL import Image
+    rid = X.FIRST_MODEL_RECORD + 4 * model
+    m = X.records(root, [rid])[rid]
+    # the pose the donor was modelled in (its own seam vertices meet), not the builder's
+    # standing frames: those mirror collarbones and hips and tilt the head (bind_pose.py)
+    P, T, UV = src["P"], src["T"], src["UV"]
+    fr_ = frames(root, m, src, log)
+    W, Q, s, g, J, F, J0, part, vrow, rows_of = (fr_[k] for k in ("W", "Q", "s", "g", "J", "F", "J0", "part", "vrow", "rows_of"))
     G = np.array([g(p) for p in P])
     blend, blend_score = {}, {}
     if "weights" in src:
@@ -1574,6 +1718,16 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
         turn &= ~both
         outward = np.where(turn, ~outward, outward)
         log(f"seen from outside: {int(turn.sum())} triangles turned, {int(both.sum())} drawn from both sides")
+    elif src.get("turn_hidden"):
+        # a rebuilt model (rebuild.py): the projection can fold a few of the donor's faces over, so
+        # they face inwards and the game culls them (a hole in the back of a thigh): turned
+        Tout = np.where(outward[:, None], T, T[:, [0, 2, 1]])
+        front, back = _seen_sides(G, Tout)
+        if back.sum() > front.sum():
+            front, back = back, front
+        turn = (back >= 3) & (back > 4 * front)
+        outward = np.where(turn, ~outward, outward)
+        log(f"seen from outside: {int(turn.sum())} folded triangles turned")
     faces = []
     for i, t in enumerate(T):
         v = list(t) if outward[i] else [t[0], t[2], t[1]]
@@ -1722,7 +1876,7 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
                "mats": {k: cid[k] for k in range(len(cid))}, "palette": palette, "charts": len(cid),
                "density": 0.0, "rgb": img}
     if src.get("reduced"):
-        faces, texture["uv"] = _pair_quads(faces, texture["uv"], G)
+        faces, texture["uv"] = _pair_quads(faces, texture["uv"], G, src.get("quad_bend", 12.0))
         log(f"{sum(1 for f in faces if len(f['v']) == 4)} triangle pairs sent as quads")
     blend_w = {}
     for v, a_ in blend.items():                      # on welded ids, as the faces
@@ -1735,6 +1889,13 @@ def _build(root: Path, model: int, src: dict, log=print, degrade=True):
     score = {}
     for v, s_ in blend_score.items():
         score[int(weld[v])] = max(score.get(int(weld[v]), 0), s_)
+    if src.get("flat_below") is not None:
+        # GPU packets over the limit (rebuild.py): the flattest polygons flat-shaded (a flat
+        # triangle is 32 bytes of packets instead of 40, a quad 40 instead of 52)
+        for f in faces:
+            f["hard"] = max(float(np.degrees(np.arccos(np.clip(Nrm[a] @ Nrm[b], -1, 1))))
+                            for a in f["v"] for b in f["v"]) <= src["flat_below"]
+        log(f"flat shading below {src['flat_below']:g} degrees: {sum(1 for f in faces if f['hard'])} polygons")
     while True:
         try:
             data, report = MI._write(m, G, Nrm, faces, vrow_w, {}, F, J, row, {"ready": texture}, blend=blend_w, zsign=-1)

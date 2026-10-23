@@ -17,6 +17,8 @@ from fmt import row, block, parse_b, parse_c_ps1
 import lowpoly
 
 SECOND = {2: 1, 4: 3, 20: 19}
+PAIRED = ((5, 8), (6, 9), (7, 10), (12, 16), (13, 17), (14, 18))
+MIRROR_GAP = 40.0          # game units: farther from any mirrored vertex of the other side = an extra
 CHILD = {1: 19, 5: 6, 6: 7, 8: 9, 9: 10, 11: 12, 12: 13, 13: 14, 15: 16, 16: 17, 17: 18}
 
 
@@ -34,12 +36,44 @@ def _neighbours(r):
     return out
 
 
-def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
+def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_page=False, thinnest=0.55, fixed=(), fuller=None,
+          paired_only=None):
     """m: donor 3DMK; bind: model_export.bind(m); F, J: the import's row frames and joints (game
     space, T-pose); ends_game: {"head", "hand L/R" -> row 14/18 tip, "toe" per foot row} as
-    {row: end point}; to_fbx: game point -> FBX point; P, Tr, trow: the original."""
+    {row: end point}; to_fbx: game point -> FBX point; P, Tr, trow: the original. any_page: keep
+    the polygons textured from the donor's second page too (rebuild.py bakes its own texture).
+    thinnest: the least share of the donor's thickness a vertex keeps (a slim import on a heavy
+    donor needs less than the default), a number or {row: share}; fixed: rows not stretched to
+    the import's bone (rebuild.py: the feet, whose toe point is often a guess); fuller: {row: p},
+    a thinner import's share q of the donor's thickness becomes q ** p (Namco's limbs are fuller);
+    paired_only: the donor's standing frames (symmetric, model_import.donor_frames) to keep on the
+    limbs only polygons with a mirror image on the other side (the donor's
+    own extras - a holster on one thigh - are not the import's, and stick out when it moves)."""
     rows = [r for r in range(1, 21) if r in bind]
     frame_of = lambda r: SECOND.get(r, r)
+    extra, flat_to = set(), {}
+    if paired_only is not None:
+        Ws = paired_only
+        for a, b in PAIRED:
+            if a not in bind or b not in bind:
+                continue
+            side = Ws[b][1] - Ws[a][1]
+            side /= np.linalg.norm(side)
+            mid = (Ws[a][1] + Ws[b][1]) / 2
+            pts = {r: [(sl[1], Ws[r][0] @ np.array(sl[1], float) + Ws[r][1]) for sl in bind[r] if sl is not None and sl[0] == r]
+                   for r in (a, b)}
+            for r, o in ((a, b), (b, a)):
+                other = np.array([p for _, p in pts[o]])
+                mirrored = other - 2 * np.outer((other - mid) @ side, side)
+                for key, p in pts[r]:
+                    pm = p - 2 * ((p - mid) @ side) * side
+                    if np.linalg.norm(other - pm, axis=1).min() > MIRROR_GAP:
+                        extra.add((r, key))
+                        # folded onto the surface: the nearest mirrored vertex of the other side
+                        q = mirrored[np.argmin(np.linalg.norm(mirrored - p, axis=1))]
+                        flat_to[(r, key)] = tuple(Ws[r][0].T @ (q - Ws[r][1]))
+        if extra:
+            log(f"template: {len(extra)} vertices of the donor's own one-sided extras folded onto the surface")
     # 1. the donor's own vertices (one per (row, local coordinates)), placed in the import
     key_id, verts, owner = {}, [], []
     for r in rows:
@@ -49,7 +83,7 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
             k = (r, sl[1])
             if k not in key_id:
                 key_id[k] = len(verts)
-                verts.append(np.array(sl[1], float))
+                verts.append(np.array(flat_to.get(k, sl[1]), float))
                 owner.append(frame_of(r))
     verts = np.array(verts)
     owner = np.array(owner)
@@ -72,7 +106,7 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
             u /= ln
             along = (p0 - J[fr]) @ u
             ext = max(float(along.max()), 1e-6)
-            k = float(np.clip(ln / ext, 0.6, 1.7)) if fr not in (1, 3, 11, 15, 14, 18, 19) else 1.0
+            k = float(np.clip(ln / ext, 0.6, 1.7)) if fr not in (1, 3, 11, 15, 14, 18, 19) + fixed else 1.0
             p0 = p0 + np.outer(along * (k - 1), u)
         G[sel] = p0
     # 1b. faces: the donor's polygons (stored corners d0..d3 face inwards; ours (d0, d2, d1, d3))
@@ -91,7 +125,9 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
                 if any(i >= len(slots) or slots[i] is None for i in c):
                     continue
                 _, mat, puv = prims[pi]
-                if mat is None or None in puv or mat & 0x100:
+                if mat is None or None in puv or (mat & 0x100 and not any_page):
+                    continue
+                if all((slots[i][0], slots[i][1]) in extra for i in c):    # a piece of its own; not the surface it sits on
                     continue
                 ids = [key_id.get((slots[i][0], slots[i][1])) for i in c]
                 if None in ids or len(set(ids)) < len(ids):
@@ -149,7 +185,9 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None):
             own = [t for r2 in ([19, 20] if fr == 19 else [fr]) for t in tri_of_row.get(r2, [])]
             r_don = lowpoly.ray_hits(o, u, out, np.array(own), reach) if own else np.full(len(sel), np.nan)
             q = r_imp / np.where(np.isnan(r_don), dist, r_don)
-            ratio[sel] = np.where(ok, np.clip(q, 0.55, 1.9), np.nan)
+            if fuller and fr in fuller:
+                q = np.where(q < 1, q ** fuller[fr], q)
+            ratio[sel] = np.where(ok, np.clip(q, thinnest.get(fr, 0.55) if isinstance(thinnest, dict) else thinnest, 1.9), np.nan)
         nb = [set() for _ in range(len(out))]
         for f in faces:
             for x in f["v"]:

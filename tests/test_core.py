@@ -657,10 +657,6 @@ class StageModelTests(unittest.TestCase):
         self.assertTrue(tris[2][5])                            # code bit 1: semi-transparent
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def _figure():
     """A standing figure of boxes in T-pose (1.75 high, Y up, facing +Z): no game data."""
     import numpy as np
@@ -1105,3 +1101,83 @@ class ColladaTests(unittest.TestCase):
         plan = DI.texture_plan(src)
         self.assertEqual(plan[1]["use"], "hide")
         self.assertEqual(plan[0]["use"], "own")
+
+
+class RebuildTests(unittest.TestCase):
+    """The Tekken rebuild's pieces: the head joint of a face rig, quads kept in one texture chart."""
+
+    def test_head_joint_is_the_chain_root(self):
+        import model_import as MI
+        m = lambda x, y, z: [[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, z], [0, 0, 0, 1]]
+        bones = [{"name": "spine_05", "parent": -1, "matrix": m(0, 131, 0)},
+                 {"name": "FACIAL_C_Forehead", "parent": 4, "matrix": m(0, 157, 7)},   # listed first
+                 {"name": "neck_01", "parent": 0, "matrix": m(0, 142, -4)},
+                 {"name": "head", "parent": 2, "matrix": m(0, 150, -2)},
+                 {"name": "FACIAL_C_FacialRoot", "parent": 3, "matrix": m(0, 152, 0)},
+                 {"name": "dyn_necklace", "parent": 0, "matrix": m(0, 136, 3)}]
+        self.assertEqual(list(MI.joint(bones, "head")), [0, 142, -4])
+
+    def test_quad_halves_share_a_chart(self):
+        import numpy as np
+        import reduce as RD
+        V = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0.9]], float)   # bent 40+ degrees
+        F = np.array([[0, 1, 2], [1, 3, 2]])
+        chart, _ = RD._charts(V, F, np.zeros(2, int), limit=20.0)
+        self.assertNotEqual(chart[0], chart[1])
+        chart, _ = RD._charts(V, F, np.zeros(2, int), limit=20.0, partner=np.array([1, 0]))
+        self.assertEqual(chart[0], chart[1])
+
+
+    def test_settings_shape_is_cleaned(self):
+        out = server.clean_import_settings({"method": "rebuild", "shape": {"head": "120", "arms": 100, "legs": 300, "x": 90}})
+        self.assertEqual(out, {"method": "rebuild", "shape": {"head": 120}})
+
+    def test_rig_map_flags_swapped_sides(self):
+        import direct_import as DI
+        m = lambda x, y: [[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, 0], [0, 0, 0, 1]]
+        names = [("Hips", -1, 0, 1), ("LeftUpLeg", 0, -0.1, 0.9), ("RightUpLeg", 0, 0.1, 0.9)]
+        bones = [{"name": n, "parent": p, "matrix": m(x, y)} for n, p, x, y in names]
+        rows = {r["part"]: r for r in DI.rig_map({"bones": bones})}
+        self.assertEqual(rows["Hips"]["confidence"], "high")
+        self.assertEqual(rows["Thigh L"]["confidence"], "low")          # a left leg on the right
+        self.assertEqual(rows["Head"]["how"], "not found")
+
+    def test_import_report(self):
+        data = {"name": "Nikki", "donor": 12, "own_model": {"file": "n.fbx", "source_triangles": 44112, "model": 24,
+                "triangles": 1035, "settings": {"method": "rebuild", "shape": {"head": 120}}}}
+        info = {"checks": [{"area": "Rigging", "level": "ok", "text": "fine"}],
+                "rig_map": [{"part": "Head", "bone": "neck_01", "how": "by name", "confidence": "medium", "note": "2"}]}
+        text = server.import_report(data, info, "a\nOK 1035 triangles\n")
+        self.assertIn("Tekken rebuild", text)
+        self.assertIn("| Head | neck_01 | by name | likely | 2 |", text)
+        self.assertIn("OK 1035 triangles", text)
+
+
+    def test_rig_sense_flags_a_short_torso(self):
+        import numpy as np
+        import direct_import as DI
+        m = lambda y: [[1, 0, 0, 0], [0, 1, 0, y], [0, 0, 1, 0], [0, 0, 0, 1]]
+        bones = [{"name": "Hips", "parent": -1, "matrix": m(4.4)}, {"name": "Spine", "parent": 0, "matrix": m(4.3)},
+                 {"name": "Neck", "parent": 1, "matrix": m(4.7)}]
+        src = {"bones": bones, "P": np.array([[0, 0, 0], [0, 7.1, 0]], float)}
+        rows = {r["part"]: r for r in DI.rig_map(src)}
+        self.assertEqual(rows["Spine"]["confidence"], "low")              # the elf's automatic rig
+        self.assertIn("torso", rows["Head"]["note"])
+
+    def test_stand_left_out_even_when_textured(self):
+        import numpy as np
+        import direct_import as DI
+        body = np.array([[0, 0.1, 0], [0.1, 1, 0], [-0.1, 1, 0]], float)
+        plate = np.array([[-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0.02, 0.5]], float)
+        src = {"P": np.vstack([body, plate]), "T": np.array([[0, 1, 2], [3, 4, 5]]), "MAT": np.array([0, 1]),
+               "UV": np.random.default_rng(2).random((6, 2)), "textures": {0: b"a"},
+               "missing_textures": {1: "ce.jpg"}}
+        DI.TEXTURE_IMAGES[:] = [{"name": "ce.tga", "png": b"x"}]
+        try:
+            self.assertEqual(DI.texture_plan(src)[1]["use"], "hide")      # the elf's base asks for ce.jpg
+        finally:
+            DI.set_texture_images([])
+
+
+if __name__ == "__main__":
+    unittest.main()

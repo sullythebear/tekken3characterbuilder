@@ -1699,10 +1699,25 @@ def source_preview(cid: str) -> dict:
 
 
 def clean_import_settings(value) -> dict:
-    """Model Importer settings for big models (reduced): {"head": 4|2|1, "detail": 100|80|60};
-    the defaults are left out."""
+    """Model Importer settings for big models: {"method": "rebuild"|"reduce", for "rebuild" "shape":
+    {"head", "arms", "legs", "hands", "feet": 70..150 per cent}, for "reduce" "head": 4|2|1,
+    "detail": 100|80|60}; the defaults are left out (no method: an older import, reduced)."""
     out = {}
     if isinstance(value, dict):
+        if value.get("method") in ("rebuild", "reduce"):
+            out["method"] = value["method"]
+        shape = value.get("shape")
+        if isinstance(shape, dict):
+            sh = {}
+            for k in ("head", "arms", "legs", "hands", "feet"):
+                try:
+                    v = int(shape.get(k, 100))
+                except (TypeError, ValueError):
+                    continue
+                if v != 100 and 70 <= v <= 150:
+                    sh[k] = v
+            if sh:
+                out["shape"] = sh
         if value.get("head") in (2, 1, "2", "1"):
             out["head"] = int(value["head"])
         if value.get("detail") in (80, 60, "80", "60"):
@@ -1763,7 +1778,45 @@ def import_model(cid: str, costume: int, parts=None, on_line=None, settings=None
                          "source_triangles": info.get("triangles"), "textured": info.get("textured"),
                          "parts": parts, "settings": settings, "imported": datetime.now().isoformat(timespec="seconds")}
     (folder / "character.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    (folder / "import-report.md").write_text(import_report(data, info, text), encoding="utf-8")
     return get_character(folder.name)
+
+
+def import_report(data: dict, info: dict, log: str) -> str:
+    """The conversion report of an import (characters/<id>/import-report.md): what came in, the
+    check list, the mapping of bones to body parts, how it was built and what came out."""
+    own = data.get("own_model") or {}
+    st = own.get("settings") or {}
+    method = "Tekken rebuild" if st.get("method") == "rebuild" else "free reduction" if own.get("source_triangles", 0) > 1100 else "kept as it is"
+    if "built with the free reduction instead" in log:
+        method = "free reduction (the Tekken rebuild did not fit this fighting style's slot)"
+    lines = [f"# Conversion report: {data.get('name', '')}", "",
+             f"- File: {own.get('file')} ({own.get('source_triangles')} triangles)",
+             f"- Fighting style (donor): character {data.get('donor')}, model {own.get('model')} (costume {own.get('costume', 0) + 1})",
+             f"- Built as: {method}" + (f", proportions {st['shape']}" if st.get("shape") else ""),
+             f"- Result: {own.get('triangles')} triangles" + (", textured" if own.get("textured") else ""),
+             f"- Imported: {own.get('imported')}", "", "## Check list", ""]
+    marks = {"ok": "OK", "info": "i", "warn": "!", "bad": "X"}
+    for c in info.get("checks", []):
+        lines.append(f"- [{marks.get(c.get('level'), '?')}] {c.get('area')}: {c.get('text')}")
+    rmap = info.get("rig_map") or []
+    if rmap:
+        lines += ["", "## Bones to Tekken body parts", "", "| Part | Bone | Found | Sure | Note |", "|---|---|---|---|---|"]
+        words = {"high": "sure", "medium": "likely", "low": "check"}
+        for r in rmap:
+            lines.append(f"| {r['part']} | {r['bone']} | {r['how']} | {words.get(r['confidence'], r['confidence'])} | {r.get('note', '')} |")
+    if info.get("problems"):
+        lines += ["", "## Problems", ""] + [f"- {p}" for p in info["problems"]]
+    lines += ["", "## Build log", "", "```"] + [x for x in log.strip().splitlines() if x.strip()][-80:] + ["```", ""]
+    return "\n".join(lines)
+
+
+def model_report(cid: str) -> dict:
+    """The last import's conversion report (import_report), as text."""
+    f = DATA / safe_id(cid) / "import-report.md"
+    if not f.is_file():
+        raise ValueError("No conversion report yet: import a model first.")
+    return {"name": f"{safe_id(cid)}-import-report.md", "text": f.read_text(encoding="utf-8")}
 
 
 PORTRAIT_LOOK = {"angle": ("turned", "front", "other", "profile"), "frame": ("shoulders", "close", "chest"),
@@ -2884,6 +2937,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 data.get("paint")))
             if path == "/api/model/colours":
                 return self._json(set_model_colours(str(data.get("id", "")), data.get("paint")))
+            if path == "/api/model/report":
+                return self._json(model_report(str(data.get("id", ""))))
             if path == "/api/model/colour-mesh":
                 return self._json(colour_mesh(str(data.get("id", ""))))
             if path == "/api/model/texture-choice":

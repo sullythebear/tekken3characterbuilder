@@ -586,3 +586,49 @@ skeleton). Animations are left out. A .zae (Collada zipped) is read as a .zip.
   with one foot ahead and came out a quarter turned. Orientation bench: same failures as before
   (VRM / chibi test artefacts), 140 of 174.
 - Unit tests `ColladaTests` (a skinned quad with a texture, Z up; a stand left out).
+
+
+## Tekken rebuild (2026-10-23, renders and live fights checked)
+
+Why: big models went through `reduce.py` (voxel shell + quadric collapse): ~900 triangles whose
+edges run anywhere, so shoulders and elbows tear when a row turns, limbs come out thin and flat and
+long hair is one rigid sheet (NIKKI, user test 2026-10-23: "ziet er echt verschrikkelijk uit").
+
+How (`rebuild.py`, code): the donor's own Namco model is the topology. Every donor vertex keeps
+its row and its place in Namco's mesh and is moved onto the import (`template.build`: placed in
+the import's row frame, stretched along the bone, pushed along the ray from the bone to the
+import's outermost surface, ratio smoothed). One bone per vertex (rigid rows, shared joint rings,
+as Namco). The texture is baked from the original as `reduce.py` does (`bake_atlas`). Then
+`_build` writes it like a reduced model.
+
+Found on the way (tested on NIKKI, Michelle, readyplayer.me, Soldier; renders):
+- `template.build` skipped donor polygons with material bit 0x100 (texture from the second page):
+  whole thigh and shin pieces missing. `any_page=True` keeps them (the rebuild bakes its own texture).
+- `MI.joint(bones, "head")` took the first bone named like a head: on a MetaHuman rig
+  `FACIAL_C_Forehead` (on the forehead), so the head sat forward and came out a narrow column.
+  Now the chain root with the most bones of the part below it (`neck_01`); Mixamo unchanged.
+- Hair bones have no row: they take the row of their nearest known parent (the head).
+- A slim import on a heavy donor (donor 24) needs less than 55 % of the donor's thickness:
+  `THINNEST` 30 % for body rows; arms keep 60 % and move part of the way to the donor's
+  (`FULLER`, q ** 0.7), as Namco's limbs are fuller.
+- Feet are not stretched along ankle -> toe (`fixed=(7, 10)`): the toe point is often a guess.
+- Packets: ~1070 triangles fit only as quads. The atlas keeps both halves of a Namco quad in one
+  chart and material (`partner`), `_pair_quads` accepts quads bent up to 30/45/60 degrees
+  (`QUAD_BENDS`, tried in turn). NIKKI: 26020 of 26028 bytes, no flat shading.
+- Long hair over the chest baked as a fur collar, and as flecks on the shoulders and back in game:
+  rays from the whole body pass through head-row triangles below the neck (`see_through`, up to
+  48 layers); the hair stays on the head.
+- In game (live fight, probe renders) the boots ended in points: a high heel points the foot down
+  and the animations keep it. The toe now comes from the mesh (the foot's most forward point; the
+  ball bone sat above the ankle) and the foot turns about the ankle onto the donor's foot line.
+- A long flap stuck out beside the hip in the stance: donor 24's own holster on one thigh (row 5:
+  9 vertices without a mirror image on row 8). `paired_only` (the donor's standing frames, which
+  are symmetric; the solved pose is not: 137 false hits) leaves such one-sided extras out (17).
+- Time: ~50 s instead of ~4 min (no voxel shell, no collapse).
+
+UI: Build "Tekken rebuild (default)" / "Free reduction"; face and body detail only for the
+latter. Older imports without "method" stay reduced (regress unchanged).
+
+Open: hair buns, ponytails and long hair as their own pieces or accessory rows (21-26); the
+face with Namco's half mirrored texture layout (`texture_bake`, 8-bit face); user test.
+

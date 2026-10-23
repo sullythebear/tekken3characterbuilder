@@ -18,12 +18,51 @@ const T3Model = (() => {
     } catch { return 0; }
   }
 
+  // the face and body detail settings belong to the free reduction only
+  function showMethod() {
+    const free = $("model-method").value === "reduce";
+    for (const el of document.querySelectorAll("#model-settings .reduce-only")) el.hidden = !free;
+    for (const el of document.querySelectorAll("#model-settings .rebuild-only")) el.hidden = free;
+  }
+  $("model-method").addEventListener("change", showMethod);
+  // the rebuild's proportions: {head, arms, legs, hands, feet: per cent}
+  function shapeSettings() {
+    const out = {};
+    for (const el of document.querySelectorAll("#model-settings [data-shape]")) out[el.dataset.shape] = Number(el.value);
+    return out;
+  }
+
+  // which source bone became which Tekken body part, how it was found and how sure that is
+  // (direct_import.rig_map); opened by itself when a part needs checking
+  function rigMapTable(rows) {
+    const box = document.createElement("details");
+    box.className = "rig-map";
+    box.open = rows.some(r => r.confidence === "low");
+    const sum = document.createElement("summary");
+    sum.textContent = "Mapping table: source bones to Tekken body parts";
+    const table = document.createElement("table");
+    const head = table.insertRow();
+    for (const t of ["Part", "Bone", "Found", "Sure"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+    const words = { high: "sure", medium: "likely", low: "check" };
+    for (const r of rows) {
+      const tr = table.insertRow();
+      tr.className = "rig-" + r.confidence;
+      for (const t of [r.part, r.bone, r.how, words[r.confidence] || r.confidence]) tr.insertCell().textContent = t;
+      if (r.note) tr.title = r.note;
+    }
+    box.append(sum, table);
+    const li = document.createElement("li");
+    li.append(box);
+    return li;
+  }
+
   function showCheck(info) {
     const box = $("model-check");
     box.hidden = !info;
     $("model-import-row").hidden = !info || !info.ok;
     // the detail settings act on big models only (reduced to PS1 size: direct_import.REDUCE_ABOVE)
     $("model-settings").hidden = $("model-settings-hint").hidden = !info || !info.ok || !info.reduce;
+    showMethod();
     if (!info) return;
     $("model-file-name").textContent = info.file || "";
     $("model-texture-row").hidden = !info.ok;
@@ -46,6 +85,7 @@ const T3Model = (() => {
         li.dataset.mark = marks[c.level] || "";
         facts.append(li);
       }
+      if (info.rig_map && info.rig_map.length) facts.append(rigMapTable(info.rig_map));
     } else if (info.ok) {
       facts.append(fact(`${info.triangles} triangles, ${info.vertices} vertices`));
       facts.append(fact(info.textured ? "Texture: embedded" : "Texture: none"));
@@ -158,6 +198,7 @@ const T3Model = (() => {
     const own = saved && c.own_model;
     $("own-model").hidden = !(saved && c.has_model);
     $("model-undo").hidden = !(saved && c.model_undo);
+    $("model-report").hidden = !(saved && c.has_model && c.own_model && c.own_model.file !== "Character Builder");
     $("model-before").hidden = !(saved && c.has_model && c.own_model && c.own_model.file !== "Character Builder");
     $("model-before-img").hidden = true;
     if (own) {
@@ -327,7 +368,8 @@ const T3Model = (() => {
     try {
       const id = state.current.id;
       await api("/api/model/import", { id, costume: Number($("model-costume").value), parts: choices,
-        settings: { head: Number($("model-head").value), detail: Number($("model-detail").value) } });
+        settings: { method: $("model-method").value, head: Number($("model-head").value), detail: Number($("model-detail").value),
+                    shape: shapeSettings() } });
       // the import runs in the background: its log lines name the step it is at
       let job;
       for (;;) {
@@ -376,6 +418,17 @@ const T3Model = (() => {
   $("model-import").addEventListener("click", importModel);
   $("model-remove").addEventListener("click", remove);
   $("model-undo").addEventListener("click", undo);
+  // the last import's conversion report as a Markdown file to save
+  $("model-report").addEventListener("click", async () => {
+    try {
+      const r = await api("/api/model/report", { id: state.current.id });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([r.text], { type: "text/markdown" }));
+      a.download = r.name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (e) { toast(e.message || String(e)); }
+  });
   $("model-before").addEventListener("click", async () => {
     const button = $("model-before"), img = $("model-before-img");
     button.disabled = true;

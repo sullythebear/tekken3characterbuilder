@@ -150,6 +150,16 @@ Find things here before reading code; then search (`grep -n`) instead of reading
 - `app/glb.py` – glTF binary reader (meshes, UVs, textures, skin bones/weights).
 - `app/kitbash.py` – `build(root, base, parts)`: a fighter from parts of the stock models (Namco geometry and texels); CLI.
 - `app/template.py` – `build`: the donor's own model as topology template moved onto the import (default, `model_import.TEMPLATE`).
+- `app/rebuild.py` – "Tekken rebuild" for big models (`settings["method"] == "rebuild"`, the UI's
+  default): `rebuild(root, model, src)` -> a low src like `reduce.reduce` (the donor's polygons via
+  `template.build(any_page, thinnest, fixed, fuller)`, one bone per row, texture by
+  `reduce.bake_atlas(partner=quad halves, see_through=hair over the chest)`); `direct_import.build`
+  retries with more bent quads (`QUAD_BENDS`). Shared helpers: `direct_import.frames` (joints and
+  row frames), `reduce.original` (welded original, opaque triangles, sampler).
+  `_shape`: the user's proportions (head, arms, legs, hands, feet in per cent), after the bake.
+- `direct_import.rig_map(src)` – per Tekken body part: source bone, how found, confidence (shown
+  as the mapping table, summarised in `checks`). `server.import_report` / `model_report` – the
+  conversion report (`characters/<id>/import-report.md`, API `/api/model/report`).
 - `app/texture_bake.py` – texture: `Source` (FBX textures, `transparent`, `colours`),
   `pack_faces` (skyline packing), `raster`, `bake` (rays from outside inwards), 
   `quantise_groups` (16-colour palette per chart group; face own palette), `face8` + `band8_into`

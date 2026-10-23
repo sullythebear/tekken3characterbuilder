@@ -65,6 +65,7 @@
     </div>
     <div class="model-view" id="model-view" hidden>
       <canvas id="model-canvas" aria-label="3D model of the fighter, drag to turn"></canvas>
+      <label class="model-ps1" title="Draw it as the PlayStation does: corners on the 320 x 240 grid and textures mapped without perspective (the wobble and warp of PS1 games)"><input type="checkbox" id="model-ps1"> PS1 look</label>
       <p class="model-status" id="model-status">Choose a fighting style to see the model.</p>
     </div>
     <div class="portrait-frame" id="portrait-frame">
@@ -220,6 +221,7 @@
           <div class="own-model" id="own-model" hidden>
             <p class="own-model-line" id="own-model-line"></p>
             <button class="btn btn-ghost" type="button" id="model-undo" hidden title="Back to the model this import replaced">Undo import</button>
+            <button class="btn btn-ghost" type="button" id="model-report" hidden title="What came in, the checks, the bone mapping, how it was built and what came out">Conversion report</button>
             <button class="btn btn-danger" type="button" id="model-remove">Remove model</button>
             <button class="btn btn-ghost" type="button" id="model-before" hidden title="Your source file with the choices made for it; the 3D view shows the PS1 result">Show before</button>
             <img class="stage-sheet" id="model-before-img" alt="Your source model before the conversion" hidden>
@@ -333,14 +335,32 @@
               </div>
             </div>
             <div class="arena-lists" id="model-settings" hidden>
-              <label>Face detail
+              <label>Build
+                <select id="model-method"><option value="rebuild">Tekken rebuild (default)</option><option value="reduce">Free reduction</option></select>
+              </label>
+              <label class="rebuild-only">Head size
+                <select data-shape="head"><option value="70">70 %</option><option value="80">80 %</option><option value="90">90 %</option><option value="100" selected>100 % (own)</option><option value="110">110 %</option><option value="120">120 %</option><option value="130">130 %</option><option value="150">150 %</option></select>
+              </label>
+              <label class="rebuild-only">Arm thickness
+                <select data-shape="arms"><option value="70">70 %</option><option value="80">80 %</option><option value="90">90 %</option><option value="100" selected>100 % (own)</option><option value="110">110 %</option><option value="120">120 %</option><option value="130">130 %</option><option value="150">150 %</option></select>
+              </label>
+              <label class="rebuild-only">Leg thickness
+                <select data-shape="legs"><option value="70">70 %</option><option value="80">80 %</option><option value="90">90 %</option><option value="100" selected>100 % (own)</option><option value="110">110 %</option><option value="120">120 %</option><option value="130">130 %</option><option value="150">150 %</option></select>
+              </label>
+              <label class="rebuild-only">Hand size
+                <select data-shape="hands"><option value="70">70 %</option><option value="80">80 %</option><option value="90">90 %</option><option value="100" selected>100 % (own)</option><option value="110">110 %</option><option value="120">120 %</option><option value="130">130 %</option><option value="150">150 %</option></select>
+              </label>
+              <label class="rebuild-only">Foot size
+                <select data-shape="feet"><option value="70">70 %</option><option value="80">80 %</option><option value="90">90 %</option><option value="100" selected>100 % (own)</option><option value="110">110 %</option><option value="120">120 %</option><option value="130">130 %</option><option value="150">150 %</option></select>
+              </label>
+              <label class="reduce-only">Face detail
                 <select id="model-head"><option value="4">High (default)</option><option value="2">Medium</option><option value="1">Same as the body</option></select>
               </label>
-              <label>Body detail
+              <label class="reduce-only">Body detail
                 <select id="model-detail"><option value="100">As much as fits (default)</option><option value="80">80 %</option><option value="60">60 %</option></select>
               </label>
             </div>
-            <p class="hint" id="model-settings-hint" hidden>Detail settings apply to big models, which are reduced to PS1 size. Less face detail leaves more for the body; less body detail gives a simpler, more PS1-like model.</p>
+            <p class="hint" id="model-settings-hint" hidden>Big models are made PS1-sized. <b>Tekken rebuild</b> fits the fighting style's own Namco model to yours: its joints, rows and head layout, with your model's shape and colours. The sizes change the rebuilt model only (100 % = your model's own; Namco's fighters often have a slightly bigger head and fuller limbs). <b>Free reduction</b> simplifies your own model instead; there less face detail leaves more for the body, and less body detail gives a simpler model.</p>
             <div class="model-import-row" id="model-import-row" hidden>
               <label for="model-costume">Costume</label>
               <select id="model-costume"></select>

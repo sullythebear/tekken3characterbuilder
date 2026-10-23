@@ -198,12 +198,17 @@ const T3Costumes = (() => {
     const gl = canvas.getContext("webgl", { antialias: true, preserveDrawingBuffer: false });
     if (!gl) return null;
     const vs = `attribute vec3 pos; attribute vec2 uv; attribute float row; attribute float bpp;
-      uniform mat4 mvp; varying vec2 vUv; varying float vRow; varying float vBpp;
-      void main(){ vUv = uv; vRow = row; vBpp = bpp; gl_Position = mvp * vec4(pos, 1.0); }`;
+      uniform mat4 mvp; uniform float ps1; varying vec2 vUv; varying vec3 vAff; varying float vRow; varying float vBpp;
+      void main(){ vUv = uv; vRow = row; vBpp = bpp; vec4 p = mvp * vec4(pos, 1.0);
+        // PS1 look: vertices snap to the 320 x 240 screen grid (the GTE has no sub-pixels)
+        if (ps1 > 0.5) p.xy = floor(p.xy / p.w * vec2(160.0, 120.0) + 0.5) / vec2(160.0, 120.0) * p.w;
+        vAff = vec3(uv * p.w, p.w);    // over the interpolated w: affine, as the PS1's GPU maps textures
+        gl_Position = p; }`;
     const fs = `precision mediump float; uniform sampler2D tex4; uniform sampler2D tex8; uniform sampler2D pal;
-      uniform float rows; uniform float pick; uniform float sel; uniform sampler2D chosen; uniform float w4; uniform float w8; varying vec2 vUv; varying float vRow; varying float vBpp;
+      uniform float rows; uniform float pick; uniform float sel; uniform sampler2D chosen; uniform float w4; uniform float w8; uniform float affine;
+      varying vec2 vUv; varying vec3 vAff; varying float vRow; varying float vBpp;
       void main(){
-        vec2 p = floor(vUv) + 0.5;
+        vec2 p = floor(affine > 0.5 ? vAff.xy / vAff.z : vUv) + 0.5;
         float idx = vBpp > 0.5 ? texture2D(tex8, vec2(p.x / w8, p.y / 256.0)).r * 255.0
                                : texture2D(tex4, vec2(p.x / w4, p.y / 256.0)).r * 255.0;
         vec4 c = texture2D(pal, vec2((floor(idx + 0.5) + 0.5) / 256.0, (floor(vRow + 0.5) + 0.5) / rows));
@@ -305,6 +310,8 @@ const T3Costumes = (() => {
       gl.uniform1f(gl.getUniformLocation(prog, "rows"), v.rows);
       gl.uniform1f(gl.getUniformLocation(prog, "w4"), v.w4); gl.uniform1f(gl.getUniformLocation(prog, "w8"), v.w8);
       gl.uniform1f(gl.getUniformLocation(prog, "pick"), pick ? 1 : 0);
+      gl.uniform1f(gl.getUniformLocation(prog, "ps1"), v.ps1 && !pick ? 1 : 0);
+      gl.uniform1f(gl.getUniformLocation(prog, "affine"), v.ps1 && !pick ? 1 : 0);   // (a uniform shared by both shaders would need one precision)
       gl.uniform1f(gl.getUniformLocation(prog, "sel"), pick ? -1 : v.sel);
       gl.drawElements(gl.TRIANGLES, v.count, gl.UNSIGNED_SHORT, 0);
     };
@@ -382,6 +389,7 @@ const T3Costumes = (() => {
       if (modelKey(now, costumeModels()[now]) !== n) return;   // changed meanwhile
       if (!viewer) viewer = createViewer($("model-canvas"));
       if (!viewer) { status.textContent = "Your browser cannot show 3D (WebGL is off)."; return; }
+      viewer.ps1 = $("model-ps1").checked;
       if (current !== model) { viewer.setModel(model); current = model; }
       viewer.onPick = onPick;
       repaint(); highlight();
@@ -390,6 +398,13 @@ const T3Costumes = (() => {
     } catch (e) { status.textContent = e.message; }
     renderPanel();
   }
+
+  // PS1 look (affine textures, vertices on the 320 x 240 grid): a per-viewer choice, remembered
+  try { $("model-ps1").checked = localStorage.getItem("t3-model-ps1") === "1"; } catch (e) { /* no storage */ }
+  $("model-ps1").addEventListener("change", () => {
+    try { localStorage.setItem("t3-model-ps1", $("model-ps1").checked ? "1" : "0"); } catch (e) { /* no storage */ }
+    if (viewer) { viewer.ps1 = $("model-ps1").checked; viewer.draw(); }
+  });
 
   // a model shown for a moment (Builder's body-part preview): not saved, not a costume
   let held = null;              // { model, note }: shown until the fighter or its model changes

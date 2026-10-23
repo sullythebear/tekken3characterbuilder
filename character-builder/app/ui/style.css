@@ -347,7 +347,7 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .editor-tab[aria-selected="true"] { background: var(--chrome); color: #10121a; border-color: #d9dde6; border-bottom: 2px solid #b9bdc9; }
 .editor-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .costume-tab.add { border-style: dashed; color: var(--gold); }
-.model-view { width: 100%; max-width: 360px; margin: 0 auto; }
+.model-view { width: 100%; max-width: 360px; margin: 0 auto; position: relative; }
 #model-canvas { display: block; width: 100%; aspect-ratio: 3 / 4; background: #0a0b10; border: 2px solid #b9bdc9;
   box-shadow: 0 0 0 1px #000; cursor: grab; touch-action: none; }
 #model-canvas:active { cursor: grabbing; }
@@ -540,3 +540,12 @@ dialog::backdrop { background: rgba(2, 3, 12, .75); }
 .texture-table td { padding: .2rem .3rem; border-bottom: 1px solid #1f2330; vertical-align: middle; }
 .texture-table select { max-width: 100%; }
 .texture-table .why { display: block; color: #8d93a8; font-size: .78rem; }
+
+/* Model Importer: mapping table (source bones -> Tekken body parts) */
+.rig-map { margin: 6px 0; font-size: 12px; }
+.rig-map summary { cursor: pointer; }
+.rig-map table { border-collapse: collapse; margin-top: 4px; width: 100%; }
+.rig-map th, .rig-map td { text-align: left; padding: 1px 6px; border-bottom: 1px solid var(--line, #333); }
+.rig-map tr.rig-medium td:last-child { color: #d9b44a; }
+.rig-map tr.rig-low td { color: #e5675a; }
+.model-ps1 { position: absolute; top: 6px; right: 8px; font-size: 12px; display: flex; gap: 4px; align-items: center; opacity: 0.85; }

@@ -7,7 +7,7 @@ debug server: load a save state, drive the pad, read memory, take screenshots.
   python tools/t3live.py setup [--game G]
       starts the debug build in a window with the live save folder; go to the character
       select screen, put P1's cursor on the fighter to test, press Shift+F8 (slot 7), close.
-  python tools/t3live.py fight [--game G] [--frames 600] [--every 60] [--pages 2] [--cell 0] [--visible]
+  python tools/t3live.py fight [--game G] [--frames 600] [--every 60] [--pages 2] [--cell 0] [--row 0] [--visible]
       boots the game, walks Title -> Arcade -> select screen -> CUSTOM page (R2 x pages) ->
       fighter at --cell, picks it (and the Tekken 3 moveset), waits for the fight, then takes
       a screenshot every N frames while pressing a few attacks; prints the paths.
@@ -127,7 +127,7 @@ def setup(game: Path):
     print("save state written" if states else "no save state found in " + str(g.saves))
 
 
-def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, cell: int = 0,
+def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, cell: int = 0, row: int = 0,
           costume_button: str = "square", probe: bool = False, cpu: str | None = None):
     live = game / "character-builder" / "live"
     # the renderer probe (patch 13): 64 calls (about two frames of both players) out of every
@@ -154,6 +154,9 @@ def fight(game: Path, frames: int, every: int, visible: bool, pages: int = 2, ce
         for _ in range(pages):
             g.press("r2")
             g.wait_frames(60)
+        for _ in range(row):                                # the CUSTOM page is 8 fighters wide
+            g.press("down")
+            g.wait_frames(20)
         for _ in range(cell):
             g.press("right")
             g.wait_frames(20)
@@ -280,6 +283,7 @@ def main():
     ap.add_argument("--probe", action="store_true", help="record the renderer's per-row transforms (live/probe.bin)")
     ap.add_argument("--pages", type=int, default=2, help="R2 presses on the select screen (2 = CUSTOM page)")
     ap.add_argument("--cell", type=int, default=0, help="the fighter's place on that page (right presses)")
+    ap.add_argument("--row", type=int, default=0, help="the fighter's row on that page (down presses; 8 per row)")
     ap.add_argument("--cpu", help="a roster key (customs.txt, e.g. cbmedea) for the CPU's stage 1 opponent")
     a = ap.parse_intermixed_args()
     if a.command == "setup":
@@ -287,7 +291,7 @@ def main():
     elif a.command == "nav":
         nav(a.game, a.steps, {"TEKKEN3_CPU_STAGE1": a.cpu} if a.cpu else None)
     else:
-        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, probe=a.probe, cpu=a.cpu)
+        fight(a.game, a.frames, a.every, a.visible, a.pages, a.cell, a.row, probe=a.probe, cpu=a.cpu)
 
 
 if __name__ == "__main__":
