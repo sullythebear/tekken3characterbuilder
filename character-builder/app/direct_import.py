@@ -1134,7 +1134,7 @@ def checks(src: dict, info: dict, weighted: int) -> list:
         if maps:
             add("Materials", "ok", f"{len(maps)} normal, mask or other maps left out: Tekken 3 draws colour only")
     UV = np.asarray(src["UV"], float)
-    if len(UV) and n:
+    if len(UV) and n and n <= REDUCE_ABOVE:          # a reduced model's texture is baked anew (repeats fine)
         tri = UV[T]
         wraps = int(((tri < -1e-3) | (tri > 1 + 1e-3)).any(axis=(1, 2)).sum())
         if wraps:

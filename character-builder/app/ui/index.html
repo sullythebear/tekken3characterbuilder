@@ -206,8 +206,9 @@
               <li><strong>Chibi builds</strong> (a big head on short legs) get longer legs: Tekken's animations need
                 the hips at about half the height, so the legs are stretched until they are; the head and arms stay
                 as they are.</li>
-              <li><strong>File:</strong> .fbx (FBX Binary), .glb or .vrm (VRoid), up to 16 MB, with the texture embedded. Models with
-                only material colours work too.</li>
+              <li><strong>File:</strong> .fbx (FBX Binary), .glb, .vrm (VRoid), .gltf or .obj, up to 16 MB, or the whole
+                download as a <strong>.zip</strong> (up to 96 MB): the model is found in it and its textures come along. Models
+                with only material colours work too; an .obj has no skeleton and is rigged automatically.</li>
               <li><strong>Any size:</strong> Tekken 3 fighters have 650-1100 triangles. A bigger model is reduced to that
                 size and gets a new texture made for it (1 to 3 minutes).</li>
               <li><strong>Hair, tails and horns</strong> can't move on their own in Tekken 3: parts that stick out are
@@ -225,7 +226,7 @@
           </div>
           <p class="hint" id="model-need-save">Save the fighter first, then add a model.</p>
           <div id="model-upload-box" hidden>
-            <label class="btn btn-ghost file-btn">Choose .fbx, .glb or .vrm<input type="file" id="model-file" accept=".fbx,.glb,.vrm" hidden></label>
+            <label class="btn btn-ghost file-btn">Choose a model or .zip<input type="file" id="model-file" accept=".fbx,.glb,.vrm,.gltf,.obj,.zip" hidden></label>
             <div class="model-check" id="model-check" hidden>
               <p class="model-file-name" id="model-file-name"></p>
               <ul class="model-facts" id="model-facts"></ul>

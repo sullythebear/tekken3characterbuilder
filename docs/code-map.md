@@ -184,3 +184,7 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   `upload_texture`, `set_texture_choice` (`/api/model/texture-choice`: assign, remove), `clean_texture_assign`,
   files `texture-<stem>-<n>.<ext>` + `textures-<stem>.json` (old single `texture-<stem>.<ext>` still read);
   UI `model3d.js` `showTextures` (image list, per-material table).
+- More formats: `app/formats.py` (stdlib): `from_zip` (the model in a .zip, safe paths, limits), `to_glb` ->
+  `gltf_to_glb` (buffers and images beside it embedded), `obj_to_glb` (.mtl colours and map_Kd, one primitive per
+  material, v flipped); `used` names the files taken. Server `check_model`: `UPLOAD_EXTRA` (.gltf .obj .zip)
+  become `upload.glb`, the zip's other images become texture images.

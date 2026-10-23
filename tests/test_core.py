@@ -890,3 +890,44 @@ class TextureSetTests(unittest.TestCase):
             self.assertFalse(DI.see_through("MI_CargoLying_Eyelashes"))
         finally:
             DI.TEXTURE_IMAGES = []
+
+
+class FormatTests(unittest.TestCase):
+    """formats.py: an .obj with its .mtl and texture, and a .gltf with its .bin, as one .glb; a
+    .zip gives its model and the other files."""
+
+    def test_obj_and_zip(self):
+        import formats
+        obj = (b"mtllib m.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n"
+               b"usemtl Skin\nf 1/1 2/2 3/3 4/4\n")
+        mtl = b"newmtl Skin\nKd 1 0 0\nmap_Kd -s 1 1 1 tex/Skin_D.png\n"
+        png = bytes([0x89]) + b"PNG fake"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("Model/m.obj", obj)
+            z.writestr("Model/m.mtl", mtl)
+            z.writestr("Model/textures/Skin_D.png", png)
+            z.writestr("Model/textures/Extra_D.png", png)
+            z.writestr("../evil.txt", b"x")
+        name, data, files = formats.from_zip(buf.getvalue())
+        self.assertEqual(name, "Model/m.obj")
+        self.assertNotIn("../evil.txt", files)
+        used = set()
+        glb = formats.to_glb(name, data, files, used)
+        self.assertEqual(glb[:4], b"glTF")
+        self.assertEqual(used, {"Model/m.mtl", "Model/textures/Skin_D.png"})   # Extra_D is left for the builder
+        clen = struct.unpack_from("<I", glb, 12)[0]
+        j = json.loads(glb[20:20 + clen])
+        self.assertEqual(j["materials"][0]["name"], "Skin")
+        self.assertEqual(j["accessors"][2]["count"], 6)                          # the quad as two triangles
+        self.assertEqual(j["images"][0]["mimeType"], "image/png")
+
+    def test_gltf_needs_its_bin(self):
+        import formats
+        gltf = json.dumps({"asset": {"version": "2.0"}, "buffers": [{"uri": "scene.bin", "byteLength": 4}],
+                           "bufferViews": [{"buffer": 0, "byteLength": 4}]}).encode()
+        with self.assertRaises(ValueError):
+            formats.to_glb("scene.gltf", gltf, {})
+        glb = formats.to_glb("scene.gltf", gltf, {"sub/scene.bin": b"abcd"})
+        clen = struct.unpack_from("<I", glb, 12)[0]
+        self.assertEqual(glb[20 + clen + 8:20 + clen + 12], b"abcd")

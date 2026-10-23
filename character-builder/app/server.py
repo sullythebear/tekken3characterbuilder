@@ -19,6 +19,7 @@ import custom_page  # noqa: E402
 import name_call  # noqa: E402
 import command_list as command_list_module  # noqa: E402   (stdlib only: struct)
 import fairness  # noqa: E402
+import formats  # noqa: E402
 
 APP_VERSION = "0.8.0"
 APP = Path(__file__).resolve().parent
@@ -1255,6 +1256,7 @@ def donor_models() -> dict:
 
 
 MODEL_SOURCES = (".fbx", ".glb", ".vrm")
+UPLOAD_EXTRA = (".gltf", ".obj", ".zip")      # turned into a .glb (formats.py) when uploaded
 
 
 # texture images the player added beside the model file: texture-<stem>-<n>.<ext> listed in
@@ -1393,17 +1395,39 @@ def check_model(cid: str, name: str, payload: str) -> dict:
     if not (folder / "character.json").is_file():
         raise ValueError("Save the character first.")
     ext = Path(str(name)).suffix.lower()
-    if ext not in MODEL_SOURCES:
-        raise ValueError("Use an .fbx (FBX Binary), .glb or .vrm file.")
+    if ext not in MODEL_SOURCES + UPLOAD_EXTRA:
+        raise ValueError("Use an .fbx (FBX Binary), .glb, .vrm, .gltf or .obj file, or a .zip with the model and "
+                         "its textures.")
     raw = base64.b64decode(payload, validate=True)
-    if len(raw) > MAX_IMPORT:
-        raise ValueError("This model file is too large (16 MB at most).")
+    if len(raw) > (MAX_PACKAGE if ext == ".zip" else MAX_IMPORT):
+        raise ValueError("This model file is too large (16 MB at most; a .zip 96 MB).")
+    # a .zip (as models are shared online) gives its model and the files beside it; a .gltf or
+    # .obj becomes a .glb, with the textures it names embedded when they are there
+    files, used, inner = {}, set(), Path(str(name)).name
+    if ext == ".zip":
+        inner, raw, files = formats.from_zip(raw)
+        ext = Path(inner).suffix.lower()
+    if ext in (".gltf", ".obj"):
+        raw = formats.to_glb(inner, raw, files, used)
+        ext = ".glb"
     for old in [*folder.glob("upload.*"), *folder.glob("rig-upload.json"), *folder.glob("colours-upload.json")]:
         old.unlink()
     drop_textures(folder, "upload")
     target = folder / f"upload{ext}"
     target.write_bytes(raw)
-    return recheck_upload(root, folder, target, Path(str(name)).name[:80])
+    images = []                                       # the zip's other images: texture images
+    for path, data in sorted(files.items()):
+        suffix = Path(path).suffix.lower()
+        if path in used or suffix not in TEXTURE_TYPES or not texture_ok(suffix, data) or len(data) > MAX_TEXTURE:
+            continue
+        if len(images) >= TEXTURE_IMAGES_MAX:
+            break
+        stored = folder / f"texture-upload-{len(images) + 1}{suffix}"
+        stored.write_bytes(data)
+        images.append({"name": Path(path).name[:80], "path": stored})
+    save_textures(folder, "upload", images, {})
+    label = Path(str(name)).name[:80] + (f" ({Path(inner).name})" if Path(inner).name != Path(str(name)).name else "")
+    return recheck_upload(root, folder, target, label[:120])
 
 
 def recheck_upload(root: Path, folder: Path, target: Path, name: str) -> dict:
@@ -2589,7 +2613,7 @@ def import_character(payload: str) -> dict:
             if info.filename not in allowed and not variant and not texture:
                 raise ValueError(f"Unexpected file in package: {info.filename}. "
                                  "Packages may only contain a description, images and a 3D model source.")
-            limit = (MAX_IMPORT if info.filename.startswith("source.") else
+            limit = (MAX_PACKAGE if info.filename.startswith("source.") else
                      MAX_TEXTURE if info.filename.startswith("texture-source") else MAX_UPLOAD)
             if info.file_size > limit:
                 raise ValueError("A file in the package is too large.")

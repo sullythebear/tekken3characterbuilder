@@ -529,6 +529,17 @@ def segment(P, solid, origin, h, J, extra=()):
     part = np.empty(len(P), dtype=object)
     for i, l in enumerate(lab):
         part[i] = lines[l][0] if l >= 0 else ("spine", None)
+    # knees or thighs that touch let the growing cross from one leg to the other (the Soldier):
+    # a leg's point belongs to the leg whose bones are nearest in a straight line
+    chain = {s: [J["thigh" + s], J["shin" + s], J["foot" + s], J["toe" + s]] for s in "LR"}
+    def dist(p, s):
+        c = chain[s]
+        return np.min([_seg_dist(p, a, b) for a, b in zip(c[:-1], c[1:])])
+    for i, prt in enumerate(part):
+        if prt[0] in ("thigh", "shin", "foot") and prt[1] in "LR":
+            other = "R" if prt[1] == "L" else "L"
+            if dist(P[i], other) < 0.8 * dist(P[i], prt[1]):
+                part[i] = (prt[0], other)
     return part
 
 

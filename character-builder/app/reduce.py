@@ -24,6 +24,7 @@ ATLAS = 256
 GUTTER = 2
 _SHELL = {}
 MANIFOLD = False             # link condition in the collapse (the shell itself is made manifold)
+WEB_BELOW = 0.03            # triangles on both legs this far (share of the height) below the hips go
 
 
 def _weld(P):
@@ -825,6 +826,22 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     Image.fromarray(img.clip(0, 255).astype(np.uint8)).save(buf, "PNG")
     lap("bake")
     log(f"texture baked: {int(done.sum())} of {len(done)} samples hit the original directly")
+    # well below the crotch the legs are apart: a triangle with corners on both legs is a web the
+    # fighting stance stretches between them (knees or calves that touch: the auto-rigged
+    # Soldier), so it goes
+    hips = [MI.joint(src["bones"], "thigh", s) for s in "LR"]
+    if all(h_ is not None for h_ in hips):
+        below = min(h_[1] for h_ in hips) - WEB_BELOW * H
+        sides = []
+        for w in weights:
+            p_ = MI._part(src["bones"][max(w, key=w.get)]["name"]) if w else (None, None)
+            sides.append(p_[1] if p_[0] in ("thigh", "shin", "foot") else None)
+        sides = np.array(sides, dtype=object)
+        s3 = sides[F]
+        web = ((s3 == "L").any(1) & (s3 == "R").any(1) & (V[F][:, :, 1].max(1) < below))
+        if web.any():
+            F, UVl, face = F[~web], UVl[~web], np.asarray(face)[~web]
+            log(f"{int(web.sum())} triangles between the legs left out (webs)")
     # per-corner model as direct_import.load returns it
     Pc = V[F.ravel()]
     Tc = np.arange(len(Pc)).reshape(-1, 3)

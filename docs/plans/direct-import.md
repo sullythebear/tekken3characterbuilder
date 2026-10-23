@@ -503,3 +503,26 @@ images are on no material.
   eyeocclusion, ...; NIKKI's Eyeshell, a thin shell over the eyes, would be drawn white over them);
   their triangles are dropped in `build` only (`_drop_hidden`), so painter and paint runs keep the
   file's triangle numbers.
+
+## More formats: .zip, .gltf, .obj (2026-10-23, tested in the browser pane)
+
+Most free models online come as a .zip (Sketchfab: `scene.gltf` + `scene.bin` + `textures/`;
+others an `.obj` + `.mtl` + images). `formats.py` (stdlib, runs in the server) turns them into a
+.glb at upload, so the whole importer works on them unchanged: a .gltf gets its buffers and
+images embedded (matched by path or by file name in any folder); an .obj becomes one primitive
+per material with the .mtl's Kd colour (sRGB -> linear) and map_Kd image (options such as
+`-s 1 1 1` skipped; v flipped to glTF's top-down); an .obj has no skeleton, so the auto rig rigs
+it. A .zip gives its model (the biggest .fbx/.glb/.vrm, else .gltf, else .obj); its images the model
+does not take become texture images (matched automatically as usual). Limits: a .zip 96 MB, 2000
+files, 400 MB unpacked, no paths outside. The file name shown is "soldier-obj.zip (soldier.obj)".
+- **tested**: Soldier.glb written out as .obj/.mtl/png and as .gltf/.bin/jpg, both zipped:
+  the glTF keeps its 51 bones and both textures; the OBJ is auto rigged with both textures; the
+  OBJ zip uploaded through the file field, imported (838 triangles), textures right (camo, red
+  hood and belt details). Unit tests `FormatTests`.
+- Leg webs of auto-rigged models: the Soldier's knees touch, so (1) the auto rig's growing let
+  inner-knee points cross to the other leg -> `autorig.segment` now gives a leg point to the leg
+  whose bones are nearest in a straight line; (2) after `reduce` a triangle with corners on both
+  legs more than `WEB_BELOW` (3 %) of the height below the hips goes (the fighting stance stretched
+  it into a web from knee to shin). Unrigged Soldier: cross-leg triangles 25 -> 10, all at the
+  crotch; the rigged Soldier loses 8 (no holes in the renders). The back flap of the unrigged
+  Soldier still hangs diagonally over the thighs.
