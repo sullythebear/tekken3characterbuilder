@@ -69,7 +69,6 @@ def _bone_regions(bones) -> list:
 
 
 def analyse(src: dict) -> dict:
-    import rebuild as RB
     P = np.asarray(src["P"], float)
     T = np.asarray(src["T"])
     MAT = np.asarray(src["MAT"])
@@ -90,6 +89,7 @@ def analyse(src: dict) -> dict:
             links = [[a, b] for a, b in LINKS if a in joints and b in joints]
             rows_of = lambda prt, sd: SIDE_ROWS[prt][sd or "L"]
             if src.get("weights"):
+                import rebuild as RB                      # (reads the game's model tools)
                 vr = RB.vertex_rows(src, part, rows_of)
                 cr = vr[T]
                 row = np.where(cr[:, 1] == cr[:, 2], cr[:, 1], cr[:, 0]).astype(np.uint8)

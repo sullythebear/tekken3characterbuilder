@@ -1179,5 +1179,51 @@ class RebuildTests(unittest.TestCase):
             DI.set_texture_images([])
 
 
+
+class AnatomyTests(unittest.TestCase):
+    """The anatomy debug data and the automatic rig's surface ways (the elf's hanging arms)."""
+
+    def test_surface_graph_joins_touching_pieces_only(self):
+        import numpy as np
+        import autorig as AR
+        a = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+        P = np.vstack([a, a + [0, 0, 0.001], a + [5, 0, 0]])        # a touching copy and a far one
+        T = np.arange(9).reshape(3, 3)
+        V, nb = AR._surface_graph(P, T, H=1.0)
+        self.assertTrue(any(j in nb[0] for j in (3, 4, 5)))        # touching: joined
+        self.assertFalse(any(j in nb[0] for j in (6, 7, 8)))       # far: not
+
+    def test_surface_way_follows_the_surface(self):
+        import numpy as np
+        import autorig as AR
+        # a U-shaped strip: the way from one tip to the other runs round the bend, not across
+        pts, tris = [], []
+        for k in range(21):
+            t = np.pi * k / 20
+            for w in (0.0, 0.1):
+                pts.append([np.cos(t), np.sin(t), w])
+        for k in range(20):
+            a = 2 * k
+            tris += [[a, a + 1, a + 2], [a + 1, a + 3, a + 2]]
+        P, T = np.array(pts), np.array(tris)
+        ways = AR._surface_ways(AR._surface_graph(P, T, H=1.0), {"hand": P[0]}, P[40])
+        self.assertGreater(ways["hand"][:, 1].max(), 0.9)           # over the top of the U
+
+    def test_analyse_regions_rows_and_left_out(self):
+        import numpy as np
+        import anatomy as AN
+        m = lambda y: [[1, 0, 0, 0], [0, 1, 0, y], [0, 0, 1, 0], [0, 0, 0, 1]]
+        names = ["Hips", "Spine", "Head", "HairBack"]
+        bones = [{"name": n, "parent": i - 1, "matrix": m(0.5 + 0.2 * i)} for i, n in enumerate(names)]
+        P = np.array([[0, 0.5, 0], [0.1, 0.5, 0], [0, 0.6, 0], [0, 1.0, 0], [0.1, 1.0, 0], [0, 1.1, 0],
+                      [0, 0.0, 0], [0.5, 0.0, 0], [0, 0.0, 0.5]], float)
+        src = {"P": P, "T": np.arange(9).reshape(3, 3), "MAT": np.array([0, 0, 1]), "bones": bones,
+               "vbone": np.array([0, 0, 0, 2, 3, 3, 1, 1, 1]), "hidden_materials": [1]}
+        a = AN.analyse(src)
+        names = [AN.REGIONS[r][0] for r in a["region"]]
+        self.assertEqual(names, ["pelvis", "hair", "excluded"])     # hair: a bone of no part under the head
+        self.assertEqual(len(a["T"]), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

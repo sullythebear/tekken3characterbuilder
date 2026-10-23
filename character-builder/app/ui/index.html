@@ -16,6 +16,7 @@
 <script src="/ui/rigview.js" defer></script>
 <script src="/ui/painter.js" defer></script>
 <script src="/ui/model3d.js" defer></script>
+<script src="/ui/anatomy.js" defer></script>
 </head>
 <body>
 <header class="hud">
@@ -227,6 +228,22 @@
             <img class="stage-sheet" id="model-before-img" alt="Your source model before the conversion" hidden>
           </div>
           <p class="hint" id="model-need-save">Save the fighter first, then add a model.</p>
+          <details class="anatomy-box" id="anatomy-box">
+            <summary>Anatomy debug view (for developers)</summary>
+            <p class="hint">What the converter makes of the model: the body region or Tekken row of every triangle, the joints and skeleton it uses, uncertain parts striped. The uploaded model if there is one, else the imported source.</p>
+            <div class="anatomy-layers">
+              <select id="anatomy-mode"><option value="regions">Body regions</option><option value="rows">Tekken rows</option></select>
+              <label><input type="checkbox" id="anatomy-stripes" checked> Uncertain</label>
+              <label><input type="checkbox" id="anatomy-excluded" checked> Left out</label>
+              <label><input type="checkbox" id="anatomy-joints" checked> Joints and skeleton</label>
+              <label><input type="checkbox" id="anatomy-bones"> File's bones</label>
+            </div>
+            <canvas id="anatomy-canvas" aria-label="The model coloured by body region, drag to turn"></canvas>
+            <p class="hint" id="anatomy-status"></p>
+            <p class="hint" id="anatomy-note"></p>
+            <ul class="anatomy-legend" id="anatomy-legend"></ul>
+            <ul class="anatomy-flags" id="anatomy-flags"></ul>
+          </details>
           <div id="model-upload-box" hidden>
             <label class="btn btn-ghost file-btn">Choose a model or .zip<input type="file" id="model-file" accept=".fbx,.glb,.vrm,.gltf,.dae,.obj,.zip,.zae" hidden></label>
             <div class="model-check" id="model-check" hidden>

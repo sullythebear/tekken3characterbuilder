@@ -1547,6 +1547,30 @@ def colour_mesh(cid: str) -> dict:
     return json.loads(out.read_text(encoding="utf-8"))
 
 
+def anatomy_mesh(cid: str) -> dict:
+    """The converter's reading of the model's anatomy (anatomy.analyse) for the anatomy debug
+    view: the upload when there is one, else the imported source. Cached per file."""
+    root = project_root()
+    folder = DATA / safe_id(cid)
+    upload = model_upload(folder)
+    which = "upload"
+    if not upload:
+        upload, which = next(folder.glob("source.*"), None), "source"
+    if not root or not upload:
+        raise ValueError("Upload or import a model first.")
+    out = CACHE / f"anatomy-{folder.name}-{which}.json"
+    deps = [upload, *(f for f in (folder / f"rig-{which}.json", folder / f"colours-{which}.json",
+                                   folder / f"textures-{which}.json") if f.is_file())]
+    deps += [i["path"] for i in model_textures(folder, which)[0]]
+    deps += [APP / "anatomy.py", APP / "autorig.py", APP / "direct_import.py"]
+    if not out.is_file() or out.stat().st_mtime < max(f.stat().st_mtime for f in deps):
+        CACHE.mkdir(exist_ok=True)
+        problem, _ = run_import_tool(root, [str(upload), "--anatomy", str(out)], timeout=300)
+        if problem or not out.is_file():
+            raise ValueError(problem or "The model could not be read.")
+    return {**json.loads(out.read_text(encoding="utf-8")), "which": which}
+
+
 def set_model_colours(cid: str, paint) -> dict:
     """Colours painted on the uploaded model (colours-upload.json); none = the file's own colours.
     The check runs again with them."""
@@ -2937,6 +2961,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 data.get("paint")))
             if path == "/api/model/colours":
                 return self._json(set_model_colours(str(data.get("id", "")), data.get("paint")))
+            if path == "/api/model/anatomy":
+                return self._json(anatomy_mesh(str(data.get("id", ""))))
             if path == "/api/model/report":
                 return self._json(model_report(str(data.get("id", ""))))
             if path == "/api/model/colour-mesh":

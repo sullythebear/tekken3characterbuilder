@@ -1943,6 +1943,7 @@ def main():
     ap.add_argument("--rig", type=Path, help='JSON {"joints": {name: [x, y, z]}, "turn": 3x3 | "auto"} for a model without a skeleton')
     ap.add_argument("--colours", type=Path, help='JSON {"colours": ["#rrggbb"], "runs": [[triangle, count, colour]]} painted by hand')
     ap.add_argument("--paint-mesh", type=Path, help="write the model for the builder's painter (JSON) and stop")
+    ap.add_argument("--anatomy", type=Path, help="write the converter's reading of the anatomy (anatomy.py, JSON) and stop")
     a = ap.parse_args()
     set_external_texture(a.texture)
     if a.textures and a.textures.is_file():
@@ -1956,6 +1957,10 @@ def main():
     X.setup(a.root)
     if a.check:
         print(json.dumps(inspect(a.model_file)))
+        return
+    if a.anatomy:
+        import anatomy
+        a.anatomy.write_text(json.dumps(anatomy.analyse(load(a.model_file))), encoding="utf-8")
         return
     if a.paint_mesh:
         a.paint_mesh.write_text(json.dumps(paint_mesh(a.model_file)), encoding="utf-8")

@@ -37,7 +37,8 @@ def _neighbours(r):
 
 
 def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_page=False, thinnest=0.55, fixed=(), fuller=None,
-          paired_only=None):
+          paired_only=None, no_head_for_body=False, fit_torso=False,
+          widest=None, fit_head=False):
     """m: donor 3DMK; bind: model_export.bind(m); F, J: the import's row frames and joints (game
     space, T-pose); ends_game: {"head", "hand L/R" -> row 14/18 tip, "toe" per foot row} as
     {row: end point}; to_fbx: game point -> FBX point; P, Tr, trow: the original. any_page: keep
@@ -48,7 +49,12 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_
     a thinner import's share q of the donor's thickness becomes q ** p (Namco's limbs are fuller);
     paired_only: the donor's standing frames (symmetric, model_import.donor_frames) to keep on the
     limbs only polygons with a mirror image on the other side (the donor's
-    own extras - a holster on one thigh - are not the import's, and stick out when it moves)."""
+    own extras - a holster on one thigh - are not the import's, and stick out when it moves);
+    no_head_for_body: the body rows are fitted to the body only, not to the head's triangles (long
+    hair round the shoulders and back blew the torso up over the face); fit_torso: the torso
+    stretched or shrunk to the import's hips .. neck length; widest: {row: the most times the
+    donor's thickness a vertex may take} (default 1.9); fit_head: the head scaled to the import's
+    neck .. top height before the rays fit it."""
     rows = [r for r in range(1, 21) if r in bind]
     frame_of = lambda r: SECOND.get(r, r)
     extra, flat_to = set(), {}
@@ -88,6 +94,10 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_
     verts = np.array(verts)
     owner = np.array(owner)
     G = np.zeros_like(verts)
+    torso_k = None
+    if fit_torso and W is not None:
+        torso_k = float(np.clip(np.linalg.norm(J[19] - J[1]) / max(np.linalg.norm(W[19][1] - W[1][1]), 1e-6), 0.5, 1.5))
+        log(f"template: torso x{torso_k:.2f} to the import's hips .. neck")
     for fr in sorted(set(owner.tolist())):
         sel = owner == fr
         p0 = verts[sel] @ F[fr].T + J[fr]
@@ -108,6 +118,24 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_
             ext = max(float(along.max()), 1e-6)
             k = float(np.clip(ln / ext, 0.6, 1.7)) if fr not in (1, 3, 11, 15, 14, 18, 19) + fixed else 1.0
             p0 = p0 + np.outer(along * (k - 1), u)
+        if fit_head and fr == 19 and ends_game.get(19) is not None:
+            # the head to the import's height from the neck to the top first (then the rays only
+            # fine-tune it): fitted from the donor's size, the smoothing kept a big head (an anime
+            # head with its hair) at the donor's and the top of the hair was never reached
+            u = ends_game[19] - J[19]
+            hl = float(np.linalg.norm(u))
+            u = u / max(hl, 1e-9)
+            ext = float(((p0 - J[19]) @ u).max())
+            k_head = float(np.clip(hl / max(ext, 1e-6), 0.6, 2.5))
+            p0 = J[19] + (p0 - J[19]) * k_head
+            log(f"template: head x{k_head:.2f} to the import's neck .. top")
+        if torso_k is not None and fr in (1, 11, 15):
+            # the torso (and the collarbones on it) to the import's hips .. neck length: the scale
+            # follows the legs, so a long-legged import has a shorter upper body than the donor and
+            # the donor's chest reached up over the face (the elf)
+            u = (J[19] - J[1]) / np.linalg.norm(J[19] - J[1])
+            along = (p0 - J[1]) @ u
+            p0 = p0 + np.outer(along * (torso_k - 1), u)
         G[sel] = p0
     # 1b. faces: the donor's polygons (stored corners d0..d3 face inwards; ours (d0, d2, d1, d3))
     faces = []
@@ -181,13 +209,20 @@ def build(m, bind, F, J, ends_game, to_fbx, P, Tr, trow, log=print, W=None, any_
             u = np.where(ok[:, None], dv / np.maximum(dist, 1e-9)[:, None], 0)
             reach = 3.0 * np.maximum(dist, 1e-3)
             rows_i = [19] if fr == 19 else list(_neighbours(fr))
+            if no_head_for_body and fr != 19:
+                rows_i = [r for r in rows_i if r != 19]   # the torso's rays met the long hair and the face
             r_imp = lowpoly.ray_hits(o, u, P, Tr[np.isin(trow, rows_i)], reach)
             own = [t for r2 in ([19, 20] if fr == 19 else [fr]) for t in tri_of_row.get(r2, [])]
             r_don = lowpoly.ray_hits(o, u, out, np.array(own), reach) if own else np.full(len(sel), np.nan)
             q = r_imp / np.where(np.isnan(r_don), dist, r_don)
             if fuller and fr in fuller:
                 q = np.where(q < 1, q ** fuller[fr], q)
-            ratio[sel] = np.where(ok, np.clip(q, thinnest.get(fr, 0.55) if isinstance(thinnest, dict) else thinnest, 1.9), np.nan)
+            ratio[sel] = np.where(ok, np.clip(q, thinnest.get(fr, 0.55) if isinstance(thinnest, dict) else thinnest,
+                                              (widest or {}).get(fr, 1.9)), np.nan)
+            if os.environ.get("T3CB_TPLDBG"):                # offline study: how each row was fitted
+                log(f"template row {fr}: {len(sel)} vertices, import hit {int(np.isfinite(r_imp).sum())}, "
+                    f"donor hit {int(np.isfinite(r_don).sum())}, ratio median {np.nanmedian(q):.2f}, "
+                    f"clipped {int(((q < (thinnest.get(fr, 0.55) if isinstance(thinnest, dict) else thinnest)) | (q > (widest or {}).get(fr, 1.9))).sum())}")
         nb = [set() for _ in range(len(out))]
         for f in faces:
             for x in f["v"]:

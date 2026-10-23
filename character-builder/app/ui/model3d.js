@@ -63,6 +63,7 @@ const T3Model = (() => {
     // the detail settings act on big models only (reduced to PS1 size: direct_import.REDUCE_ABOVE)
     $("model-settings").hidden = $("model-settings-hint").hidden = !info || !info.ok || !info.reduce;
     showMethod();
+    if (typeof T3Anatomy !== "undefined") T3Anatomy.reset();     // the anatomy view follows the upload
     if (!info) return;
     $("model-file-name").textContent = info.file || "";
     $("model-texture-row").hidden = !info.ok;

@@ -23,6 +23,7 @@ import template
 THINNEST = {r: 0.3 for r in (1, 3, 5, 6, 7, 8, 9, 10, 11, 15, 19)}
 THINNEST.update({r: 0.6 for r in (12, 13, 14, 16, 17, 18)})
 FULLER = {r: 0.7 for r in (12, 13, 16, 17)}    # thin arms move part of the way to the donor's
+WIDEST = {19: 3.0}    # a head may grow to 3x the donor's (an anime head with its hair; template: 1.9)
 QUAD_BENDS = (30.0, 45.0, 60.0, 90.0)   # Namco's quads bend more than a free shell's pairs may
                                         # (_pair_quads: 12); more when the packets do not fit
 FLAT_BELOW = (8.0, 16.0, 30.0)    # then polygons this flat are flat-shaded (cheaper GPU packets)
@@ -124,7 +125,9 @@ def rebuild(root, model: int, src: dict, log=print, shape=None, fewer=0) -> dict
     corner = vrow_w[To]
     trow = np.where(corner[:, 1] == corner[:, 2], corner[:, 1], corner[:, 0])
     body = template.build(m, X.bind(m), F, J, ends, to_fbx, Pw, To, trow, log=log, W=W, any_page=True, thinnest=THINNEST,
-                          fixed=(7, 10), fuller=FULLER, paired_only=MI.donor_frames(root, m))
+                          fixed=(7, 10), fuller=FULLER, paired_only=MI.donor_frames(root, m),
+                          no_head_for_body=True, fit_torso=True,
+                          widest=WIDEST, fit_head=True)
     V = np.asarray(body["positions"], float)
     owner = np.asarray(body["owner"])
     face_chart = {c for c, w in body["chart_weight"].items() if w >= 4}
@@ -185,6 +188,14 @@ def rebuild(root, model: int, src: dict, log=print, shape=None, fewer=0) -> dict
     tc = vrow[T]
     hair = (np.where(tc[:, 1] == tc[:, 2], tc[:, 1], tc[:, 0]) == 19) & (Pw[weld[T]].mean(1)[:, 1] < neck_y)
     body = owner[Fc].max(1) != 19
+    # the face: the donor head's face polygons and every head polygon facing forward below the
+    # hair line (reduce's rule): a big anime face put the elf's eyes outside the donor's face
+    cen = V[Fc].mean(1)
+    fn = np.cross(V[Fc[:, 1]] - V[Fc[:, 0]], V[Fc[:, 2]] - V[Fc[:, 0]])
+    fn /= np.linalg.norm(fn, axis=1, keepdims=True) + 1e-12
+    top = V[:, 1].max()
+    face = face | ((owner[Fc].max(1) == 19) & (fn[:, 2] > 0.3) & (cen[:, 1] < neck_y + 0.78 * (top - neck_y))
+                   & (cen[:, 1] > neck_y))
     UVl, png, face = RD.bake_atlas(V, Fc, src, base, neck_y, log=log, face=face, partner=partner,
                                    see_through=(body, hair))
     if shape:                    # after the bake: the texture was taken at the import's own shape

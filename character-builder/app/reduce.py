@@ -21,6 +21,7 @@ import decimate as DC
 import texture_bake as TB
 
 ATLAS = 256
+FAR_RAY = 0.15              # share of the height: the second, longer ray of samples the first missed
 GUTTER = 2
 _SHELL = {}
 MANIFOLD = False             # link condition in the collapse (the shell itself is made manifold)
@@ -643,6 +644,34 @@ def bake_atlas(V, F, src, base, neck_y, head_detail=4.0, log=print, lap=lambda w
         col[idx[solid]] = rgba[solid, :3]
         done[idx[solid]] = True
         start[idx[~solid]] = start[idx[~solid]] + dirs[idx[~solid]] * (h[got][~solid, 3:4] + 1e-4 * H)
+    # where the low surface lies far inside the original (an import much bigger than the donor
+    # in places: an anime head full of hair; the elf: 61 % of the samples hit), a longer ray
+    # from farther out before the nearest point (which takes whatever lies closest: skin, hair)
+    far_len = FAR_RAY * H
+    todo = np.where(~done)[0]
+    if len(todo):
+        start = PN[todo, :3] + PN[todo, 3:] * (far_len / 2)
+        for _ in range(16):
+            if not len(todo):
+                break
+            h = caster.first_hit(start, -PN[todo, 3:], far_len)
+            got = h[:, 0] >= 0
+            if not got.any():
+                break
+            idx = todo[got]
+            tri = h[got, 0].astype(int)
+            u, v = h[got, 1:2], h[got, 2:3]
+            uv = UV[T[tri, 0]] * (1 - u - v) + UV[T[tri, 1]] * u + UV[T[tri, 2]] * v
+            rgba = _texel(textures, MAT[tri], uv)
+            solid = rgba[:, 3] > 128
+            if through is not None:
+                solid &= ~(through[idx] & see_through[1][tri])
+            col[idx[solid]] = rgba[solid, :3]
+            done[idx[solid]] = True
+            keep = ~solid
+            start = np.concatenate([start[~got], start[got][keep] - PN[idx[keep], 3:] * (h[got][keep, 3:4] + 1e-4 * H)])
+            todo = np.concatenate([todo[~got], idx[keep]])
+    log(f"long rays: {int(done.sum())} of {len(done)} samples hit after them")
     miss = np.where(~done)[0]
     if len(miss):                          # nothing opaque on the ray: the nearest surface point
         h = S.lookup(PN[miss, :3])

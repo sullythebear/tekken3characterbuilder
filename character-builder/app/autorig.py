@@ -27,6 +27,7 @@ ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
 CHIBI_SHOULDERS = 0.58             # shoulders under this share of the height: a chibi (41-57 %; others 59 % and up)
 ARM_LINE = 0.02                    # shoulder this far (share of the height) above the arm's line: put on it
+TORSO_MIN = 0.12                   # shoulders at least this share of the height above the hip joints
 ARMS_WIDER = 1.3                   # upper body this much wider than deep: the arms are spread, side to side
 BEND = 35                          # degrees: where the arm's way turns into the torso (the shoulder)
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
@@ -236,6 +237,23 @@ def auto_rig(P, T):
     J.update(_arms(paths, P, H, dep, origin, h))
     shoulders = (J["upperL"][1] + J["upperR"][1]) / 2
     J.update(_legs(paths, sole, H, chibi=shoulders < sole + CHIBI_SHOULDERS * H, solid=(solid, origin, h)))
+    if shoulders - J["thighL"][1] < TORSO_MIN * H or shoulders - J["thighR"][1] < TORSO_MIN * H:
+        # the shoulders came out level with the hips: a hand hanging against the body (a flared
+        # skirt, a hip) joins it in voxels, and the way from the hand runs straight in to the
+        # torso's middle at the hips (the elf: shoulders at 62 %, hips at 63 % of the height).
+        # Traced to the top of the head instead, the way along the arm (arm + neck) is shorter
+        # than in at the hip and up the whole torso, for hanging and spread arms alike
+        # The voxels cannot tell an arm hanging against a flared skirt from the skirt; the mesh
+        # can: a sleeve's surface meets the body only at the shoulder. So the way is traced over
+        # the surface (pieces that touch - a hand in its sleeve - joined where they touch)
+        graph = _surface_graph(P, T, H)
+        up = _surface_ways(graph, {k: e[1] for k, e in (("handL", handL), ("handR", handR))}, head[1])
+        again = _surface_arms(up, graph, H) if up else None
+        if again is None:
+            again = {"upperL": J["upperL"], "upperR": J["upperR"]}
+        if (again["upperL"][1] + again["upperR"][1]) / 2 - max(J["thighL"][1], J["thighR"][1]) >= TORSO_MIN * H:
+            J.update(again)
+            shoulders = (J["upperL"][1] + J["upperR"][1]) / 2
     J.update(_centre(J, P, H, head[1], top_y))
     J["handendL"], J["handendR"] = handL[1], handR[1]
     for s in "LR":
@@ -371,6 +389,148 @@ def _legs(paths, sole, H, chibi=False, solid=None):
         J["thigh" + s] = hip
         J["shin" + s] = hip + 0.52 * (ankle - hip)
     return J
+
+
+def _surface_arms(ways, graph, H, slab=0.012, reach=0.12):
+    """Shoulders, elbows and wrists along ways over the surface (_surface_ways, hand first). Walking
+    in from the hand, a cut across the way stays as thin as the arm; where it widens to twice the
+    arm's (the torso), the arm has ended: the shoulder, in the middle of the last thin cut. A cut
+    holds only what lies within `reach` of the height over the surface: an arm hanging against
+    the body or a skirt does not take them in (they join it only at the shoulder)."""
+    import heapq
+    V, nb = graph
+    near_cache = {}
+
+    def near(i0):                                       # surface distance from vertex i0, up to reach
+        if i0 in near_cache:
+            return near_cache[i0]
+        dist = {i0: 0.0}
+        heap = [(0.0, i0)]
+        while heap:
+            d, i = heapq.heappop(heap)
+            if d > dist.get(i, np.inf):
+                continue
+            for j, w in nb[i].items():
+                if d + w < dist.get(j, np.inf) and d + w <= reach * H:
+                    dist[j] = d + w
+                    heapq.heappush(heap, (d + w, j))
+        near_cache[i0] = np.fromiter(dist.keys(), int)
+        return near_cache[i0]
+    J = {}
+    for s in "LR":
+        way = ways["hand" + s]
+        cum = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(way, axis=0), axis=1))])
+        if cum[-1] <= 0:
+            return None
+        cen, rad = [], []
+        for i in range(len(way)):
+            a, b = way[max(0, i - 3)], way[min(len(way) - 1, i + 3)]
+            u = b - a
+            u = u / max(np.linalg.norm(u), 1e-9)
+            ids = near(int(np.argmin(np.linalg.norm(V - way[i], axis=1))))
+            d = V[ids] - way[i]
+            along = d @ u
+            cut = V[ids][np.abs(along) < slab * H]
+            if len(cut) < 4:
+                cen.append(way[i]); rad.append(np.nan)
+                continue
+            c = (cut.min(0) + cut.max(0)) / 2
+            cen.append(c)
+            dc = cut - c
+            rad.append(float(np.percentile(np.linalg.norm(dc - np.outer(dc @ u, u), axis=1), 90)))
+        rad = np.array(rad)
+        first = np.searchsorted(cum, 0.15 * cum[-1]), np.searchsorted(cum, 0.4 * cum[-1])
+        arm_r = np.nanmedian(rad[first[0]:first[1] + 1])
+        k = None
+        for i in range(first[1], len(way)):
+            if np.isfinite(rad[i]) and rad[i] > 2.0 * arm_r:
+                k = max(i - 1, 0)
+                break
+        if k is None or not np.isfinite(arm_r):
+            return None
+        shoulder = np.array(cen[k], float)
+        shoulder[1] += RAISE * H
+        tail = np.array(cen[:k + 1][::-1])                 # shoulder .. hand, through the arm's middle
+        tail[0] = shoulder
+        L = _length(tail[::-1]) + np.linalg.norm(way[0] - tail[-1])
+        J["upper" + s] = shoulder
+        J["fore" + s] = _at_length(tail, ELBOW * L)
+        J["hand" + s] = _at_length(tail, WRIST * L)
+    return J
+
+
+def _surface_graph(P, T, H, touch=0.01):
+    """The mesh's surface as a graph: welded vertices V and per vertex {neighbour: length}, along
+    the edges and between separate pieces where they come within `touch` of the height of each
+    other (a hand in its sleeve)."""
+    key = {}
+    weld = np.array([key.setdefault(tuple(np.round(p, 5)), len(key)) for p in P])
+    V = np.zeros((len(key), 3))
+    V[weld] = P
+    Tw = weld[np.asarray(T)]
+    nb = [dict() for _ in range(len(V))]
+    for a, b in np.concatenate([Tw[:, [0, 1]], Tw[:, [1, 2]], Tw[:, [2, 0]]]):
+        if a != b:
+            d = float(np.linalg.norm(V[a] - V[b]))
+            nb[a][b] = nb[b][a] = d
+    # touching pieces: a grid of cells `touch * H` wide; pairs of different pieces within it
+    par = list(range(len(V)))
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    for t in Tw:
+        for b in t[1:]:
+            ra, rb = find(t[0]), find(b)
+            if ra != rb:
+                par[rb] = ra
+    piece = np.array([find(i) for i in range(len(V))])
+    eps = touch * H
+    cell = np.floor(V / eps).astype(int)
+    grid = {}
+    for i, c in enumerate(map(tuple, cell)):
+        grid.setdefault(c, []).append(i)
+    for (cx, cy, cz), ids in grid.items():
+        near = [j for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                for j in grid.get((cx + dx, cy + dy, cz + dz), ())]
+        for i in ids:
+            for j in near:
+                if j > i and piece[i] != piece[j]:
+                    d = float(np.linalg.norm(V[i] - V[j]))
+                    if d < eps:
+                        nb[i][j] = nb[j][i] = d
+    return V, nb
+
+
+def _surface_ways(graph, ends, goal):
+    """The shortest ways over the surface (_surface_graph) from each end point to the goal (the
+    top of the head). {name: points from the end to the goal}, {} when a way is missing."""
+    import heapq
+    V, nb = graph
+    start = int(np.argmin(np.linalg.norm(V - goal, axis=1)))
+    dist = np.full(len(V), np.inf)
+    prev = -np.ones(len(V), int)
+    dist[start] = 0.0
+    heap = [(0.0, start)]
+    while heap:
+        d, i = heapq.heappop(heap)
+        if d > dist[i]:
+            continue
+        for j, w in nb[i].items():
+            if d + w < dist[j]:
+                dist[j], prev[j] = d + w, i
+                heapq.heappush(heap, (d + w, j))
+    out = {}
+    for name, p in ends.items():
+        i = int(np.argmin(np.linalg.norm(V - p, axis=1)))
+        if not np.isfinite(dist[i]):
+            return {}
+        way = [i]
+        while prev[way[-1]] >= 0:
+            way.append(int(prev[way[-1]]))
+        out[name] = V[way]
+    return out
 
 
 def _arms(paths, P, H, dep, origin, h):

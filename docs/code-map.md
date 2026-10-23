@@ -157,6 +157,12 @@ Find things here before reading code; then search (`grep -n`) instead of reading
   retries with more bent quads (`QUAD_BENDS`). Shared helpers: `direct_import.frames` (joints and
   row frames), `reduce.original` (welded original, opaque triangles, sampler).
   `_shape`: the user's proportions (head, arms, legs, hands, feet in per cent), after the bake.
+- `app/anatomy.py` – `analyse(src)`: the converter's reading of a model (regions, rows, joints,
+  skeleton, bones, left out, uncertain) for the anatomy debug view (`ui/anatomy.js`,
+  `/api/model/anatomy`, `direct_import --anatomy`) and `tools/render/anatomy_render.py`.
+- `autorig._surface_graph` / `_surface_ways` / `_surface_arms` – the second pass for arms that
+  hang against the body (shoulders level with the hips): ways over the mesh surface, the shoulder
+  where a surface-only cut widens.
 - `direct_import.rig_map(src)` – per Tekken body part: source bone, how found, confidence (shown
   as the mapping table, summarised in `checks`). `server.import_report` / `model_report` – the
   conversion report (`characters/<id>/import-report.md`, API `/api/model/report`).

@@ -122,3 +122,48 @@ Verdict: NIKKI (a rigged modern model with separate TGAs) converts into a recogn
 style character that plays in game. The elf (no skeleton) imports and plays, but looks wrong
 because the automatic rig misplaces the torso; the app now says so instead of hiding it.
 
+## Anatomy phase: debug view, automatic rig, E2EELB (2026-10-23)
+
+Tools (code): `anatomy.analyse(src)` collects the converter's own reading - region per triangle
+from the skin's heaviest bone (the same bones and weights the build uses), the Tekken row per
+triangle (`rebuild.vertex_rows`, shared with the build), joints and skeleton
+(`direct_import.rig_from_skeleton`), the file's bones, materials left out, uncertain regions
+(`rig_map` "check"). Shown by the builder's "Anatomy debug view (for developers)" (WebGL, layer
+switches; `/api/model/anatomy`, `ui/anatomy.js`, checked in the browser pane) and by
+`tools/render/anatomy_render.py MODEL out.png` (front, side, back, rows; used for every step).
+
+Root causes found on the elf (tested, renders and numbers):
+1. Its base plate was used (fixed before: stand check first).
+2. Shoulders at 62 %, hips at 63 % of the height: the arm's way runs from the hand to the
+   torso's middle through voxels; the elf's hands hang against a flared pleated skirt (x up to
+   +-1.0, the hands at +-1.4), so in voxels the way runs straight in over the skirt at hip height.
+   More voxels did not cure it (160: one side right; 240: 46 s and still 80 % / 88 %), nor a
+   stronger pull to deep voxels (no change; benchmark mixed). The mesh can tell: the hands are
+   pieces of their own inside the sleeves, and a sleeve's surface meets the body only at the
+   shoulder. Fix (`autorig`): when the shoulders come out within 12 % of the height of the hips,
+   the arms are traced again over the surface (`_surface_graph`: welded edges + joins where
+   pieces touch, `_surface_ways` to the top of the head) and the shoulder is where a cut across
+   the way, taken over the surface only, widens to twice the arm's (`_surface_arms`). Elf:
+   shoulders 75 %, elbows 65 %, wrists 57 %, neck 79 %. The rig benchmark (30 rigged models) is
+   identical: the second pass never runs on them.
+3. The torso row covered the face: the torso was fitted to its neighbours' triangles, the head
+   with all its long hair among them (NIKKI's "fur collar" too); and it kept the donor's length,
+   while a long-legged import has a short upper body (the scale follows the hips). Fixes
+   (`template`): body rows ignore the head's triangles (`no_head_for_body`); the torso and
+   collarbones to the import's hips .. neck (`fit_torso`, elf x0.50).
+4. No eyes: the donor head stayed at Nina's size (rays and smoothing from the donor's size, ratio
+   0.79) and below the face; the eyes landed on the top of the low head. Fixes: the head first
+   scaled to the import's neck .. top (`fit_head`, elf x1.57, NIKKI x0.85), a head may take 3x
+   the donor's thickness (`WIDEST`), the face is also every forward head polygon below the hair
+   line, and samples the bake's short ray misses get a longer one (`reduce.FAR_RAY`): elf
+   61 % -> 80 % of the samples hit the original.
+
+Result (E2EELB through the HTTP API, donor 5): 1083 triangles, in game (0 of 5852 words differ),
+recognisable: blonde hair, green eyes, headband, white sweater with sleeves, green skirt,
+stockings and boots. NIKKI improved too (no fur collar, clean shoulders), PAINTTEST unchanged.
+
+Still wrong on the elf: the long hair is not there (left out on purpose: no room in the slot
+yet), one eye comes out pale (a strand of hair in front of it?), skin patches on one thigh, the
+skirt is smaller than the original's; the right arm takes a piece of the skirt behind the hand
+(the anatomy view shows it). Next: hair as a piece within the budget, then those.
+
