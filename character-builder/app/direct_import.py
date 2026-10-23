@@ -954,7 +954,7 @@ def inspect(path: Path) -> dict:
     import in the builder."""
     path = Path(path)
     if path.suffix.lower() not in (".fbx", ".glb", ".vrm"):
-        return {"ok": False, "rigged": False, "problems": ["Use an .fbx (FBX Binary), .glb or .vrm file."]}
+        return {"ok": False, "rigged": False, "problems": ["Use an .fbx, .glb or .vrm file."]}
     try:
         src = load(path)
     except Exception as error:                        # a damaged or unsupported file

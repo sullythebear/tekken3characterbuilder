@@ -1,6 +1,7 @@
-"""Binary FBX reader (stdlib only): the node tree, plus meshes, skeleton, skin weights and
-textures of a character model. FBX 7.x binary; versions >= 7500 use 64-bit node headers."""
+"""FBX reader (stdlib only): the node tree, plus meshes, skeleton, skin weights and textures of a
+character model. FBX 7.x, binary (versions >= 7500 use 64-bit node headers) or ASCII."""
 from __future__ import annotations
+import re
 import struct
 import zlib
 from pathlib import Path
@@ -78,11 +79,128 @@ def _node(data: bytes, at: int, wide: bool):
     return Node(name, props, children), end
 
 
+_TOKEN = re.compile(r'\s*(?:(;[^\n]*)|("[^"]*")|([A-Za-z_][\w|]*):|(\*\d+)'
+                    r'|([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)|(\{)|(\})|(,)|([A-Za-z_]\w*))')
+
+
+def _number(text: str):
+    return float(text) if any(ch in text for ch in ".eE") else int(text)
+
+
+def read_ascii(text: str) -> Node:
+    """An ASCII FBX (7.x) as the same node tree the binary reader gives: objects named
+    "Name\\x00\\x01Class" (ASCII writes "Class::Name"), arrays (*N { a: ... }) as one list, embedded
+    textures (base64 Content) as bytes."""
+    pos, n = 0, len(text)
+
+    def tok():
+        nonlocal pos
+        while True:
+            m = _TOKEN.match(text, pos)
+            if not m or m.end() == pos:
+                if text[pos:].strip() == "":
+                    pos = n
+                    return None, None
+                raise FbxError(f"ASCII FBX: cannot read near {text[pos:pos + 40]!r}")
+            pos = m.end()
+            kind = m.lastindex
+            if kind == 1:                             # a comment
+                continue
+            return kind, m.group(kind)
+
+    def peek():
+        nonlocal pos
+        keep = pos
+        out = tok()
+        pos = keep
+        return out
+
+    def value(kind, raw):
+        if kind == 2:
+            s = raw[1:-1].replace("&quot;", '"')
+            if "::" in s:                             # "Class::Name" -> "Name\x00\x01Class"
+                cls, _, name = s.partition("::")
+                if cls and cls[0].isalpha() and " " not in cls:
+                    s = name + "\x00\x01" + cls
+            return s
+        if kind == 5:
+            return _number(raw)
+        return raw                                    # T, Y, W, ...
+
+    def node(name):
+        nonlocal pos
+        props, children = [], []
+        k, raw = peek()
+        if k == 4:                                    # *N { a: v, v, ... }: read the numbers fast
+            tok()
+            start = text.index("{", pos) + 1
+            end = text.index("}", start)
+            body = text[start:end]
+            body = body[body.index(":") + 1:] if ":" in body else body
+            items = [x for x in body.replace("\n", "").replace("\r", "").split(",") if x.strip()]
+            props.append([_number(x.strip()) for x in items])
+            pos = end + 1
+            return Node(name, props, children)
+        if k == 8:                                    # a leading comma: an empty first value
+            props.append("")
+        while True:
+            k, raw = peek()
+            if k in (2, 5, 9):
+                tok()
+                props.append(value(k, raw))
+            elif k == 8:
+                tok()
+                continue
+            else:
+                break
+            k, raw = peek()
+            if k != 8:
+                break
+        k, raw = peek()
+        if k == 6:
+            tok()
+            while True:
+                k, raw = tok()
+                if k == 7 or k is None:
+                    break
+                if k == 3:
+                    children.append(node(raw))
+        if name == "Content" and props and all(isinstance(p, str) for p in props):
+            import base64
+            joined = "".join(props)
+            try:
+                props = [base64.b64decode(joined)] if joined else [b""]
+            except ValueError:
+                pass
+        return Node(name, props, children)
+
+    top = []
+    while True:
+        k, raw = tok()
+        if k is None:
+            break
+        if k == 3:
+            top.append(node(raw))
+    version = 7400
+    head = next((t for t in top if t.name == "FBXHeaderExtension"), None)
+    if head is not None and head.value("FBXVersion") is not None:
+        version = int(head.value("FBXVersion"))
+    return Node("", [version], top)
+
+
 def read(path: Path) -> Node:
     data = Path(path).read_bytes()
     if not data.startswith(MAGIC):
-        raise FbxError("Only binary FBX files are supported (export as binary FBX).")
+        head = data[:4096].decode("utf-8", "replace")
+        if "FBXHeaderExtension" in head or head.lstrip().startswith("; FBX"):
+            root = read_ascii(data.decode("utf-8", "replace"))
+            if root.props[0] < 7000:
+                raise FbxError("This is an old FBX (version 6, 2010 or older): export it again as FBX 2014 or newer.")
+            return root
+        raise FbxError("This is not an FBX file this importer can read (binary or ASCII FBX 7.x).")
     version = struct.unpack_from("<I", data, 23)[0]
+    if version < 7000:
+        raise FbxError("This is an old FBX (version 6, 2010 or older): export it again as FBX 2014 or newer.")
     wide = version >= 7500
     at, top = 27, []
     while at < len(data):

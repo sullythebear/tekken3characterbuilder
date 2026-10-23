@@ -531,3 +531,9 @@ files, 400 MB unpacked, no paths outside. The file name shown is "soldier-obj.zi
 - `regress.py` now builds a character the way the builder does: with its texture images
   (`textures-source.json`, or an older `texture-source.*`), colours and rig beside `source.*` (NIKKI
   came out grey before).
+- ASCII FBX (2026-10-23): `fbx.read_ascii` builds the same node tree as the binary reader
+  ("Class::Name" -> "Name\x00\x01Class", `*N { a: ... }` arrays read fast as one list, base64
+  `Content` as bytes, comments skipped); `fbx.read` picks it by the header. FBX 6 (2010 and older,
+  binary or ASCII) gets a clear message (export as FBX 2014 or newer). **tested**: Mixamo, Medea and
+  Low Poly written out as ASCII FBX (13.5 / 10 / 0.5 MB) read identically to their binary files
+  (mesh, UVs, materials, bones, weights, textures); the model check passes. Unit test `AsciiFbxTests`.

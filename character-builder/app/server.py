@@ -1396,7 +1396,7 @@ def check_model(cid: str, name: str, payload: str) -> dict:
         raise ValueError("Save the character first.")
     ext = Path(str(name)).suffix.lower()
     if ext not in MODEL_SOURCES + UPLOAD_EXTRA:
-        raise ValueError("Use an .fbx (FBX Binary), .glb, .vrm, .gltf or .obj file, or a .zip with the model and "
+        raise ValueError("Use an .fbx, .glb, .vrm, .gltf or .obj file, or a .zip with the model and "
                          "its textures.")
     raw = base64.b64decode(payload, validate=True)
     if len(raw) > (MAX_PACKAGE if ext == ".zip" else MAX_IMPORT):
@@ -2629,8 +2629,9 @@ def import_character(payload: str) -> dict:
     for name in files:
         if name.endswith(".png") and not files[name].startswith(PNG_SIGNATURE):
             raise ValueError(f"{name} is not a valid PNG.")
-    if "source.fbx" in files and not files["source.fbx"].startswith(b"Kaydara FBX Binary"):
-        raise ValueError("source.fbx is not an FBX Binary file.")
+    if "source.fbx" in files and not (files["source.fbx"].startswith(b"Kaydara FBX Binary")
+                                  or b"FBXHeaderExtension" in files["source.fbx"][:4096]):
+        raise ValueError("source.fbx is not an FBX file.")
     if "source.glb" in files and not files["source.glb"].startswith(b"glTF"):
         raise ValueError("source.glb is not a glTF binary file.")
     if "source.vrm" in files and not files["source.vrm"].startswith(b"glTF"):

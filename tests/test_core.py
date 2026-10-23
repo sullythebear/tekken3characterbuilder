@@ -931,3 +931,47 @@ class FormatTests(unittest.TestCase):
         glb = formats.to_glb("scene.gltf", gltf, {"sub/scene.bin": b"abcd"})
         clen = struct.unpack_from("<I", glb, 12)[0]
         self.assertEqual(glb[20 + clen + 8:20 + clen + 12], b"abcd")
+
+
+class AsciiFbxTests(unittest.TestCase):
+    """fbx.read_ascii: the same node tree as the binary reader (names, arrays, base64 content)."""
+
+    def test_ascii_tree(self):
+        import fbx
+        text = "\n".join([
+            "; FBX 7.4.0 project file",
+            "FBXHeaderExtension:  {",
+            "\tFBXVersion: 7400",
+            "}",
+            "Objects:  {",
+            '\tGeometry: 2035, "Geometry::Body", "Mesh" {',
+            "\t\tVertices: *6 {",
+            "\t\t\ta: 0,0,0,",
+            "1.5,-2e-1,3",
+            "\t\t} ",
+            "\t\tShading: T",
+            "\t}",
+            '\tVideo: 77, "Video::Skin", "Clip" {',
+            "\t\tContent: , ",
+            '\t\t"aGVsbG8="',
+            "\t}",
+            "}",
+            "Connections:  {",
+            "\t;Geometry::Body, Model::Body",
+            '\tC: "OO",2035,1',
+            "}",
+        ])
+        root = fbx.read_ascii(text)
+        self.assertEqual(root.props[0], 7400)
+        geo = root.find("Objects").find("Geometry")
+        self.assertEqual(geo.props[:3], [2035, "Body\x00\x01Geometry", "Mesh"])
+        self.assertEqual(fbx.object_name(geo), "Body")
+        self.assertEqual(geo.value("Vertices"), [0, 0, 0, 1.5, -0.2, 3])
+        self.assertEqual(geo.value("Shading"), "T")
+        self.assertEqual(root.find("Objects").find("Video").value("Content"), b"hello")
+        self.assertEqual(root.find("Connections").find("C").props, ["OO", 2035, 1])
+        with tempfile.TemporaryDirectory() as d:
+            old = Path(d) / "old.fbx"
+            old.write_text("; FBX 6.1.0 project file\nFBXHeaderExtension:  {\n\tFBXVersion: 6100\n}\n")
+            with self.assertRaises(fbx.FbxError):
+                fbx.read(old)
