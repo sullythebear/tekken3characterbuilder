@@ -24,7 +24,7 @@ ATLAS = 256
 GUTTER = 2
 _SHELL = {}
 MANIFOLD = False             # link condition in the collapse (the shell itself is made manifold)
-WEB_BELOW = 0.03            # triangles on both legs this far (share of the height) below the hips go
+WEB_BELOW = 0.12            # triangles on both legs this far (share of the height) below the hips go
 
 
 def _weld(P):

@@ -55,6 +55,30 @@ def _no_skeleton(load):
     return f
 
 
+def _beside(src_file):
+    """What the builder passes with a character's source.*: its texture images (textures-source.json,
+    or an older single texture-source.*), colours painted and joints placed by hand."""
+    folder, stem = src_file.parent, src_file.stem
+    if stem != "source":
+        return
+    spec = folder / f"textures-{stem}.json"
+    if spec.is_file():
+        data = json.loads(spec.read_text(encoding="utf-8"))
+        DI.set_texture_images([{"name": i["name"], "path": folder / i["file"]} for i in data.get("images", [])],
+                              data.get("assign"))
+    else:
+        old = next((p for p in folder.glob(f"texture-{stem}.*")), None)
+        if old:
+            DI.set_external_texture(old)
+    colours = folder / f"colours-{stem}.json"
+    if colours.is_file():
+        DI.set_colours(json.loads(colours.read_text(encoding="utf-8")))
+    rig = folder / f"rig-{stem}.json"
+    if rig.is_file():
+        r = json.loads(rig.read_text(encoding="utf-8"))
+        DI.set_rig(r.get("joints"), r.get("turn", "auto"), r.get("paint"))
+
+
 def build(cid, info, src_file):
     """Imports src_file as the app does. -> (model bytes, reference RGB, degraded?)"""
     cap = {}
@@ -76,11 +100,15 @@ def build(cid, info, src_file):
         cap["degrade"] = degrade if src.get("reduced") or len(src["T"]) > DI.REDUCE_ABOVE else False
         return inner(root, model, src, log, degrade)
     TB.quantise_groups, DI._build = q, b
+    _beside(Path(src_file))
     try:
         stock, new, tx, rep = DI.build(GAME, info["model"], src_file, log=lambda *a: None, parts=info.get("parts"),
                                          settings=info.get("settings"))
     finally:
         TB.quantise_groups, DI._build = quant, inner
+        DI.set_texture_images([])
+        DI.set_colours(None)
+        DI.set_rig()
     return X.own_model_file(info["model"], stock, new, tx), cap["rgb"], cap["owner"], cap.get("degrade", False)
 
 

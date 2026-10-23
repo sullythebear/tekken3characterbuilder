@@ -522,7 +522,12 @@ files, 400 MB unpacked, no paths outside. The file name shown is "soldier-obj.zi
 - Leg webs of auto-rigged models: the Soldier's knees touch, so (1) the auto rig's growing let
   inner-knee points cross to the other leg -> `autorig.segment` now gives a leg point to the leg
   whose bones are nearest in a straight line; (2) after `reduce` a triangle with corners on both
-  legs more than `WEB_BELOW` (3 %) of the height below the hips goes (the fighting stance stretched
+  legs more than `WEB_BELOW` (12 %) of the height below the hips goes (the fighting stance stretched
   it into a web from knee to shin). Unrigged Soldier: cross-leg triangles 25 -> 10, all at the
   crotch; the rigged Soldier loses 8 (no holes in the renders). The back flap of the unrigged
   Soldier still hangs diagonally over the thighs.
+- `WEB_BELOW` 0.03 -> 0.12: at 3 % NIKKI's thighs (touching just under the crotch) got holes (culling holes 99
+  -> 203); at 12 % she is byte-identical and the Soldier's knee and calf webs still go (13 triangles).
+- `regress.py` now builds a character the way the builder does: with its texture images
+  (`textures-source.json`, or an older `texture-source.*`), colours and rig beside `source.*` (NIKKI
+  came out grey before).
