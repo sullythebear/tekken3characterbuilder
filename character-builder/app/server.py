@@ -1256,7 +1256,7 @@ def donor_models() -> dict:
 
 
 MODEL_SOURCES = (".fbx", ".glb", ".vrm")
-UPLOAD_EXTRA = (".gltf", ".obj", ".zip")      # turned into a .glb (formats.py) when uploaded
+UPLOAD_EXTRA = (".gltf", ".dae", ".obj", ".zip", ".zae")      # turned into a .glb (formats.py) when uploaded
 
 
 # texture images the player added beside the model file: texture-<stem>-<n>.<ext> listed in
@@ -1396,18 +1396,18 @@ def check_model(cid: str, name: str, payload: str) -> dict:
         raise ValueError("Save the character first.")
     ext = Path(str(name)).suffix.lower()
     if ext not in MODEL_SOURCES + UPLOAD_EXTRA:
-        raise ValueError("Use an .fbx, .glb, .vrm, .gltf or .obj file, or a .zip with the model and "
+        raise ValueError("Use an .fbx, .glb, .vrm, .gltf, .dae or .obj file, or a .zip with the model and "
                          "its textures.")
     raw = base64.b64decode(payload, validate=True)
-    if len(raw) > (MAX_PACKAGE if ext == ".zip" else MAX_IMPORT):
+    if len(raw) > (MAX_PACKAGE if ext in (".zip", ".zae") else MAX_IMPORT):
         raise ValueError("This model file is too large (16 MB at most; a .zip 96 MB).")
     # a .zip (as models are shared online) gives its model and the files beside it; a .gltf or
     # .obj becomes a .glb, with the textures it names embedded when they are there
     files, used, inner = {}, set(), Path(str(name)).name
-    if ext == ".zip":
+    if ext in (".zip", ".zae"):                       # a .zae is Collada zipped
         inner, raw, files = formats.from_zip(raw)
         ext = Path(inner).suffix.lower()
-    if ext in (".gltf", ".obj"):
+    if ext in (".gltf", ".dae", ".obj"):
         raw = formats.to_glb(inner, raw, files, used)
         ext = ".glb"
     for old in [*folder.glob("upload.*"), *folder.glob("rig-upload.json"), *folder.glob("colours-upload.json")]:

@@ -27,6 +27,7 @@ ELBOW, WRIST, NECK = 0.36, 0.70, 0.15
 SHOULDER, DEPTH_K, RAISE = "depth", 1.55, 0.032
 CHIBI_SHOULDERS = 0.58             # shoulders under this share of the height: a chibi (41-57 %; others 59 % and up)
 ARM_LINE = 0.02                    # shoulder this far (share of the height) above the arm's line: put on it
+ARMS_WIDER = 1.3                   # upper body this much wider than deep: the arms are spread, side to side
 BEND = 35                          # degrees: where the arm's way turns into the torso (the shoulder)
 NECK_SPLIT = (0.35, 0.15)          # spine ends / head starts this share of shoulder..head below it
 HEAD_LIFT, HEAD_WIDTH = 0.03, 0.5  # all above the head joint + lift, within this share of the shoulders: head
@@ -638,7 +639,13 @@ def orient(P, T=None, up=None):
     low = S[ys0 < lo + 0.04 * H][:, others]
     widths = [np.ptp(P[y < lo + 0.5 * H][:, k]) for k in others]
     side_i = int(np.argmax(widths))
-    if len(low) > 20:
+    # arms spread (T- or A-pose) say it best: the upper body is far wider side to side than deep;
+    # the feet only when it is not (one foot ahead of the other split them front to back: the elf)
+    upper = P[y > lo + 0.5 * H][:, others]
+    spans = np.ptp(upper, axis=0) if len(upper) else np.zeros(2)
+    if spans.min() > 0 and spans.max() / spans.min() > ARMS_WIDER:
+        side_i = int(np.argmax(spans))
+    elif len(low) > 20:
         c = low.mean(0)
         a, b = low[low[:, 0] < c[0]], low[low[:, 0] >= c[0]]
         for _ in range(10):                          # two clusters (2-means), seeded along each axis

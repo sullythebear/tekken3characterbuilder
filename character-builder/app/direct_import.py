@@ -146,6 +146,20 @@ def _named_like(material: str, kinds: list) -> int | None:
     return None if best is None else best[1]
 
 
+def _stand(src: dict, mi: int) -> bool:
+    """A material that is a stand or a ground plate: all in the bottom 8 % of the model, flat, and
+    wider than a body in both directions (the elf's flower base)."""
+    if "P" not in src:
+        return False
+    P, T, MAT = np.asarray(src["P"], float), np.asarray(src["T"]), np.asarray(src["MAT"])
+    if (MAT == mi).sum() == len(MAT):
+        return False
+    H = float(np.ptp(P[:, 1])) or 1.0
+    v = P[T[MAT == mi].ravel()]
+    lo = float(P[:, 1].min())
+    return bool(v[:, 1].max() <= lo + 0.08 * H and min(np.ptp(v[:, 0]), np.ptp(v[:, 2])) >= 0.4 * H)
+
+
 def texture_plan(src: dict) -> dict:
     """What every material wears: {material: {"use": "own" | "colour" | image index, "how":
     "chosen" | "auto", "why": text}}. Automatic: the image the file asks for by name, else one
@@ -182,6 +196,8 @@ def texture_plan(src: dict) -> dict:
         elif not own and see_through(name):
             plan[mi] = {"use": "hide", "how": "auto", "why": "a see-through layer (an eye's shell): left out, "
                                                             "the PS1 draws nothing see-through"}
+        elif _stand(src, mi):
+            plan[mi] = {"use": "hide", "how": "auto", "why": "a stand under the feet: left out"}
         else:
             plan[mi] = {"use": "own" if own else "colour", "how": "auto",
                         "why": "its own texture" if own else "no image fits: plain colour" if mapped or not len(uv) else "no UV map: plain colour"}
@@ -416,17 +432,44 @@ def _auto_rig(out: dict, suffix: str) -> None:
     as a rigged file would have. A shape it cannot rig keeps its reason in "rig_error"."""
     import autorig
     P, T = np.asarray(out["P"], float), np.asarray(out["T"])
+    # materials left out at the import (a stand, an eye's shell) are not the body: rig without them
+    keep = ~np.isin(np.asarray(out["MAT"]), out.get("hidden_materials") or [])
+    Tv = T[keep] if keep.any() else T
     if isinstance(RIG_TURN, (list, tuple, np.ndarray)):
         R = np.asarray(RIG_TURN, float)
     else:                                            # glTF is Y up by its standard, an FBX says
         hint = [0.0, 1, 0] if suffix in (".glb", ".vrm") else out.get("up")   # its own up axis
-        R = autorig.orient(P, T, up=None if hint is None else np.array(hint, float))
-    out["P"] = P @ R.T
+        used = np.unique(Tv)
+        remap = np.full(len(P), -1)
+        remap[used] = np.arange(len(used))
+        R = autorig.orient(P[used], remap[Tv], up=None if hint is None else np.array(hint, float))
+    out["P"] = P = P @ R.T
     out["turn"] = R.tolist()
+    used = np.unique(Tv)
+    remap = np.full(len(P), -1)
+    remap[used] = np.arange(len(used))
+    sub = {"P": P[used], "T": remap[Tv]}
     try:
-        autorig.rig(out, RIG_JOINTS, RIG_PAINT)
+        autorig.rig(sub, RIG_JOINTS, RIG_PAINT)
     except autorig.RigError as error:
         out["rig_error"] = str(error)
+        return
+    if len(used) == len(P):
+        out.update({k: sub[k] for k in ("bones", "weights", "vbone", "auto_rig")})
+        return
+    # the points outside the rig take the weights of the nearest rigged point
+    from_sub = remap.copy()
+    rest = np.where(remap < 0)[0]
+    if len(rest):
+        Pu = P[used]
+        step = max(1, len(used) // 6000)
+        sample = np.arange(0, len(used), step)
+        for chunk in np.array_split(rest, max(1, len(rest) // 2000)):
+            d = ((P[chunk][:, None, :] - Pu[sample][None]) ** 2).sum(2)
+            from_sub[chunk] = sample[np.argmin(d, axis=1)]
+    out["bones"], out["auto_rig"] = sub["bones"], sub["auto_rig"]
+    out["weights"] = [sub["weights"][i] for i in from_sub]
+    out["vbone"] = np.asarray(sub["vbone"])[from_sub]
 
 
 def _vrm_extras(src: dict) -> None:

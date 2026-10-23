@@ -1028,3 +1028,80 @@ class VertexColourTests(unittest.TestCase):
         pal, label = DI._median_cut(np.random.default_rng(0).random((500, 3)), np.ones(500), 48)
         self.assertLessEqual(len(pal), 48)
         self.assertEqual(len(label), 500)
+
+
+class ColladaTests(unittest.TestCase):
+    """collada.py: a .dae with a skinned quad becomes a .glb with nodes, a skin and weights; a
+    material that is a stand under the feet is left out."""
+
+    DAE = """<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset><up_axis>Z_UP</up_axis></asset>
+  <library_images><image id="skin_png"><init_from>tex/Skin.png</init_from></image></library_images>
+  <library_effects><effect id="skin-fx"><profile_COMMON>
+    <newparam sid="s-surface"><surface type="2D"><init_from>skin_png</init_from></surface></newparam>
+    <newparam sid="s-sampler"><sampler2D><source>s-surface</source></sampler2D></newparam>
+    <technique sid="common"><lambert><diffuse><texture texture="s-sampler" texcoord="UV"/></diffuse></lambert></technique>
+  </profile_COMMON></effect></library_effects>
+  <library_materials><material id="skin-mat" name="Skin"><instance_effect url="#skin-fx"/></material></library_materials>
+  <library_geometries><geometry id="quad" name="Quad"><mesh>
+    <source id="pos"><float_array id="pos-a" count="12">0 0 0 1 0 0 1 0 2 0 0 2</float_array>
+      <technique_common><accessor source="#pos-a" count="4" stride="3"/></technique_common></source>
+    <source id="uv"><float_array id="uv-a" count="8">0 0 1 0 1 1 0 1</float_array>
+      <technique_common><accessor source="#uv-a" count="4" stride="2"/></technique_common></source>
+    <vertices id="verts"><input semantic="POSITION" source="#pos"/></vertices>
+    <polylist material="SKIN" count="1">
+      <input semantic="VERTEX" source="#verts" offset="0"/><input semantic="TEXCOORD" source="#uv" offset="1" set="0"/>
+      <vcount>4</vcount><p>0 0 1 1 2 2 3 3</p>
+    </polylist>
+  </mesh></geometry></library_geometries>
+  <library_controllers><controller id="ctrl"><skin source="#quad">
+    <bind_shape_matrix>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</bind_shape_matrix>
+    <source id="j"><Name_array id="j-a" count="2">Hips Head</Name_array>
+      <technique_common><accessor source="#j-a" count="2" stride="1"/></technique_common></source>
+    <source id="ibm"><float_array id="ibm-a" count="32">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 1 0 0 0 0 1 0 0 0 0 1 -2 0 0 0 1</float_array>
+      <technique_common><accessor source="#ibm-a" count="2" stride="16"/></technique_common></source>
+    <source id="w"><float_array id="w-a" count="2">1 0.5</float_array>
+      <technique_common><accessor source="#w-a" count="2" stride="1"/></technique_common></source>
+    <joints><input semantic="JOINT" source="#j"/><input semantic="INV_BIND_MATRIX" source="#ibm"/></joints>
+    <vertex_weights count="4"><input semantic="JOINT" source="#j" offset="0"/><input semantic="WEIGHT" source="#w" offset="1"/>
+      <vcount>1 1 2 1</vcount><v>0 0 0 0 0 1 1 1 1 0</v></vertex_weights>
+  </skin></controller></library_controllers>
+  <library_visual_scenes><visual_scene id="scene">
+    <node id="Armature" name="Armature" type="NODE">
+      <node id="Hips" sid="Hips" name="Hips" type="JOINT"><translate>0 0 0</translate>
+        <node id="Head" sid="Head" name="Head" type="JOINT"><translate>0 0 2</translate></node></node>
+    </node>
+    <node id="Body" name="Body"><instance_controller url="#ctrl"><skeleton>#Hips</skeleton>
+      <bind_material><technique_common><instance_material symbol="SKIN" target="#skin-mat"/></technique_common></bind_material>
+    </instance_controller></node>
+  </visual_scene></library_visual_scenes>
+  <scene><instance_visual_scene url="#scene"/></scene>
+</COLLADA>"""
+
+    def test_skinned_quad(self):
+        import formats
+        png = bytes([0x89]) + b"PNG fake"
+        used = set()
+        glb = formats.to_glb("model.dae", self.DAE.encode(), {"textures/Skin.png": png}, used)
+        self.assertEqual(used, {"textures/Skin.png"})
+        clen = struct.unpack_from("<I", glb, 12)[0]
+        j = json.loads(glb[20:20 + clen])
+        self.assertEqual([j["nodes"][k]["name"] for k in j["skins"][0]["joints"]], ["Hips", "Head"])
+        prim = j["meshes"][0]["primitives"][0]
+        self.assertEqual(j["accessors"][prim["indices"]]["count"], 6)                 # the quad as two triangles
+        self.assertIn("JOINTS_0", prim["attributes"])
+        self.assertEqual(j["materials"][prim["material"]]["name"], "Skin")
+        self.assertEqual(j["images"][0]["mimeType"], "image/png")
+        self.assertTrue(any(n.get("name") == "Z up to Y up" for n in j["nodes"]))
+
+    def test_stand_is_left_out(self):
+        import numpy as np
+        import direct_import as DI
+        body = np.array([[0, 0.1, 0], [0.1, 1, 0], [-0.1, 1, 0]], float)
+        plate = np.array([[-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0.02, 0.5]], float)
+        src = {"P": np.vstack([body, plate]), "T": np.array([[0, 1, 2], [3, 4, 5]]), "MAT": np.array([0, 1]),
+               "UV": np.random.default_rng(2).random((6, 2)), "textures": {0: b"a", 1: b"b"}}
+        plan = DI.texture_plan(src)
+        self.assertEqual(plan[1]["use"], "hide")
+        self.assertEqual(plan[0]["use"], "own")

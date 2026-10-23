@@ -17,7 +17,7 @@ import struct
 import zipfile
 from array import array
 
-MODELS = (".fbx", ".glb", ".vrm", ".gltf", ".obj")
+MODELS = (".fbx", ".glb", ".vrm", ".gltf", ".dae", ".obj")
 IMAGES = (".png", ".jpg", ".jpeg", ".tga")
 ZIP_FILES_MAX = 2000
 ZIP_TOTAL_MAX = 400 * 1024 * 1024        # unpacked
@@ -247,13 +247,16 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
 
 
 def to_glb(name: str, data: bytes, files: dict | None = None, used: set | None = None) -> bytes:
-    """A .gltf or .obj (with the files beside it) as .glb bytes; the files it took go into `used`."""
+    """A .gltf, .dae or .obj (with the files beside it) as .glb bytes; the files it took go into `used`."""
     ext = posixpath.splitext(name.lower())[1]
     if ext == ".gltf":
         return gltf_to_glb(data, files or {}, used)
     if ext == ".obj":
         return obj_to_glb(data, files or {}, used)
-    raise ValueError(f"{name}: not a .gltf or .obj")
+    if ext == ".dae":
+        import collada
+        return collada.to_glb(data, files or {}, _find, _pack, _mime, used)
+    raise ValueError(f"{name}: not a .gltf, .dae or .obj")
 
 
 def from_zip(raw: bytes) -> tuple[str, bytes, dict]:
@@ -276,7 +279,7 @@ def from_zip(raw: bytes) -> tuple[str, bytes, dict]:
             if total > ZIP_TOTAL_MAX:
                 raise ValueError("The .zip is too large unpacked.")
             files[name] = z.read(i)
-    rank = {".fbx": 0, ".glb": 0, ".vrm": 0, ".gltf": 1, ".obj": 2}
+    rank = {".fbx": 0, ".glb": 0, ".vrm": 0, ".gltf": 1, ".dae": 1, ".obj": 2}
     models = [n for n in files if posixpath.splitext(n.lower())[1] in MODELS]
     if not models:
         raise ValueError("No 3D model (.fbx, .glb, .vrm, .gltf or .obj) in the .zip.")

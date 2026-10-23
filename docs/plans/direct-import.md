@@ -559,3 +559,30 @@ for its shaders: NIKKI, 99 % of the coloured corners single-channel) are recogni
   file: "Vertex colours: 11376 triangles in 48 colours", imported (825 triangles), camo and the red
   hood details back. Of all 32 test models only NIKKI has vertex colours (masks: unchanged). Unit
   tests `VertexColourTests` (FBX colour layer, triangles, masks, median cut).
+
+## Collada (.dae, .zae) (2026-10-23)
+
+`collada.py` (stdlib, called by `formats.to_glb`) turns a .dae into a .glb: the scene's node tree
+(matrix / translate / rotate / scale composed in document order; instance_node followed),
+triangles / polylist / polygons / tristrips / trifans (polygons as fans; the lowest TEXCOORD set;
+v flipped), COLOR as COLOR_0, materials (effect diffuse colour or texture: 1.4 sampler -> surface ->
+image or 1.5 instance_image; images embedded when among the files, else named for the builder),
+skins (joints by sid / id / name, Name_array or IDREF_array, inverse bind matrices, vertex_weights
+to the 4 strongest; the bind shape matrix baked into the positions, glTF has none). A Z_UP file gets
+a root node turning it Y up (skinned meshes keep their bind space; the importer turns them by the
+skeleton). Animations are left out. A .zae (Collada zipped) is read as a .zip.
+- Test files downloaded with the user's permission (2026-10-23, never committed, in
+  `<game>/character-builder/testmodels/dl-dae/`): three.js `stormtrooper` (skinned, 52 bones,
+  texture), `elf` (4 textures, no skeleton, a flower stand), `skin_and_morph`; assimp `duck` (+TGA),
+  `kwxport_test_vcolors`, `cube_tristrips`, `ConcavePolygon`, `cube_with_2UVs`, `cube_UTF16LE`
+  (SCEA Shared Source licence). All nine convert; the stormtrooper passes the check with 14 of 14
+  Tekken bones and imports (858 triangles: white armour, helmet, belt); the elf is auto rigged.
+- Stands: a material entirely in the bottom 8 % of the model, flat, and at least 0.4 of the height wide
+  in both directions is a stand (`_stand`) and is left out ("hide"); the auto rig and turning upright
+  now run on the triangles that are not left out (a stand or an eye's shell no longer moves the soles
+  or the feet); points outside take the weights of the nearest rigged point.
+- Turning upright: the side-to-side axis is now the one the upper body is widest along when it is at
+  least 1.3 times wider than deep (arms spread); the two feet decide only otherwise. The elf stands
+  with one foot ahead and came out a quarter turned. Orientation bench: same failures as before
+  (VRM / chibi test artefacts), 140 of 174.
+- Unit tests `ColladaTests` (a skinned quad with a texture, Z up; a stand left out).
