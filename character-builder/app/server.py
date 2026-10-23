@@ -1728,7 +1728,7 @@ def clean_import_settings(value) -> dict:
     "detail": 100|80|60}; the defaults are left out (no method: an older import, reduced)."""
     out = {}
     if isinstance(value, dict):
-        if value.get("method") in ("rebuild", "reduce"):
+        if value.get("method") in ("rebuild", "reduce", "segment"):
             out["method"] = value["method"]
         shape = value.get("shape")
         if isinstance(shape, dict):

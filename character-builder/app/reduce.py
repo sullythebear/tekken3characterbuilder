@@ -702,7 +702,36 @@ def bake_atlas(V, F, src, base, neck_y, head_detail=4.0, log=print, lap=lambda w
     return UVl, buf.getvalue(), face
 
 
-def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) -> dict:
+def _shell_parts(V, src, base) -> np.ndarray:
+    """Per shell point the body part (an int) of the bone weighing most on the nearest original
+    point; a bone of no part takes its nearest parent's part (hair goes with the head)."""
+    import model_import as MI
+    bones = src["bones"]
+    key = []
+    for i, b in enumerate(bones):
+        j = i
+        while j >= 0 and MI._part(bones[j]["name"])[0] is None:
+            j = bones[j].get("parent", -1)
+        key.append(MI._part(bones[j]["name"]) if j >= 0 else ("spine", None))
+    ids = {k: n for n, k in enumerate(sorted(set(key), key=str))}
+    Pw, weld, Tw, opaque, S = (base[k] for k in ("Pw", "weld", "Tw", "opaque", "S"))
+    vb = np.full(len(Pw), -1)
+    for i, w in enumerate(src.get("weights") or []):
+        if w:
+            vb[weld[i]] = max(w, key=w.get)
+    To = Tw[opaque]
+    hit = S.lookup(V)
+    out = np.zeros(len(V), int)
+    for n, (t, u, v) in enumerate(hit):
+        if t < 0:
+            continue
+        tri = To[int(t)]
+        b = vb[tri[int(np.argmax((1 - u - v, u, v)))]]
+        out[n] = ids[key[b]] if b >= 0 else ids.get(("spine", None), 0)
+    return out
+
+
+def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0, segmented: bool = False) -> dict:
     import time
     t0 = time.time()
     lap = lambda what: log(f"  {what}: {time.time() - t0:.0f} s")
@@ -732,11 +761,20 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     dbg = __import__("os").environ.get("T3CB_DEBUG")
     if dbg:
         log(f"  non-manifold edges: shell {_nm(F)}")
-    V, kept, F, _ = DC.decimate(V, F, int(target * 1.5), importance=imp, uniform=0.3)
+    keep = None
+    if segmented and src.get("bones"):
+        # segment-aware: every shell point takes the body part of the bone weighing most on the
+        # nearest original point, and only points of one part merge. The seam between two parts
+        # stays a strip of triangles (Namco's joint rings) and no triangle runs across a joint
+        # (the free shell's triangles crossed shoulders and elbows, which tore when rows turned)
+        lab = _shell_parts(V, src, base)
+        keep = lambda a, b: lab[a] == lab[b]
+        log(f"segment-aware collapse: {len(set(lab.tolist()))} body parts")
+    V, kept, F, _ = DC.decimate(V, F, int(target * 1.5), keep=keep, importance=imp, uniform=0.3)
     F = np.asarray(F)
     if dbg:
         log(f"  non-manifold edges: collapse 1 {_nm(F)}")
-    V, _, F, _ = DC.decimate(V, F, target, importance=imp, uniform=0.3, manifold=True)
+    V, _, F, _ = DC.decimate(V, F, target, keep=keep, importance=imp, uniform=0.3, manifold=True)
     F = np.asarray(F)
     if dbg:
         log(f"  non-manifold edges: collapse 2 {_nm(F)}")

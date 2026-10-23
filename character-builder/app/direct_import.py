@@ -1441,7 +1441,7 @@ def build(root: Path, model: int, path: Path, log=print, parts=None, settings=No
     target = int(min(MI.MAX_PACKET_BYTES / 35.5, slot / 25.5) * 0.97 * settings.get("detail", 100) / 100)
     head = float(settings.get("head", 4))
     for k in range(8):
-        low = RD.reduce(src, target, log=log, head_detail=head)
+        low = RD.reduce(src, target, log=log, head_detail=head, segmented=settings.get("method") == "segment")
         try:
             return _build(root, model, low, log, degrade=k == 7)
         except MI.Budget as error:
