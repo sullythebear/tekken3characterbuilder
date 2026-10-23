@@ -582,6 +582,73 @@ def _colour_swatches(src: dict, colours: dict, linear: bool = True) -> None:
         src["UV"][corners] = 0.5
 
 
+VERTEX_MATERIAL = 20000                  # vertex-coloured triangles: material VERTEX_MATERIAL + colour
+VERTEX_COLOURS_MAX = 48
+
+
+def _median_cut(cols: np.ndarray, weights: np.ndarray, n: int) -> np.ndarray:
+    """At most n colours for the given ones (median cut, boxes split along their widest channel)."""
+    boxes = [np.arange(len(cols))]
+    while len(boxes) < n:
+        spans = [np.ptp(cols[b], axis=0).max() if len(b) > 1 else 0 for b in boxes]
+        k = int(np.argmax(spans))
+        if spans[k] <= 0:
+            break
+        b = boxes.pop(k)
+        ch = int(np.argmax(np.ptp(cols[b], axis=0)))
+        b = b[np.argsort(cols[b, ch])]
+        cum = np.cumsum(weights[b])
+        cut = int(np.clip(np.searchsorted(cum, cum[-1] / 2), 1, len(b) - 1))
+        boxes += [b[:cut], b[cut:]]
+    pal = np.array([np.average(cols[b], axis=0, weights=weights[b]) for b in boxes])
+    label = np.zeros(len(cols), int)
+    for i, b in enumerate(boxes):
+        label[b] = i
+    return pal, label
+
+
+def _vertex_colours(src: dict, vcol: np.ndarray) -> None:
+    """Vertex colours (low-poly models without a texture): every triangle of a material without a
+    texture takes its corners' mean colour, reduced to VERTEX_COLOURS_MAX colours, as plain swatch
+    materials (the corners split off as for colours painted by hand). White everywhere: nothing."""
+    from PIL import Image
+    T, MAT = np.asarray(src["T"]), np.asarray(src["MAT"]).copy()
+    if len(vcol) != len(src["P"]):
+        return
+    # colours used as masks (Unreal: pure red, green or blue painted for its shaders) are no colours
+    lit = vcol[np.abs(vcol - 1).max(1) > 0.02]
+    if len(lit) and ((lit > 0.05).sum(1) <= 1).mean() > 0.9:
+        src["vertex_masks"] = True
+        return
+    bare = np.array([m not in src["textures"] for m in MAT])
+    face = vcol[T].mean(1)
+    sel = np.where(bare & (np.abs(face - 1).max(1) > 0.02))[0]
+    if not len(sel):
+        return
+    q = np.round(face[sel] * 31).astype(int)                 # 15-bit colours, as the PS1 draws them
+    uniq, inv, counts = np.unique(q, axis=0, return_inverse=True, return_counts=True)
+    pal, label = _median_cut(uniq / 31.0, counts.astype(float), VERTEX_COLOURS_MAX)
+    lab = label[inv.ravel()]
+    P, UV = np.asarray(src["P"], float), np.asarray(src["UV"], float)
+    corners = T[sel].ravel()
+    base = len(P)
+    src["P"] = np.concatenate([P, P[corners]])
+    src["UV"] = np.concatenate([UV, np.full((len(corners), 2), 0.5)])
+    if src.get("weights") is not None:
+        src["weights"] = list(src["weights"]) + [src["weights"][i] for i in corners]
+    if src.get("vbone") is not None:
+        src["vbone"] = np.concatenate([np.asarray(src["vbone"]), np.asarray(src["vbone"])[corners]])
+    T = T.copy()
+    T[sel] = base + np.arange(len(corners)).reshape(-1, 3)
+    for k, rgb in enumerate(pal):
+        buf = io.BytesIO()
+        Image.new("RGBA", (8, 8), tuple(int(round(c * 255)) for c in rgb) + (255,)).save(buf, "PNG")
+        src["textures"][VERTEX_MATERIAL + k] = buf.getvalue()
+    MAT[sel] = VERTEX_MATERIAL + lab
+    src["T"], src["MAT"] = T, MAT
+    src["vertex_coloured"] = (int(len(sel)), len(pal))
+
+
 def merge_textures(src: dict) -> None:
     """Several textures (or colour swatches) in one: a grid of cells, every triangle's UVs moved
     into its material's cell (the PS1 model has one 256 x 256 page)."""
@@ -734,6 +801,9 @@ def _load(path: Path) -> dict:
             w = g["weights"]
             out["bones"], out["weights"] = g["bones"], w
             out["vbone"] = np.array([max(x, key=x.get) if x else -1 for x in w])
+        if g.get("vertex_colours") is not None:      # glTF colours are linear
+            lin = np.clip(np.asarray(g["vertex_colours"], float), 0, 1)
+            _vertex_colours(out, np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055))
         _colour_swatches(out, g.get("colours", {}))
         return out
     import fbx
@@ -752,13 +822,15 @@ def _load(path: Path) -> dict:
     if c.get("up") in (0, 1, 2):                       # the file's own up axis (GlobalSettings)
         out["up"] = [float(c.get("up_sign") or 1) * (k == c["up"]) for k in range(3)]
     _apply_textures(out)
-    _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     if c["bones"]:
         # a real rig (e.g. from Mixamo): joints and the strongest bone of every vertex
         w = c["weights"]
         out["bones"] = c["bones"]
         out["vbone"] = np.array([max(w[i], key=w[i].get) if w[i] else -1 for i in T.ravel()])
         out["weights"] = [w[i] for i in T.ravel()]
+    if c.get("corner_colours") is not None:            # FBX colours: display values, per corner
+        _vertex_colours(out, np.clip(np.array(c["corner_colours"], float).reshape(-1, 3), 0, 1))
+    _colour_swatches(out, c.get("colours", {}), linear=False)     # FBX colours are display values
     return out
 
 
@@ -1001,7 +1073,7 @@ def inspect(path: Path) -> dict:
                           **{k: p_[k] for k in ("use", "how", "why")}}
                          for mi, p_ in sorted(plan.items())]
     info["colourless"] = (not any(k < PAINT_MATERIAL and k not in src.get("plain", []) for k in (src.get("textures") or {}))
-                          and not TEXTURE_IMAGES)
+                          and not TEXTURE_IMAGES and not src.get("vertex_coloured"))
     return info
 
 
@@ -1091,16 +1163,23 @@ def checks(src: dict, info: dict, weighted: int) -> list:
     hidden = [m for m in mats if plan_.get(m, {}).get("use") == "hide"]
     bare = [m for m in bare if m not in hidden]
     coloured = len(mats) - added - embedded - len(bare) - len(hidden)
-    add("Materials", "ok" if not bare else "warn",
-        f"{len(mats)} material{'s' if len(mats) != 1 else ''}: {embedded} with a texture in the file"
-        + (f", {added} with an added image" if added else "")
-        + (f", {coloured} in a plain colour" if coloured else "")
-        + (f", {len(hidden)} left out" if hidden else "")
-        + (f"; {len(bare)} without any colour {'is' if len(bare) == 1 else 'are'} drawn grey" if bare else ""))
+    if mats:
+        add("Materials", "ok" if not bare else "warn",
+            f"{len(mats)} material{'s' if len(mats) != 1 else ''}: {embedded} with a texture in the file"
+            + (f", {added} with an added image" if added else "")
+            + (f", {coloured} in a plain colour" if coloured else "")
+            + (f", {len(hidden)} left out" if hidden else "")
+            + (f"; {len(bare)} without any colour {'is' if len(bare) == 1 else 'are'} drawn grey" if bare else ""))
+    if src.get("vertex_masks"):
+        add("Materials", "ok", "The vertex colours are masks for a game engine's shaders (pure red, green, blue): "
+                               "not used as colours")
+    if src.get("vertex_coloured"):
+        add("Materials", "ok", f"Vertex colours: {src['vertex_coloured'][0]} triangles in {src['vertex_coloured'][1]} "
+                               "colours (one colour per triangle, as PS1 models are drawn)")
     if src.get("painted"):
         add("Materials", "ok", f"{src['painted']} triangles painted by hand in "
-                               f"{len(set(int(m) for m in np.asarray(src['MAT']) if m >= PAINT_MATERIAL))} colours")
-    elif len(bare) == len(mats) and not TEXTURE_IMAGES:
+                               f"{len(set(int(m) for m in np.asarray(src['MAT']) if PAINT_MATERIAL <= m < VERTEX_MATERIAL))} colours")
+    elif len(bare) == len(mats) and not TEXTURE_IMAGES and not src.get("vertex_coloured"):
         add("Materials", "info", "The file has no colours of its own: paint the model with the painter (🎨 Paint)")
     if len(mats) > 1:
         add("Materials", "ok", f"The {len(mats)} materials share one 256 x 256 texture page (each gets a cell)")

@@ -333,7 +333,10 @@ def character(path: Path) -> dict:
         idx = geo.value("PolygonVertexIndex")
         uv = _layer(geo, "LayerElementUV", "UV", "UVIndex")
         mat = _layer(geo, "LayerElementMaterial", "Materials", "")
-        triangles, corner_uvs, materials = [], [], []
+        col = _layer(geo, "LayerElementColor", "Colors", "ColorIndex")    # vertex colours (RGBA)
+        if col and not col["data"]:
+            col = None
+        triangles, corner_uvs, materials, corner_cols = [], [], [], []
         poly, pcount = [], 0
         for k, v in enumerate(idx):
             poly.append((v if v >= 0 else ~v, k))
@@ -352,12 +355,20 @@ def character(path: Path) -> dict:
                             corner_uvs += uv["data"][2 * u_at:2 * u_at + 2]
                         else:
                             corner_uvs += [0.0, 0.0]
+                        if col:
+                            c_at = vert if col["mapping"] == "ByControlPoint" else corner_at
+                            if col["reference"] == "IndexToDirect":
+                                c_at = col["index"][c_at]
+                            corner_cols += col["data"][4 * c_at:4 * c_at + 3]
+                        else:
+                            corner_cols += [1.0, 1.0, 1.0]
                     materials.append(m)
                 poly = []; pcount += 1
         # textures: Model(mesh) <- Material <- Texture (DiffuseColor) <- Video (Content)
         mesh_model = next((p for p, _, _ in parents.get(gid, []) if p in objs and objs[p].name == "Model"), None)
         mats = [m for m, _, _ in children.get(mesh_model, []) if m in objs and objs[m].name == "Material"]
-        parts.append((positions, triangles, corner_uvs, materials, clusters, mats, len(raw) // 3))
+        parts.append((positions, triangles, corner_uvs, materials, clusters, mats, len(raw) // 3,
+                      corner_cols, col is not None))
 
     # bones: every LimbNode, parent = the Model it is connected to; bind matrices from all skins
     limb = {i: n for i, n in objs.items() if n.name == "Model" and len(n.props) > 2 and n.props[2] in ("LimbNode", "Root", "Null")}
@@ -378,9 +389,10 @@ def character(path: Path) -> dict:
         parent = next((p for p, _, _ in parents.get(i, []) if p in order), None)
         bones.append({"name": object_name(limb[i]).replace("mixamorig:", ""), "parent": order.get(parent, -1), "matrix": bind[i]})
 
-    positions, triangles, corner_uvs, materials, weights = [], [], [], [], []
+    positions, triangles, corner_uvs, materials, weights, corner_cols = [], [], [], [], [], []
     textures, colours, names, material_ids = {}, {}, [], {}
-    for pos, tris, cuv, mts, clusters, mats, nverts in parts:
+    has_cols = any(part[8] for part in parts)
+    for pos, tris, cuv, mts, clusters, mats, nverts, ccol, _ in parts:
         base = len(positions) // 3
         w = [dict() for _ in range(nverts)]
         for c, bone in clusters:
@@ -398,6 +410,7 @@ def character(path: Path) -> dict:
         positions += pos
         triangles += [t + base for t in tris]
         corner_uvs += cuv
+        corner_cols += ccol
         materials += [local[m] if m < len(local) else (local[0] if local else 0) for m in mts]
         weights += w
     wanted = {}                                       # material -> texture file not embedded
@@ -418,6 +431,7 @@ def character(path: Path) -> dict:
             if k not in textures:                      # a texture file that is not in the FBX
                 wanted[k] = objs[tid].value("RelativeFilename") or objs[tid].value("FileName") or ""
     return {"positions": positions, "missing_textures": wanted, "triangles": triangles, "corner_uvs": corner_uvs, "materials": materials,
+            "corner_colours": corner_cols if has_cols else None,
             "material_names": names, "bones": bones, "weights": weights,
             "textures": textures, "colours": colours, "up": s["settings"].get("UpAxis", [1])[0],
             "up_sign": s["settings"].get("UpAxisSign", [1])[0], "unit": s["settings"].get("UnitScaleFactor", [1.0])[0]}

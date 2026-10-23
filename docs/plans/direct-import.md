@@ -544,3 +544,18 @@ files, 400 MB unpacked, no paths outside. The file name shown is "soldier-obj.zi
 - Regress 2026-10-23 (`--all --unrigged`): all approved models the same except MegaAngel (holes 52 -> 1) and
   MushroomFairy (skirt flaps), changed by the fold-down fix; both reviewed and approved. 26 of 27 unrigged
   test models import (CesiumMan: the known test artefact).
+
+## Vertex colours (2026-10-23)
+
+Many low-poly models have no texture but a colour per vertex: glTF `COLOR_0` (linear), FBX
+`LayerElementColor` (per corner or per control point, direct or indexed), .obj `v x y z r g b`
+(written into the converted .glb as COLOR_0). `_vertex_colours` (after the bones, before the
+material swatches): every triangle of a material without a texture takes its corners' mean colour,
+the colours are reduced to `VERTEX_COLOURS_MAX` (48) by median cut over the 15-bit colours, and
+applied as swatch materials (`VERTEX_MATERIAL` + index, corners split off as for the painter, which
+then shows and paints over them). Colours used as **masks** (Unreal paints pure red / green / blue
+for its shaders: NIKKI, 99 % of the coloured corners single-channel) are recognised and not used.
+- **tested**: the Soldier written out as an .obj with vertex colours from its texture and no texture
+  file: "Vertex colours: 11376 triangles in 48 colours", imported (825 triangles), camo and the red
+  hood details back. Of all 32 test models only NIKKI has vertex colours (masks: unchanged). Unit
+  tests `VertexColourTests` (FBX colour layer, triangles, masks, median cut).

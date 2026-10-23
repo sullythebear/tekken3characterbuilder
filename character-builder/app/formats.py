@@ -128,7 +128,7 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
     """An .obj (with its .mtl and images among the files) as a .glb: one primitive per material,
     flat UVs per corner (v turned to glTF's top-down), the .mtl's colours and colour maps."""
     text = data.decode("utf-8", errors="replace")
-    V, VT = [], []
+    V, VT, VC = [], [], []              # VC: vertex colours ("v x y z r g b", sRGB 0..1)
     materials = {}                                    # name -> list of corner keys
     order, current, libs = [], "default", []
     for line in text.splitlines():
@@ -140,6 +140,10 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
         key = parts[0]
         if key == "v" and len(parts) >= 4:
             V.append((float(parts[1]), float(parts[2]), float(parts[3])))
+            if len(parts) >= 7:
+                VC.append(tuple(_srgb_to_linear(min(1.0, max(0.0, float(x)))) for x in parts[4:7]))
+            else:
+                VC.append((1.0, 1.0, 1.0))
         elif key == "vt" and len(parts) >= 3:
             VT.append((float(parts[1]), float(parts[2])))
         elif key == "usemtl":
@@ -188,11 +192,12 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
         corners = materials[name]
         if not corners:
             continue
-        index, pos, uv, idx = {}, array("f"), array("f"), array("I")
+        index, pos, uv, idx, col = {}, array("f"), array("f"), array("I"), array("f")
         for c in corners:
             if c not in index:
                 index[c] = len(index)
                 pos.extend(V[c[0]])
+                col.extend(VC[c[0]])
                 if c[1] >= 0:
                     u, v = VT[c[1]]
                     uv.extend((u, 1.0 - v))
@@ -208,6 +213,10 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
                           "type": "VEC2"})
         accessors.append({"bufferView": add_view(idx.tobytes(), 34963), "componentType": 5125, "count": len(idx),
                           "type": "SCALAR"})
+        coloured = any(c != (1.0, 1.0, 1.0) for c in VC)
+        if coloured:
+            accessors.append({"bufferView": add_view(col.tobytes(), 34962), "componentType": 5126, "count": n,
+                              "type": "VEC3"})
         m = mtl.get(name, {"colour": [0.8, 0.8, 0.8], "map": None})
         pbr = {"baseColorFactor": [_srgb_to_linear(c) for c in m["colour"]] + [1.0], "metallicFactor": 0.0}
         if m["map"]:
@@ -222,8 +231,11 @@ def obj_to_glb(data: bytes, files: dict, used: set | None = None) -> bytes:
             pbr["baseColorTexture"] = {"index": len(textures) - 1}
             pbr["baseColorFactor"] = [1.0, 1.0, 1.0, 1.0]
         mats.append({"name": name, "pbrMetallicRoughness": pbr})
-        prims.append({"attributes": {"POSITION": len(accessors) - 3, "TEXCOORD_0": len(accessors) - 2},
-                      "indices": len(accessors) - 1, "material": len(mats) - 1})
+        k0 = len(accessors) - (4 if coloured else 3)
+        attrs = {"POSITION": k0, "TEXCOORD_0": k0 + 1}
+        if coloured:
+            attrs["COLOR_0"] = k0 + 3
+        prims.append({"attributes": attrs, "indices": k0 + 2, "material": len(mats) - 1})
     j = {"asset": {"version": "2.0", "generator": "Dizzy Character Creator (from .obj)"},
          "buffers": [{"byteLength": 0}], "bufferViews": views, "accessors": accessors,
          "meshes": [{"primitives": prims}], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0,

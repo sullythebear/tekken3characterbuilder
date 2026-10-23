@@ -64,7 +64,8 @@ def read(path: Path) -> dict:
     for s in j.get("scenes", [{"nodes": list(range(len(j["nodes"])))}]):
         for i in s["nodes"]:
             walk(i, np.eye(4))
-    P, T, UV, MAT = [], [], [], []
+    P, T, UV, MAT, COL = [], [], [], [], []
+    has_col = False
     # a skin: its joints become the bones (bind matrix = inverse of the inverse bind matrix),
     # skinned meshes are already in bind space (glTF ignores their node transform)
     bones, WTS, skin_of = [], [], {}
@@ -125,15 +126,20 @@ def read(path: Path) -> dict:
                 WTS += [{} if rigid is None else {rigid: 1.0} for _ in range(len(p))]
             idx = acc(prim["indices"]).astype(int) if "indices" in prim else np.arange(len(p))
             uv = acc(a["TEXCOORD_0"]).astype(float) if "TEXCOORD_0" in a else np.zeros((len(p), 2))
+            # vertex colours (low-poly models without a texture): linear RGB, white where none
+            col = acc(a["COLOR_0"]).astype(float)[:, :3] if "COLOR_0" in a else np.ones((len(p), 3))
+            has_col = has_col or "COLOR_0" in a
             base = sum(len(x) for x in P)
             P.append(p)
             UV.append(uv)
+            COL.append(col)
             t = idx.reshape(-1, 3) + base
             T.append(t)
             MAT += [prim.get("material", 0)] * len(t)
     P = np.concatenate(P)
     UV = np.concatenate(UV)
     T = np.concatenate(T)
+    COL = np.concatenate(COL)
     textures, colours, names, missing = {}, {}, [], {}
     for mi, m in enumerate(j.get("materials", [])):
         names.append(m.get("name") or f"Material {mi + 1}")
@@ -149,6 +155,7 @@ def read(path: Path) -> dict:
             missing[mi] = str(img["uri"])           # an image file beside the model, not in it
     out = {"positions": P, "triangles": T, "uv": UV, "materials": np.array(MAT), "textures": textures,
            "colours": colours, "material_names": names, "missing_textures": missing,
+           "vertex_colours": COL if has_col else None,
            "skinned": any("skin" in n for n in j["nodes"])}
     if bones and any(WTS):
         out["bones"], out["weights"] = bones, WTS

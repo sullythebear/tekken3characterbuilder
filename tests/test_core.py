@@ -975,3 +975,56 @@ class AsciiFbxTests(unittest.TestCase):
             old.write_text("; FBX 6.1.0 project file\nFBXHeaderExtension:  {\n\tFBXVersion: 6100\n}\n")
             with self.assertRaises(fbx.FbxError):
                 fbx.read(old)
+
+
+class VertexColourTests(unittest.TestCase):
+    """Vertex colours (FBX LayerElementColor, glTF COLOR_0, .obj "v x y z r g b") become plain
+    colours per triangle, at most VERTEX_COLOURS_MAX of them."""
+
+    def test_fbx_colour_layer(self):
+        import fbx
+        text = "\n".join([
+            "; FBX 7.4.0 project file",
+            "FBXHeaderExtension:  {", "\tFBXVersion: 7400", "}",
+            "Objects:  {",
+            '\tGeometry: 10, "Geometry::Quad", "Mesh" {',
+            "\t\tVertices: *12 {", "\t\t\ta: 0,0,0,1,0,0,1,1,0,0,1,0", "\t\t}",
+            "\t\tPolygonVertexIndex: *4 {", "\t\t\ta: 0,1,2,-4", "\t\t}",
+            "\t\tLayerElementColor: 0 {",
+            '\t\t\tMappingInformationType: "ByPolygonVertex"',
+            '\t\t\tReferenceInformationType: "IndexToDirect"',
+            "\t\t\tColors: *8 {", "\t\t\t\ta: 1,0,0,1,0,0,1,1", "\t\t\t}",
+            "\t\t\tColorIndex: *4 {", "\t\t\t\ta: 0,0,1,1", "\t\t\t}",
+            "\t\t}",
+            "\t}",
+            '\tModel: 20, "Model::Quad", "Mesh" {', "\t}",
+            "}",
+            "Connections:  {", '\tC: "OO",10,20', '\tC: "OO",20,0', "}",
+        ])
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "quad.fbx"
+            f.write_text(text)
+            c = fbx.character(f)
+        self.assertEqual(len(c["corner_colours"]), 2 * 3 * 3)          # two triangles, three corners
+        self.assertEqual(c["corner_colours"][:3], [1, 0, 0])
+        self.assertEqual(c["corner_colours"][-3:], [0, 0, 1])
+
+    def test_triangles_take_their_colour(self):
+        import numpy as np
+        import direct_import as DI
+        P = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [2, 0, 0]], float)
+        src = {"P": P, "T": np.array([[0, 1, 2], [0, 2, 3], [1, 4, 2]]), "UV": np.zeros((5, 2)),
+               "MAT": np.array([0, 0, 1]), "textures": {1: b"own"}}
+        vcol = np.array([[.9, .6, .5], [.9, .6, .5], [.9, .6, .5], [.2, .3, .8], [1, 1, 1]], float)
+        DI._vertex_colours(src, vcol)
+        self.assertEqual(src["vertex_coloured"][0], 2)                 # the textured triangle stays
+        self.assertGreaterEqual(src["MAT"][0], DI.VERTEX_MATERIAL)
+        self.assertEqual(src["MAT"][2], 1)
+        self.assertNotEqual(src["MAT"][0], src["MAT"][1])              # skin and blue-ish apart
+        masks = {"P": P, "T": np.array([[0, 1, 2]]), "UV": np.zeros((5, 2)), "MAT": np.array([0]), "textures": {}}
+        DI._vertex_colours(masks, np.array([[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 1, 1], [0, .5, 0]], float))
+        self.assertTrue(masks.get("vertex_masks"))                    # pure channels: an engine's masks
+        self.assertNotIn("vertex_coloured", masks)
+        pal, label = DI._median_cut(np.random.default_rng(0).random((500, 3)), np.ones(500), 48)
+        self.assertLessEqual(len(pal), 48)
+        self.assertEqual(len(label), 500)
