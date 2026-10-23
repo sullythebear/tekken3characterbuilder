@@ -184,3 +184,8 @@ kitbash or writer change.
   and the glTF Y-up hint is kept; an unskinned export has its node transform applied. A height
   ratio cannot tell lying from standing (Buffedwolf stands at 0.55 with its tail). `build` now
   stops with the rig's reason when a model has no skeleton (was a KeyError in reduce).
+
+- User test 2026-10-23: KITTEST's neck intensely long. Cause: the head size (shape "head") scaled row 20
+  too (it shares the head's frame), so neck and shoulders grew downward from the head joint. Now row 20 takes
+  the head size only above the joint (`NECK_BLEND` 80 units). kitregress: only the kittest mix changed
+  (re-approved); KITTEST rebuilt and checked in a live fight (probe renders: normal neck).

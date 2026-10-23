@@ -26,6 +26,7 @@ PARTS = {"head": (19, 20), "body": (1, 2, 3, 4),
          # floated under it (tested 2026-10-16)
          "hands": (14, 18)}
 FINE = ("hands",)
+NECK_BLEND = 80.0       # game units above the head joint over which row 20 takes on the head size
 # body shape: {name: factor}. The head grows on all axes (rows 19/20 scaled 1.5x and 2.5x drew
 # fine in game, own-models.md); arms, legs and body only across the bone (local Y and Z: every
 # bone runs along local +X), so joints stay where the animations put them. Hands and feet keep
@@ -273,7 +274,11 @@ def _build(root: Path, base: int, parts: dict, log=print, tint=None, shape=None,
         if kb and ks:                          # stretch along the bone to the base's length
             loc = loc * [kb / ks, 1, 1]
         if fr in scale:
-            loc = loc * scale[fr]
+            s = scale[fr]
+            if r == 20:                        # the neck row shares the head's frame: only what lies
+                w = min(1.0, max(0.0, loc[0] / NECK_BLEND))   # above the joint grows with the head,
+                s = 1 + (s - 1) * w            # the neck and shoulders keep their size (no long neck)
+            loc = loc * s
         R, T = B.W[fr]
         return R @ loc + T
 
