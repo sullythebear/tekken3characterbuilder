@@ -26,6 +26,7 @@ const T3Paint = (() => {
   let undo = [], redo = [], stroke = null, changed = false, drag = null;
   let adjacency = null, mirrorMap = null, cornerColour = null, faceNormal = null, creases = false;
   let parts = null, partNames = [];   // every triangle's body part (index into partNames, -1 = none)
+  let hidden = null;                  // triangles of materials left out at the import (not drawn here)
 
   // ------------------------------------------------------------------ the model
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)).buffer;
@@ -37,6 +38,7 @@ const T3Paint = (() => {
     const T = new Uint32Array(b64(data.triangles));
     base = new Uint8Array(b64(data.colours));
     parts = data.parts ? new Int8Array(b64(data.parts)) : null;
+    hidden = data.hidden ? new Uint8Array(b64(data.hidden)) : null;
     partNames = data.part_names || [];
     nT = data.count;
     mesh = { P, T };
@@ -71,9 +73,11 @@ const T3Paint = (() => {
       n = n.map((v) => v / l);
       faceNormal.set(n, 3 * f);
       const id = f + 1;
+      const gone = hidden && hidden[f];       // left out: all three corners on one point, never drawn
       [a, b, c].forEach((v, k) => {
         const o = f * 9 + k * 3;
-        pos[o] = P[v] - centre[0]; pos[o + 1] = P[v + 1] - centre[1]; pos[o + 2] = P[v + 2] - centre[2];
+        const w = gone ? a : v;
+        pos[o] = P[w] - centre[0]; pos[o + 1] = P[w + 1] - centre[1]; pos[o + 2] = P[w + 2] - centre[2];
         nrm[o] = n[0]; nrm[o + 1] = n[1]; nrm[o + 2] = n[2];
         ids[o] = id & 255; ids[o + 1] = (id >> 8) & 255; ids[o + 2] = (id >> 16) & 255;
       });

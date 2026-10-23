@@ -323,6 +323,7 @@ def paint_mesh(path: Path) -> dict:
     names, part = face_parts(src)
     return {"positions": b64(P), "triangles": b64(T), "colours": b64(face_colours(src)),
             "parts": b64(part.astype(np.int8)), "part_names": names,
+            "hidden": b64(np.isin(np.asarray(src["MAT"]), src.get("hidden_materials") or []).astype(np.uint8)),
             "count": int(len(T)), "paint": keep or {"colours": [], "runs": []}}
 
 
