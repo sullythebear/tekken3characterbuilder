@@ -537,3 +537,10 @@ files, 400 MB unpacked, no paths outside. The file name shown is "soldier-obj.zi
   binary or ASCII) gets a clear message (export as FBX 2014 or newer). **tested**: Mixamo, Medea and
   Low Poly written out as ASCII FBX (13.5 / 10 / 0.5 MB) read identically to their binary files
   (mesh, UVs, materials, bones, weights, textures); the model check passes. Unit test `AsciiFbxTests`.
+- Leg webs, final rule (2026-10-23): only triangles below the knees plus `WEB_ABOVE_KNEE` (25 %) of the way up
+  to the hips go. The 12 % rule cut readyplayer.me's coat tails between the legs (regress: holes 95 -> 241,
+  WORSE); now readyplayer.me, Soldier, Michelle and NIKKI are byte-identical (rigged models untouched) and the
+  unrigged Soldier still loses its shin web (13 triangles).
+- Regress 2026-10-23 (`--all --unrigged`): all approved models the same except MegaAngel (holes 52 -> 1) and
+  MushroomFairy (skirt flaps), changed by the fold-down fix; both reviewed and approved. 26 of 27 unrigged
+  test models import (CesiumMan: the known test artefact).

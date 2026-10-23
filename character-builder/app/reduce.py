@@ -24,7 +24,8 @@ ATLAS = 256
 GUTTER = 2
 _SHELL = {}
 MANIFOLD = False             # link condition in the collapse (the shell itself is made manifold)
-WEB_BELOW = 0.12            # triangles on both legs this far (share of the height) below the hips go
+WEB_ABOVE_KNEE = 0.25       # triangles on both legs below the knees (+ this share up to the hips) go;
+                            # higher up coat tails hang between the legs (readyplayer.me)
 
 
 def _weld(P):
@@ -826,12 +827,14 @@ def reduce(src: dict, target: int = 900, log=print, head_detail: float = 4.0) ->
     Image.fromarray(img.clip(0, 255).astype(np.uint8)).save(buf, "PNG")
     lap("bake")
     log(f"texture baked: {int(done.sum())} of {len(done)} samples hit the original directly")
-    # well below the crotch the legs are apart: a triangle with corners on both legs is a web the
+    # below the knees the legs are apart: a triangle with corners on both legs is a web the
     # fighting stance stretches between them (knees or calves that touch: the auto-rigged
     # Soldier), so it goes
     hips = [MI.joint(src["bones"], "thigh", s) for s in "LR"]
-    if all(h_ is not None for h_ in hips):
-        below = min(h_[1] for h_ in hips) - WEB_BELOW * H
+    knees = [MI.joint(src["bones"], "shin", s) for s in "LR"]
+    if all(h_ is not None for h_ in hips + knees):
+        hip_y, knee_y = min(h_[1] for h_ in hips), max(k_[1] for k_ in knees)
+        below = knee_y + WEB_ABOVE_KNEE * (hip_y - knee_y)
         sides = []
         for w in weights:
             p_ = MI._part(src["bones"][max(w, key=w.get)]["name"]) if w else (None, None)
